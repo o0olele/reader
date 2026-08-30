@@ -2,6 +2,9 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import packageJson from '../../package.json'
 import ReaderPane from '../features/reader/ReaderPane.vue'
+import SettingsPage from '../features/settings/SettingsPage.vue'
+import BookshelfPage from '../features/bookshelf/BookshelfPage.vue'
+import SearchPage from '../features/search/SearchPage.vue'
 import {
   addOnlineBook,
   clearBookSourceSession,
@@ -529,21 +532,44 @@ onBeforeUnmount(() => {
           @scroll="scheduleProgressSave"
           @reader-content="readerContent = $event"
         />
-        <div v-else-if="settingsTab" class="search-results">
-          <section class="source-editor">
-            <h2>网络代理</h2>
-            <p>所有书源请求默认使用此代理，书源单独配置的代理会覆盖这里的设置。</p>
-            <form class="source-import" @submit.prevent="saveSettings">
-              <input
-                v-model="proxyUrl"
-                placeholder="如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
-                aria-label="全局代理 URL"
-              /><button type="submit" class="primary" :disabled="savingSettings">
-                {{ savingSettings ? '保存中...' : '保存代理' }}</button
-              ><button type="button" class="secondary" @click="proxyUrl = ''">清空</button>
-            </form>
-          </section>
-        </div>
+        <SettingsPage
+          v-else-if="settingsTab"
+          :proxy-url="proxyUrl"
+          :saving="savingSettings"
+          @update:proxy-url="proxyUrl = $event"
+          @save="saveSettings"
+          @clear="proxyUrl = ''"
+        />
+        <SearchPage
+          v-else-if="onlineSearch"
+          :query="searchQuery"
+          :results="searchResults"
+          :sources="bookSources"
+          :searching="searching"
+          :importing-sources="importingSources"
+          :saving-source="savingSource"
+          :adding-result="addingResult"
+          :logging-in="loggingIn"
+          :source-url="sourceUrl"
+          :login-source-id="loginForm.sourceId"
+          :username="loginForm.username"
+          :password="loginForm.password"
+          :source-form="sourceForm"
+          @update:query="searchQuery = $event"
+          @update:source-url="sourceUrl = $event"
+          @update:login-source-id="loginForm.sourceId = $event"
+          @update:username="loginForm.username = $event"
+          @update:password="loginForm.password = $event"
+          @search="runSearch"
+          @import-file="importSourceFile"
+          @import-url="importSourceFromUrl"
+          @save-source="addSource"
+          @login="loginSource"
+          @clear-session="clearSourceSession"
+          @add="addSearchResult"
+        />
+        <!-- Legacy inline search markup is retained below during the extraction and is disabled. -->
+        <!--
         <div v-else-if="onlineSearch" class="search-results">
           <details class="source-editor">
             <summary>添加或导入书源</summary>
@@ -676,32 +702,16 @@ onBeforeUnmount(() => {
             </div>
           </article>
         </div>
-        <div v-else-if="visibleBooks().length" class="book-grid">
-          <article
-            v-for="book in visibleBooks()"
-            :key="book.id"
-            class="book-item"
-            tabindex="0"
-            @click="openBook(book)"
-            @keydown.enter="openBook(book)"
-          >
-            <div class="book-cover">{{ book.title.slice(0, 1) }}</div>
-            <div class="book-meta">
-              <h2>{{ book.title }}</h2>
-              <p>{{ book.chapter_count }} 个章节</p>
-              <select aria-label="移动到分组" @click.stop @change="moveBook(book, $event)">
-                <option :value="book.group_id ?? ''">当前分组</option>
-                <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option></select
-              ><button type="button" class="delete-button" @click.stop="removeBook(book)">删除</button>
-            </div>
-          </article>
-        </div>
-        <div v-else class="empty-state">
-          <div class="empty-icon">+</div>
-          <h2>书架还是空的</h2>
-          <p>导入 TXT 或 EPUB，开始你的第一本书。</p>
-          <button type="button" class="secondary" @click="chooseFile">选择文件</button>
-        </div>
+        -->
+        <BookshelfPage
+          v-else
+          :books="visibleBooks()"
+          :groups="groups"
+          @open="openBook"
+          @move="moveBook"
+          @remove="removeBook"
+          @choose="chooseFile"
+        />
       </section>
     </section>
   </main>
