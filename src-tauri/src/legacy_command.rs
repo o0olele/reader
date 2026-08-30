@@ -1,6 +1,6 @@
 use crate::{
     app::AppState,
-    domain::{decode_text, split_chapters, Book, BookshelfGroup, Chapter, ReadingProgress},
+    domain::{decode_text, split_chapters, Book, Chapter, ReadingProgress},
     error::AppError,
     infrastructure::http::{
         client::build_source_client,
@@ -299,70 +299,6 @@ pub async fn list_books(state: State<'_, AppState>) -> Result<Vec<Book>, AppErro
 #[tauri::command]
 pub async fn delete_book(state: State<'_, AppState>, book_id: i64) -> Result<(), AppError> {
     BookService::new(pool(&state)?).delete(book_id).await
-}
-
-#[tauri::command]
-pub async fn list_groups(state: State<'_, AppState>) -> Result<Vec<BookshelfGroup>, AppError> {
-    let db = pool(&state)?;
-    let rows = sqlx::query_as::<_, (i64, String, i64)>("SELECT g.id, g.name, COUNT(b.id) FROM bookshelf_groups g LEFT JOIN books b ON b.group_id = g.id GROUP BY g.id ORDER BY g.sort_order, g.id")
-        .fetch_all(&db).await.map_err(AppError::database)?;
-    Ok(rows
-        .into_iter()
-        .map(|(id, name, book_count)| BookshelfGroup {
-            id,
-            name,
-            book_count,
-        })
-        .collect())
-}
-
-#[tauri::command]
-pub async fn create_group(
-    state: State<'_, AppState>,
-    name: String,
-) -> Result<BookshelfGroup, AppError> {
-    let name = name.trim();
-    if name.is_empty() || name.len() > 40 {
-        return Err("分组名称需要为 1 到 40 个字符".into());
-    }
-    let db = pool(&state)?;
-    let result = sqlx::query("INSERT INTO bookshelf_groups (name) VALUES (?)")
-        .bind(name)
-        .execute(&db)
-        .await
-        .map_err(|e| {
-            if e.to_string().contains("UNIQUE") {
-                "分组名称已存在".into()
-            } else {
-                e.to_string()
-            }
-        })?;
-    Ok(BookshelfGroup {
-        id: result.last_insert_rowid(),
-        name: name.to_owned(),
-        book_count: 0,
-    })
-}
-
-#[tauri::command]
-pub async fn move_book_to_group(
-    state: State<'_, AppState>,
-    book_id: i64,
-    group_id: i64,
-) -> Result<(), AppError> {
-    let db = pool(&state)?;
-    let result =
-        sqlx::query("UPDATE books SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-            .bind(group_id)
-            .bind(book_id)
-            .execute(&db)
-            .await
-            .map_err(AppError::database)?;
-    if result.rows_affected() == 0 {
-        Err("书籍不存在".into())
-    } else {
-        Ok(())
-    }
 }
 
 #[tauri::command]
