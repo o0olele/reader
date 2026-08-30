@@ -5,14 +5,10 @@ mod command_api;
 mod command_legacy;
 mod domain;
 mod error;
-#[allow(dead_code)]
 mod infrastructure;
-#[allow(dead_code)]
 mod repository;
-#[allow(dead_code)]
 mod service;
 mod source;
-#[allow(dead_code)]
 mod source_engine;
 
 use app::AppState;

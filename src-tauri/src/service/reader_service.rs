@@ -7,7 +7,7 @@ use crate::{
     domain::ReadingProgress,
 };
 
-pub const MODULE: &str = "reader";
+
 
 #[derive(Clone)]
 pub struct ReaderService {

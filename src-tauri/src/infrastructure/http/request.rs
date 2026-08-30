@@ -1,7 +1,9 @@
 use crate::{error::AppError, source::BookSource};
 use sha2::{Digest, Sha256};
 
-pub fn source_request(
+/// Builds a GET carrying the browser-ish headers, stored session credentials,
+/// per-source custom headers and signature that book sources expect.
+fn source_request(
     client: &reqwest::Client,
     url: &str,
     source: &BookSource,
@@ -119,4 +121,100 @@ pub async fn send_source_request(
         }
     }
     Err(AppError::Network(last_error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::{CatalogRule, InfoRule, SearchRule};
+
+    fn test_source(sign_script: Option<&str>, header: Option<&str>) -> BookSource {
+        BookSource {
+            id: 1,
+            name: "test".into(),
+            base_url: "https://example.com".into(),
+            search_url: "https://example.com/?q={{key}}".into(),
+            search_rule: SearchRule {
+                item: ".book".into(),
+                title: ".title".into(),
+                author: None,
+                cover: None,
+                url: "a::attr(href)".into(),
+            },
+            info_rule: InfoRule::default(),
+            catalog_rule: CatalogRule {
+                item: "a".into(),
+                title: "a".into(),
+                url: "a::attr(href)".into(),
+            },
+            content_selector: "body".into(),
+            header: header.map(str::to_owned),
+            login_url: None,
+            login_method: "POST".into(),
+            login_body: None,
+            token_path: None,
+            access_token: None,
+            session_cookie: None,
+            session_expires_at: None,
+            sign_script: sign_script.map(str::to_owned),
+            proxy_url: None,
+            enabled: true,
+        }
+    }
+
+    fn build(source: &BookSource, url: &str) -> reqwest::Request {
+        source_request(&reqwest::Client::new(), url, source)
+            .unwrap()
+            .build()
+            .unwrap()
+    }
+
+    /// B4 regression: signing used to sit after an early return in the `header`
+    /// branch, so sources without custom headers were silently never signed.
+    #[test]
+    fn signs_requests_without_custom_headers() {
+        let request = build(
+            &test_source(Some("sha256({{url}})"), None),
+            "https://example.com/chapter",
+        );
+        assert!(request.headers().contains_key("x-signature"));
+    }
+
+    #[test]
+    fn signs_requests_that_also_carry_custom_headers() {
+        let request = build(
+            &test_source(Some("sha256({{url}})"), Some(r#"{"X-Api-Key":"abc"}"#)),
+            "https://example.com/chapter",
+        );
+        assert!(request.headers().contains_key("x-signature"));
+        assert_eq!(request.headers()["x-api-key"], "abc");
+    }
+
+    #[test]
+    fn omits_the_signature_header_when_no_script_is_configured() {
+        let request = build(&test_source(None, None), "https://example.com/chapter");
+        assert!(!request.headers().contains_key("x-signature"));
+    }
+
+    #[test]
+    fn derives_the_referer_from_the_request_origin() {
+        let request = build(&test_source(None, None), "https://example.com/a/b?c=1");
+        assert_eq!(
+            request.headers()[reqwest::header::REFERER],
+            "https://example.com/"
+        );
+    }
+
+    #[test]
+    fn sends_the_stored_session_credentials() {
+        let mut source = test_source(None, None);
+        source.access_token = Some("tok".into());
+        source.session_cookie = Some("sid=1".into());
+        let request = build(&source, "https://example.com/chapter");
+        assert_eq!(
+            request.headers()[reqwest::header::AUTHORIZATION],
+            "Bearer tok"
+        );
+        assert_eq!(request.headers()[reqwest::header::COOKIE], "sid=1");
+    }
 }

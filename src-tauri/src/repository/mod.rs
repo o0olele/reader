@@ -1,8 +1,8 @@
 //! Persistence contracts used by application services.
 //!
-//! The current SQLite queries still live in the legacy command module. These
-//! traits define the Step 0 boundary so implementations can be moved without
-//! changing IPC payloads.
+//! Writes that must be atomic — importing a book together with its chapters,
+//! for example — stay as inherent methods on the concrete SQLite types rather
+//! than on these traits, so a transaction is never split across two calls.
 
 use crate::{
     domain::{Book, Chapter, ReadingProgress},
@@ -10,22 +10,15 @@ use crate::{
 };
 
 pub mod book;
-pub mod chapter;
 pub mod bookshelf;
+pub mod chapter;
 pub mod progress;
 pub mod source;
-
-pub struct NewBook<'a> {
-    pub title: &'a str,
-    pub author: Option<&'a str>,
-    pub path: Option<&'a str>,
-}
 
 pub trait BookRepository: Send + Sync {
     async fn get(&self, id: i64) -> Result<Option<Book>, AppError>;
     async fn list(&self) -> Result<Vec<Book>, AppError>;
     async fn find_by_path(&self, path: &str) -> Result<Option<Book>, AppError>;
-    async fn create(&self, book: &NewBook<'_>) -> Result<i64, AppError>;
     async fn delete(&self, id: i64) -> Result<(), AppError>;
 }
 

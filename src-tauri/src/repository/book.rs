@@ -1,4 +1,4 @@
-use super::{BookRepository, NewBook};
+use super::BookRepository;
 use crate::{domain::Book, error::AppError};
 
 #[derive(Clone)]
@@ -21,6 +21,36 @@ impl SqliteBookRepository {
         sqlx::query("INSERT INTO books (title, author, path, source_id, remote_url, group_id) VALUES (?, ?, ?, ?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))")
             .bind(title).bind(author).bind(url).bind(source_id).bind(url)
             .execute(&self.pool).await.map(|result| result.last_insert_rowid()).map_err(AppError::database)
+    }
+
+    /// Inserts a locally imported book and its chapters in one transaction, so
+    /// a failure part-way through leaves no half-imported book on the shelf.
+    pub async fn create_local_with_chapters(
+        &self,
+        title: &str,
+        author: Option<&str>,
+        path: &str,
+        chapters: &[(String, String)],
+    ) -> Result<i64, AppError> {
+        let mut tx = self.pool.begin().await.map_err(AppError::database)?;
+        let inserted = sqlx::query("INSERT INTO books (title, author, path, group_id) VALUES (?, ?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))")
+            .bind(title).bind(author).bind(path)
+            .execute(&mut *tx).await.map_err(AppError::database)?;
+        let book_id = inserted.last_insert_rowid();
+        for (number, (chapter_title, content)) in chapters.iter().enumerate() {
+            sqlx::query(
+                "INSERT INTO chapters (book_id, number, title, content) VALUES (?, ?, ?, ?)",
+            )
+            .bind(book_id)
+            .bind(number as i64)
+            .bind(chapter_title)
+            .bind(content)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::database)?;
+        }
+        tx.commit().await.map_err(AppError::database)?;
+        Ok(book_id)
     }
 }
 
@@ -83,17 +113,6 @@ impl BookRepository for SqliteBookRepository {
         .await
         .map_err(|error| AppError::Database(error.to_string()))
         .map(|row| row.map(map_book))
-    }
-
-    async fn create(&self, book: &NewBook<'_>) -> Result<i64, AppError> {
-        sqlx::query("INSERT INTO books (title, author, path) VALUES (?, ?, ?)")
-            .bind(book.title)
-            .bind(book.author)
-            .bind(book.path)
-            .execute(&self.pool)
-            .await
-            .map(|result| result.last_insert_rowid())
-            .map_err(|error| AppError::Database(error.to_string()))
     }
 
     async fn delete(&self, id: i64) -> Result<(), AppError> {

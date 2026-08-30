@@ -1,5 +1,5 @@
-use crate::command_legacy::SourceTestResult;
-use crate::{app::AppState, command_legacy as command, error::AppError, source::BookSearchResult};
+use crate::command_legacy::{SearchResponse, SourceTestResult};
+use crate::{app::AppState, command_legacy as command, error::AppError};
 use tauri::State;
 
 #[tauri::command(rename = "search_books")]
@@ -7,7 +7,7 @@ pub async fn search_books_cmd(
     state: State<'_, AppState>,
     query: String,
     source_id: Option<i64>,
-) -> Result<Vec<BookSearchResult>, AppError> {
+) -> Result<SearchResponse, AppError> {
     command::search_books(state, query, source_id).await
 }
 
