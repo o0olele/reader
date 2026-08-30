@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Reader Desktop",
+  "version": "0.1.0",
+  "identifier": "com.reader.desktop",
+  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
+  "app": { "windows": [{ "title": "Reader Desktop", "width": 1100, "height": 720, "minWidth": 760, "minHeight": 520 }], "security": { "csp": null } },
+  "bundle": { "active": false }
+}
