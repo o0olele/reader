@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::fmt::Display;
 
 #[allow(dead_code)]
 #[derive(Debug, thiserror::Error, Serialize)]
@@ -28,4 +29,23 @@ impl From<&str> for AppError {
     fn from(value: &str) -> Self {
         Self::Source(value.to_owned())
     }
+}
+
+impl AppError {
+    pub fn database(error: impl Display) -> Self {
+        Self::Database(error.to_string())
+    }
+
+    pub fn network(error: impl Display) -> Self {
+        Self::Network(error.to_string())
+    }
+
+    pub fn parse(error: impl Display) -> Self {
+        Self::Parse(error.to_string())
+    }
+
+    pub fn io(error: impl Display) -> Self {
+        Self::Io(error.to_string())
+    }
+
 }

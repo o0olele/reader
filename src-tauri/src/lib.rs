@@ -39,11 +39,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let state = app.state::<AppState>();
-            let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-            std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+            let data_dir = app.path().app_data_dir().map_err(error::AppError::io)?;
+            std::fs::create_dir_all(&data_dir).map_err(error::AppError::io)?;
             let db_path = data_dir.join("app.db");
             tauri::async_runtime::block_on(state.initialize_database(&db_path))
-                .map_err(|e| e.to_string())?;
+                .map_err(error::AppError::database)?;
             tracing::info!(target: "database", path = %db_path.display(), "database initialized");
             Ok(())
         })

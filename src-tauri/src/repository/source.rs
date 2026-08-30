@@ -120,3 +120,43 @@ impl SourceRepository for SqliteSourceRepository {
             .map(|row| row.map(map_source))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[tokio::test]
+    async fn upsert_round_trips_proxy_url() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let repository = SqliteSourceRepository::new(pool);
+        let source = BookSource {
+            id: 0,
+            name: "proxy-test".into(),
+            base_url: "https://example.com".into(),
+            search_url: "https://example.com/?q={{key}}".into(),
+            search_rule: SearchRule { item: ".book".into(), title: ".title".into(), author: None, cover: None, url: "a".into() },
+            info_rule: InfoRule::default(),
+            catalog_rule: CatalogRule { item: "a".into(), title: "a".into(), url: "a::attr(href)".into() },
+            content_selector: "body".into(),
+            header: None,
+            login_url: None,
+            login_method: "POST".into(),
+            login_body: None,
+            token_path: None,
+            access_token: None,
+            session_cookie: None,
+            session_expires_at: None,
+            sign_script: None,
+            proxy_url: Some("socks5://127.0.0.1:1080".into()),
+            enabled: true,
+        };
+        let id = repository.upsert(&source).await.unwrap();
+        assert_eq!(repository.get(id).await.unwrap().unwrap().proxy_url.as_deref(), Some("socks5://127.0.0.1:1080"));
+    }
+}

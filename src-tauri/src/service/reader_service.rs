@@ -1,8 +1,9 @@
 //! Chapter catalog, content and progress orchestration boundary.
 
 use crate::{
+    domain::Chapter,
     error::AppError,
-    repository::chapter::SqliteChapterRepository,
+    repository::{chapter::SqliteChapterRepository, ChapterRepository},
 };
 
 pub const MODULE: &str = "reader";
@@ -25,5 +26,17 @@ impl ReaderService {
 
     pub async fn cache_content(&self, chapter_id: i64, content: &str) -> Result<(), AppError> {
         self.chapters.save_content(chapter_id, content).await
+    }
+
+    pub async fn list_chapters(&self, book_id: i64) -> Result<Vec<Chapter>, AppError> {
+        self.chapters.list_for_book(book_id).await
+    }
+
+    pub async fn replace_catalog(
+        &self,
+        book_id: i64,
+        catalog: &[(String, String)],
+    ) -> Result<(), AppError> {
+        self.chapters.replace_catalog(book_id, catalog).await
     }
 }

@@ -1,10 +1,10 @@
-use crate::source::BookSource;
+use crate::{error::AppError, source::BookSource};
 
 pub fn build_source_client(
     source: &BookSource,
     timeout_secs: u64,
     global_proxy: Option<&str>,
-) -> Result<reqwest::Client, String> {
+) -> Result<reqwest::Client, AppError> {
     let mut builder = reqwest::Client::builder()
         .user_agent("Reader Desktop/0.1")
         .cookie_store(true)
@@ -17,10 +17,10 @@ pub fn build_source_client(
         .or(global_proxy)
     {
         let proxy = reqwest::Proxy::all(proxy_url.trim())
-            .map_err(|error| format!("代理 URL 无效: {error}"))?;
+            .map_err(|error| AppError::InvalidArgument(format!("代理 URL 无效: {error}")))?;
         builder = builder.proxy(proxy);
     }
     builder
         .build()
-        .map_err(|error| format!("HTTP 客户端创建失败: {error}"))
+        .map_err(AppError::network)
 }

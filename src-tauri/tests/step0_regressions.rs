@@ -7,3 +7,10 @@ fn legado_fixture_is_present() {
     assert!(fixture.lines().count() >= 2);
     assert!(fixture.contains("@XPath:"));
 }
+
+#[test]
+fn app_settings_drift_migration_is_documented_noop() {
+    let migration = include_str!("../migrations/012_app_settings_drift.sql");
+    assert!(!migration.to_ascii_uppercase().contains("CREATE TABLE"));
+    assert!(migration.contains("migration 001"));
+}

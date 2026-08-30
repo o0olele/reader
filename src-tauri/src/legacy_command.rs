@@ -7,11 +7,10 @@ use crate::{
         request::{send_source_request, source_request},
     },
     repository::{
-        book::SqliteBookRepository, chapter::SqliteChapterRepository,
-        progress::SqliteProgressRepository, source::SqliteSourceRepository, BookRepository,
-        ChapterRepository, ProgressRepository, SourceRepository,
+        progress::SqliteProgressRepository, source::SqliteSourceRepository, ProgressRepository,
     },
     service::reader_service::ReaderService,
+    service::{book_service::BookService, source_service::SourceService},
     source::{BookSearchResult, BookSource, CatalogRule, InfoRule, SearchRule, SourceImport},
     source_engine::{
         import::parse_sources_json,
@@ -31,30 +30,16 @@ use std::{
 use tauri::{AppHandle, Emitter, State};
 use zip::ZipArchive;
 
-fn pool(state: &State<'_, AppState>) -> Result<sqlx::SqlitePool, String> {
-    state
-        .db
-        .lock()
-        .map_err(|_| "数据库状态锁不可用".to_owned())?
-        .clone()
-        .ok_or_else(|| "数据库尚未初始化".to_owned())
+fn pool(state: &State<'_, AppState>) -> Result<sqlx::SqlitePool, AppError> {
+    state.database()
 }
 
-fn global_proxy(state: &State<'_, AppState>) -> Result<Option<String>, String> {
-    state
-        .global_proxy
-        .lock()
-        .map_err(|_| "代理状态锁不可用".to_owned())
-        .map(|value| value.clone())
+fn global_proxy(state: &State<'_, AppState>) -> Result<Option<String>, AppError> {
+    state.proxy()
 }
 
-async fn source_by_id(state: &State<'_, AppState>, source_id: i64) -> Result<BookSource, String> {
-    let db = pool(state)?;
-    SqliteSourceRepository::new(db)
-        .get(source_id)
-        .await
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| "书源不存在".into())
+async fn source_by_id(state: &State<'_, AppState>, source_id: i64) -> Result<BookSource, AppError> {
+    SourceService::new(pool(state)?).get(source_id).await
 }
 
 #[tauri::command]
@@ -81,7 +66,7 @@ pub async fn import_txt_book(
             .bind(&filename)
             .fetch_optional(&db)
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(AppError::database)?
     {
         return list_books(state)
             .await?
@@ -89,8 +74,8 @@ pub async fn import_txt_book(
             .find(|book| book.id == existing_id)
             .ok_or_else(|| "已存在的书籍无法读取".into());
     }
-    let mut tx = db.begin().await.map_err(|e| e.to_string())?;
-    let result = sqlx::query("INSERT INTO books (title, path, group_id) VALUES (?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))").bind(&title).bind(&filename).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    let mut tx = db.begin().await.map_err(AppError::database)?;
+    let result = sqlx::query("INSERT INTO books (title, path, group_id) VALUES (?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))").bind(&title).bind(&filename).execute(&mut *tx).await.map_err(AppError::database)?;
     let book_id = result.last_insert_rowid();
     for (number, (chapter_title, content)) in chapters.iter().enumerate() {
         sqlx::query("INSERT INTO chapters (book_id, number, title, content) VALUES (?, ?, ?, ?)")
@@ -100,9 +85,9 @@ pub async fn import_txt_book(
             .bind(content)
             .execute(&mut *tx)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(AppError::database)?;
     }
-    tx.commit().await.map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(AppError::database)?;
     tracing::info!(target: "book", book_id, chapter_count = chapters.len(), "TXT import completed");
     list_books(state)
         .await?
@@ -119,12 +104,12 @@ fn xml_attribute(event: &quick_xml::events::BytesStart<'_>, name: &[u8]) -> Opti
         .and_then(|attr| String::from_utf8(attr.value.into_owned()).ok())
 }
 
-fn zip_entry(archive: &mut ZipArchive<Cursor<Vec<u8>>>, path: &str) -> Result<Vec<u8>, String> {
+fn zip_entry(archive: &mut ZipArchive<Cursor<Vec<u8>>>, path: &str) -> Result<Vec<u8>, AppError> {
     let mut entry = archive
         .by_name(path)
-        .map_err(|e| format!("EPUB 缺少文件 {path}: {e}"))?;
+        .map_err(|e| AppError::Parse(format!("EPUB 缺少文件 {path}: {e}")))?;
     let mut output = Vec::new();
-    entry.read_to_end(&mut output).map_err(|e| e.to_string())?;
+    entry.read_to_end(&mut output).map_err(AppError::io)?;
     Ok(output)
 }
 
@@ -276,7 +261,7 @@ pub async fn import_epub_book(
             .bind(&filename)
             .fetch_optional(&db)
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(AppError::database)?
     {
         return list_books(state)
             .await?
@@ -284,8 +269,8 @@ pub async fn import_epub_book(
             .find(|book| book.id == existing_id)
             .ok_or_else(|| "已存在的书籍无法读取".into());
     }
-    let mut tx = db.begin().await.map_err(|e| e.to_string())?;
-    let result = sqlx::query("INSERT INTO books (title, author, path, group_id) VALUES (?, ?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))").bind(&title).bind(&author).bind(&filename).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    let mut tx = db.begin().await.map_err(AppError::database)?;
+    let result = sqlx::query("INSERT INTO books (title, author, path, group_id) VALUES (?, ?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))").bind(&title).bind(&author).bind(&filename).execute(&mut *tx).await.map_err(AppError::database)?;
     let book_id = result.last_insert_rowid();
     for (number, (chapter_title, content)) in chapters.iter().enumerate() {
         sqlx::query("INSERT INTO chapters (book_id, number, title, content) VALUES (?, ?, ?, ?)")
@@ -295,9 +280,9 @@ pub async fn import_epub_book(
             .bind(content)
             .execute(&mut *tx)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(AppError::database)?;
     }
-    tx.commit().await.map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(AppError::database)?;
     tracing::info!(target: "book", book_id, chapter_count = chapters.len(), "EPUB import completed");
     list_books(state)
         .await?
@@ -308,21 +293,19 @@ pub async fn import_epub_book(
 
 #[tauri::command]
 pub async fn list_books(state: State<'_, AppState>) -> Result<Vec<Book>, AppError> {
-    let db = pool(&state)?;
-    SqliteBookRepository::new(db).list().await
+    BookService::new(pool(&state)?).list().await
 }
 
 #[tauri::command]
 pub async fn delete_book(state: State<'_, AppState>, book_id: i64) -> Result<(), AppError> {
-    let db = pool(&state)?;
-    SqliteBookRepository::new(db).delete(book_id).await
+    BookService::new(pool(&state)?).delete(book_id).await
 }
 
 #[tauri::command]
 pub async fn list_groups(state: State<'_, AppState>) -> Result<Vec<BookshelfGroup>, AppError> {
     let db = pool(&state)?;
     let rows = sqlx::query_as::<_, (i64, String, i64)>("SELECT g.id, g.name, COUNT(b.id) FROM bookshelf_groups g LEFT JOIN books b ON b.group_id = g.id GROUP BY g.id ORDER BY g.sort_order, g.id")
-        .fetch_all(&db).await.map_err(|e| AppError::Database(e.to_string()))?;
+        .fetch_all(&db).await.map_err(AppError::database)?;
     Ok(rows
         .into_iter()
         .map(|(id, name, book_count)| BookshelfGroup {
@@ -374,7 +357,7 @@ pub async fn move_book_to_group(
             .bind(book_id)
             .execute(&db)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(AppError::database)?;
     if result.rows_affected() == 0 {
         Err("书籍不存在".into())
     } else {
@@ -384,12 +367,11 @@ pub async fn move_book_to_group(
 
 #[tauri::command]
 pub async fn list_book_sources(state: State<'_, AppState>) -> Result<Vec<BookSource>, AppError> {
-    let db = pool(&state)?;
-    SqliteSourceRepository::new(db).list().await
+    SourceService::new(pool(&state)?).list().await
 }
 
 #[allow(dead_code)]
-async fn legacy_list_book_sources(state: State<'_, AppState>) -> Result<Vec<BookSource>, String> {
+async fn legacy_list_book_sources(state: State<'_, AppState>) -> Result<Vec<BookSource>, AppError> {
     let db = pool(&state)?;
     #[derive(sqlx::FromRow)]
     struct SourceRow {
@@ -423,7 +405,7 @@ async fn legacy_list_book_sources(state: State<'_, AppState>) -> Result<Vec<Book
     }
     let rows = sqlx::query_as::<_, SourceRow>(
         "SELECT id, name, base_url, search_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, info_title_selector, info_author_selector, info_intro_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, enabled, header, login_url, login_method, login_body, token_path, access_token, session_cookie, session_expires_at, sign_script, proxy_url FROM book_sources ORDER BY name"
-    ).fetch_all(&db).await.map_err(|e| e.to_string())?;
+    ).fetch_all(&db).await.map_err(AppError::database)?;
     rows.into_iter()
         .map(|row| {
             Ok(BookSource {
@@ -560,7 +542,7 @@ pub async fn save_book_source(
     let id = SqliteSourceRepository::new(db)
         .upsert(&source)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(AppError::database)?;
     Ok(BookSource { id, ..source })
 }
 
@@ -582,7 +564,7 @@ fn legacy_build_source_client(
     source: &BookSource,
     timeout_secs: u64,
     global_proxy: Option<&str>,
-) -> Result<reqwest::Client, String> {
+) -> Result<reqwest::Client, AppError> {
     let mut builder = reqwest::Client::builder()
         .user_agent("Reader Desktop/0.1")
         .cookie_store(true)
@@ -600,7 +582,7 @@ fn legacy_build_source_client(
     }
     builder
         .build()
-        .map_err(|error| format!("HTTP 客户端创建失败: {error}"))
+        .map_err(AppError::network)
 }
 
 #[derive(serde::Serialize)]
@@ -634,7 +616,7 @@ pub async fn save_app_settings(
     }
     let db = pool(&state)?;
     sqlx::query("INSERT INTO app_settings (key, value) VALUES ('proxy_url', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
-        .bind(proxy.as_deref().unwrap_or("")).execute(&db).await.map_err(|e| e.to_string())?;
+        .bind(proxy.as_deref().unwrap_or("")).execute(&db).await.map_err(AppError::database)?;
     *state
         .global_proxy
         .lock()
@@ -647,7 +629,7 @@ fn legacy_source_request(
     client: &reqwest::Client,
     url: &str,
     source: &BookSource,
-) -> Result<reqwest::RequestBuilder, String> {
+) -> Result<reqwest::RequestBuilder, AppError> {
     let referer = reqwest::Url::parse(url).ok().map(|parsed| {
         let mut origin = parsed;
         origin.set_path("/");
@@ -708,11 +690,11 @@ async fn legacy_send_source_request(
     client: &reqwest::Client,
     url: &str,
     source: &BookSource,
-) -> Result<reqwest::Response, String> {
+) -> Result<reqwest::Response, AppError> {
     let mut last_error = String::new();
     for attempt in 0..3 {
         let request = legacy_source_request(client, url, source)
-            .and_then(|builder| builder.build().map_err(|e| e.to_string()))
+            .and_then(|builder| builder.build().map_err(AppError::network))
             .map_err(|e| format!("请求构造失败，请检查认证 Header: {e}"))?;
         match client.execute(request).await {
             Ok(response) => return Ok(response),
@@ -732,7 +714,7 @@ async fn legacy_send_source_request(
             }
         }
     }
-    Err(last_error)
+    Err(AppError::Network(last_error))
 }
 
 async fn response_error(response: reqwest::Response, source_name: &str) -> String {
@@ -874,13 +856,13 @@ pub async fn login_book_source(
         .filter_map(|v| v.split(';').next())
         .collect::<Vec<_>>()
         .join("; ");
-    let response_text = response.text().await.map_err(|e| e.to_string())?;
+    let response_text = response.text().await.map_err(AppError::network)?;
     let token = source.token_path.as_deref().and_then(|path| {
         serde_json::from_str::<serde_json::Value>(&response_text)
             .ok()
             .and_then(|v| json_path(&v, path))
     });
-    sqlx::query("UPDATE book_sources SET access_token = ?, session_cookie = ?, session_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(&token).bind(if cookies.is_empty() { None } else { Some(cookies.clone()) }).bind(input.source_id).execute(&db).await.map_err(|e| e.to_string())?;
+    sqlx::query("UPDATE book_sources SET access_token = ?, session_cookie = ?, session_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(&token).bind(if cookies.is_empty() { None } else { Some(cookies.clone()) }).bind(input.source_id).execute(&db).await.map_err(AppError::database)?;
     Ok(SourceLoginResult {
         source_id: input.source_id,
         authenticated: token.is_some() || !cookies.is_empty(),
@@ -895,7 +877,7 @@ pub async fn clear_book_source_session(
     source_id: i64,
 ) -> Result<(), AppError> {
     let db = pool(&state)?;
-    sqlx::query("UPDATE book_sources SET access_token = NULL, session_cookie = NULL, session_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(source_id).execute(&db).await.map_err(|e| AppError::Database(e.to_string())).map(|_| ())
+    sqlx::query("UPDATE book_sources SET access_token = NULL, session_cookie = NULL, session_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(source_id).execute(&db).await.map_err(AppError::database).map(|_| ())
 }
 
 #[tauri::command]
@@ -924,7 +906,7 @@ pub async fn search_books(
         .redirect(reqwest::redirect::Policy::limited(5))
         .timeout(std::time::Duration::from_secs(15))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(AppError::database)?;
     let limiter = Arc::new(tokio::sync::Semaphore::new(8));
     let jobs = sources.into_iter().map(|source| {
         let shared_client = shared_client.clone();
@@ -932,6 +914,7 @@ pub async fn search_books(
         let limiter = limiter.clone();
         let keyword = encode_query(query);
         async move {
+            let result: Result<Vec<BookSearchResult>, AppError> = async {
             let client = if source
                 .proxy_url
                 .as_deref()
@@ -945,7 +928,7 @@ pub async fn search_books(
             let _permit = limiter
                 .acquire_owned()
                 .await
-                .map_err(|_| "搜索并发限制器不可用".to_owned())?;
+                .map_err(|_| AppError::Source("搜索并发限制器不可用".into()))?;
             let url = source
                 .search_url
                 .replace("{{key}}", &keyword)
@@ -954,21 +937,24 @@ pub async fn search_books(
                 .replace("<searchKey>", &keyword);
             let request_url = reqwest::Url::parse(&url)
                 .or_else(|_| reqwest::Url::parse(&source.base_url).and_then(|base| base.join(&url)))
-                .map_err(|e| format!("{} 搜索 URL 无效: {e}", source.name))?;
+                .map_err(|e| AppError::InvalidArgument(format!("{} 搜索 URL 无效: {e}", source.name)))?;
             let _request = source_request(&client, request_url.as_str(), &source)?
                 .build()
-                .map_err(|e| format!("{} 请求构造失败，请检查 header: {e}", source.name))?;
+                .map_err(|e| AppError::Network(format!("{} 请求构造失败，请检查 header: {e}", source.name)))?;
             let response = send_source_request(&client, request_url.as_str(), &source)
                 .await
-                .map_err(|e| format!("{} 请求失败: {e}", source.name))?;
+                .map_err(|e| AppError::Network(format!("{} 请求失败: {e}", source.name)))?;
             if !response.status().is_success() {
-                return Err(response_error(response, &source.name).await);
+                return Err(AppError::Network(response_error(response, &source.name).await));
             }
             let body = response
                 .text()
                 .await
-                .map_err(|e| format!("{} 响应读取失败: {e}", source.name))?;
-            parse_search(&source, &body).map_err(|e| format!("{} 解析失败: {e}", source.name))
+                .map_err(|e| AppError::Network(format!("{} 响应读取失败: {e}", source.name)))?;
+            parse_search(&source, &body).map_err(|e| AppError::Parse(format!("{} 解析失败: {e}", source.name)))
+            }
+            .await;
+            result
         }
     });
     let mut all = Vec::new();
@@ -980,7 +966,13 @@ pub async fn search_books(
         }
     }
     if all.is_empty() && !failures.is_empty() {
-        return Err(AppError::Source(failures.join("；")));
+        return Err(AppError::Source(
+            failures
+                .into_iter()
+                .map(|error| error.to_string())
+                .collect::<Vec<_>>()
+                .join("；"),
+        ));
     }
     let mut seen = std::collections::HashSet::new();
     all.retain(|item| seen.insert(item.url.clone()));
@@ -1024,7 +1016,7 @@ pub async fn test_book_source(
             response_error(response, &source.name).await,
         ));
     }
-    let results = parse_search(&source, &response.text().await.map_err(|e| e.to_string())?)
+    let results = parse_search(&source, &response.text().await.map_err(AppError::network)?)
         .map_err(|e| format!("解析失败: {e}"))?;
     Ok(SourceTestResult {
         source_id,
@@ -1155,7 +1147,7 @@ pub async fn import_book_sources_url(
         .user_agent("Reader Desktop/0.1")
         .timeout(std::time::Duration::from_secs(20))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(AppError::network)?;
     let response = client
         .get(url)
         .send()
@@ -1164,7 +1156,7 @@ pub async fn import_book_sources_url(
     if !response.status().is_success() {
         return Err(format!("书源 URL 返回 HTTP {}", response.status()).into());
     }
-    import_book_sources_json(state, response.text().await.map_err(|e| e.to_string())?).await
+    import_book_sources_json(state, response.text().await.map_err(AppError::network)?).await
 }
 
 #[tauri::command]
@@ -1178,7 +1170,7 @@ pub async fn add_online_book(
             .bind(&result.url)
             .fetch_optional(&db)
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(AppError::database)?
     {
         return list_books(state)
             .await?
@@ -1186,7 +1178,7 @@ pub async fn add_online_book(
             .find(|book| book.id == existing)
             .ok_or_else(|| "书籍已存在但无法读取".into());
     }
-    let inserted = sqlx::query("INSERT INTO books (title, author, path, source_id, remote_url, group_id) VALUES (?, ?, ?, ?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))").bind(&result.title).bind(&result.author).bind(&result.url).bind(result.source_id).bind(&result.url).execute(&db).await.map_err(|e| e.to_string())?;
+    let inserted = sqlx::query("INSERT INTO books (title, author, path, source_id, remote_url, group_id) VALUES (?, ?, ?, ?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))").bind(&result.title).bind(&result.author).bind(&result.url).bind(result.source_id).bind(&result.url).execute(&db).await.map_err(AppError::database)?;
     list_books(state)
         .await?
         .into_iter()
@@ -1207,7 +1199,7 @@ pub async fn fetch_online_content(
         if let Some(cached) = reader_service
             .cached_content(chapter_id)
             .await
-            .map_err(|error| error.to_string())?
+            .map_err(AppError::database)?
         {
             tracing::debug!(target: "reader", chapter_id, "chapter cache hit");
             return Ok(cached);
@@ -1224,22 +1216,19 @@ pub async fn fetch_online_content(
     if !response.status().is_success() {
         return Err(format!("返回 HTTP {}", response.status()).into());
     }
-    let body = response.text().await.map_err(|e| e.to_string())?;
+    let body = response.text().await.map_err(AppError::network)?;
     let content = parse_content(&source, &body)?;
     if let Some(chapter_id) = chapter_id {
         reader_service
             .cache_content(chapter_id, &content)
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(AppError::database)?;
     }
     Ok(content)
 }
 
-async fn read_chapters(db: &sqlx::SqlitePool, book_id: i64) -> Result<Vec<Chapter>, String> {
-    SqliteChapterRepository::new(db.clone())
-        .list_for_book(book_id)
-        .await
-        .map_err(|error| error.to_string())
+async fn read_chapters(db: &sqlx::SqlitePool, book_id: i64) -> Result<Vec<Chapter>, AppError> {
+    ReaderService::new(db.clone()).list_chapters(book_id).await
 }
 
 #[tauri::command]
@@ -1247,9 +1236,7 @@ pub async fn list_chapters(
     state: State<'_, AppState>,
     book_id: i64,
 ) -> Result<Vec<Chapter>, AppError> {
-    read_chapters(&pool(&state)?, book_id)
-        .await
-        .map_err(AppError::from)
+    read_chapters(&pool(&state)?, book_id).await
 }
 
 #[tauri::command]
@@ -1265,7 +1252,7 @@ pub async fn refresh_catalog(
     .bind(book_id)
     .fetch_optional(&db)
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(AppError::database)?
     .ok_or("书籍不存在")?;
     let source_id = source_id.ok_or("本地书籍没有在线书源")?;
     let book_url = book_url.ok_or("书籍没有远程地址")?;
@@ -1279,21 +1266,21 @@ pub async fn refresh_catalog(
     if !response.status().is_success() {
         return Err(format!("目录返回 HTTP {}", response.status()).into());
     }
-    let catalog = parse_catalog(&source, &response.text().await.map_err(|e| e.to_string())?)?;
+    let catalog = parse_catalog(&source, &response.text().await.map_err(AppError::network)?)
+        .map_err(AppError::parse)?;
     tracing::info!(target: "reader", book_id, chapter_count = catalog.len(), "catalog refreshed");
     if catalog.is_empty() {
         return Err("书源没有解析出目录".into());
     }
-    SqliteChapterRepository::new(db.clone())
+    ReaderService::new(db.clone())
         .replace_catalog(book_id, &catalog)
-        .await
-        .map_err(|error| error.to_string())?;
+        .await?;
     let chapters = read_chapters(&db, book_id).await?;
     app.emit(
         "chapter-updated",
         serde_json::json!({ "book_id": book_id, "count": chapters.len() }),
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(AppError::database)?;
     Ok(chapters)
 }
 
