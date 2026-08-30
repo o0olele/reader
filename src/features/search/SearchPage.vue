@@ -23,6 +23,7 @@ const emit = defineEmits<{
   'update:login-source-id': [value: number]
   'update:username': [value: string]
   'update:password': [value: string]
+  'update:source-form': [key: string, value: string]
   search: []
   importFile: [event: Event]
   importUrl: []
@@ -49,19 +50,19 @@ const emit = defineEmits<{
       </div>
       <form @submit.prevent="emit('saveSource')">
         <div class="source-fields">
-          <input v-model="sourceForm.name" placeholder="名称" aria-label="书源名称" />
-          <input v-model="sourceForm.base_url" placeholder="基础 URL，如 https://example.com" aria-label="基础 URL" />
-          <input v-model="sourceForm.search_url" placeholder="搜索 URL，使用 {{key}}" aria-label="搜索 URL" />
-          <input v-model="sourceForm.item" placeholder="结果项 CSS，如 .book" aria-label="结果项 CSS" />
-          <input v-model="sourceForm.title" placeholder="标题 CSS，如 .title" aria-label="标题 CSS" />
-          <input v-model="sourceForm.author" placeholder="作者 CSS（可选）" aria-label="作者 CSS" />
-          <input v-model="sourceForm.url" placeholder="链接 CSS，如 a::attr(href)" aria-label="链接 CSS" />
-          <input v-model="sourceForm.login_url" placeholder="登录 URL（可选）" aria-label="登录 URL" />
-          <select v-model="sourceForm.login_method" aria-label="登录方法"><option>POST</option><option>GET</option><option>PUT</option></select>
-          <input v-model="sourceForm.login_body" placeholder="登录 Body" aria-label="登录 Body" />
-          <input v-model="sourceForm.token_path" placeholder="Token 路径" aria-label="Token 路径" />
-          <input v-model="sourceForm.sign_script" placeholder="签名表达式" aria-label="签名表达式" />
-          <input v-model="sourceForm.proxy_url" placeholder="代理 URL（可选）" aria-label="代理 URL" />
+          <input :value="sourceForm.name" placeholder="名称" aria-label="书源名称" @input="emit('update:source-form', 'name', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.base_url" placeholder="基础 URL，如 https://example.com" aria-label="基础 URL" @input="emit('update:source-form', 'base_url', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.search_url" placeholder="搜索 URL，使用 {{key}}" aria-label="搜索 URL" @input="emit('update:source-form', 'search_url', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.item" placeholder="结果项 CSS，如 .book" aria-label="结果项 CSS" @input="emit('update:source-form', 'item', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.title" placeholder="标题 CSS，如 .title" aria-label="标题 CSS" @input="emit('update:source-form', 'title', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.author" placeholder="作者 CSS（可选）" aria-label="作者 CSS" @input="emit('update:source-form', 'author', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.url" placeholder="链接 CSS，如 a::attr(href)" aria-label="链接 CSS" @input="emit('update:source-form', 'url', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.login_url" placeholder="登录 URL（可选）" aria-label="登录 URL" @input="emit('update:source-form', 'login_url', ($event.target as HTMLInputElement).value)" />
+          <select :value="sourceForm.login_method" aria-label="登录方法" @change="emit('update:source-form', 'login_method', ($event.target as HTMLSelectElement).value)"><option>POST</option><option>GET</option><option>PUT</option></select>
+          <input :value="sourceForm.login_body" placeholder="登录 Body" aria-label="登录 Body" @input="emit('update:source-form', 'login_body', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.token_path" placeholder="Token 路径" aria-label="Token 路径" @input="emit('update:source-form', 'token_path', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.sign_script" placeholder="签名表达式" aria-label="签名表达式" @input="emit('update:source-form', 'sign_script', ($event.target as HTMLInputElement).value)" />
+          <input :value="sourceForm.proxy_url" placeholder="代理 URL（可选）" aria-label="代理 URL" @input="emit('update:source-form', 'proxy_url', ($event.target as HTMLInputElement).value)" />
         </div>
         <button type="submit" class="secondary" :disabled="savingSource">{{ savingSource ? '保存中...' : '保存书源' }}</button>
       </form>
