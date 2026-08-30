@@ -1,0 +1,2 @@
+{"rule":".book && a::attr(href)","mode":"css-chain"}
+{"rule":"@XPath://article","mode":"unsupported-step0"}
