@@ -10,6 +10,18 @@ impl SqliteBookRepository {
     pub fn new(pool: sqlx::SqlitePool) -> Self {
         Self { pool }
     }
+
+    pub async fn create_online(
+        &self,
+        title: &str,
+        author: Option<&str>,
+        url: &str,
+        source_id: i64,
+    ) -> Result<i64, AppError> {
+        sqlx::query("INSERT INTO books (title, author, path, source_id, remote_url, group_id) VALUES (?, ?, ?, ?, ?, (SELECT id FROM bookshelf_groups WHERE name = '默认书架' LIMIT 1))")
+            .bind(title).bind(author).bind(url).bind(source_id).bind(url)
+            .execute(&self.pool).await.map(|result| result.last_insert_rowid()).map_err(AppError::database)
+    }
 }
 
 type BookRow = (

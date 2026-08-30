@@ -3,7 +3,8 @@
 use crate::{
     domain::Chapter,
     error::AppError,
-    repository::{chapter::SqliteChapterRepository, ChapterRepository},
+    repository::{chapter::SqliteChapterRepository, progress::SqliteProgressRepository, ChapterRepository, ProgressRepository},
+    domain::ReadingProgress,
 };
 
 pub const MODULE: &str = "reader";
@@ -11,12 +12,14 @@ pub const MODULE: &str = "reader";
 #[derive(Clone)]
 pub struct ReaderService {
     chapters: SqliteChapterRepository,
+    progress: SqliteProgressRepository,
 }
 
 impl ReaderService {
     pub fn new(pool: sqlx::SqlitePool) -> Self {
         Self {
-            chapters: SqliteChapterRepository::new(pool),
+            chapters: SqliteChapterRepository::new(pool.clone()),
+            progress: SqliteProgressRepository::new(pool),
         }
     }
 
@@ -38,5 +41,14 @@ impl ReaderService {
         catalog: &[(String, String)],
     ) -> Result<(), AppError> {
         self.chapters.replace_catalog(book_id, catalog).await
+    }
+
+    pub async fn progress(&self, book_id: i64) -> Result<Option<ReadingProgress>, AppError> {
+        self.progress.get(book_id).await
+    }
+
+    pub async fn save_progress(&self, book_id: i64, chapter_id: i64, offset: i64) -> Result<(), AppError> {
+        if offset < 0 { return Err(AppError::InvalidArgument("阅读位置不能为负数".into())); }
+        self.progress.save(&ReadingProgress { book_id, chapter_id, offset }).await
     }
 }

@@ -3,6 +3,7 @@ use crate::{
     command_legacy as command,
     domain::{Chapter, ReadingProgress},
     error::AppError,
+    service::reader_service::ReaderService,
 };
 use tauri::{AppHandle, State};
 
@@ -38,7 +39,7 @@ pub async fn get_reading_progress_cmd(
     state: State<'_, AppState>,
     book_id: i64,
 ) -> Result<Option<ReadingProgress>, AppError> {
-    command::get_reading_progress(state, book_id).await
+    ReaderService::new(state.database()?).progress(book_id).await
 }
 
 #[tauri::command(rename = "save_reading_progress")]
@@ -48,5 +49,5 @@ pub async fn save_reading_progress_cmd(
     chapter_id: i64,
     offset: i64,
 ) -> Result<(), AppError> {
-    command::save_reading_progress(state, book_id, chapter_id, offset).await
+    ReaderService::new(state.database()?).save_progress(book_id, chapter_id, offset).await
 }

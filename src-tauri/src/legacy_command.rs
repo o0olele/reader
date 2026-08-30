@@ -297,6 +297,7 @@ pub async fn list_books(state: State<'_, AppState>) -> Result<Vec<Book>, AppErro
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn delete_book(state: State<'_, AppState>, book_id: i64) -> Result<(), AppError> {
     BookService::new(pool(&state)?).delete(book_id).await
 }
@@ -1099,6 +1100,7 @@ pub async fn import_book_sources_url(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn add_online_book(
     state: State<'_, AppState>,
     result: BookSearchResult,
@@ -1224,6 +1226,7 @@ pub async fn refresh_catalog(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn get_reading_progress(
     state: State<'_, AppState>,
     book_id: i64,
@@ -1233,6 +1236,7 @@ pub async fn get_reading_progress(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn save_reading_progress(
     state: State<'_, AppState>,
     book_id: i64,
