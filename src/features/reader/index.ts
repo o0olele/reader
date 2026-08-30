@@ -1,1 +1,2 @@
-export { default as ReaderView } from '../../app/AppShell.vue'
+export { default as ReaderPane } from './ReaderPane.vue'
+export { useReader } from './useReader'

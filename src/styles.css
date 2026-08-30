@@ -61,9 +61,6 @@ body {
   align-items: center;
   gap: 12px;
 }
-.topbar-test {
-  padding: 6px 10px;
-}
 .workspace {
   display: flex;
   min-height: calc(100vh - 60px);
@@ -336,6 +333,58 @@ h2 {
   padding: 44px 12px;
   color: #7b828d;
   text-align: center;
+}
+.book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.search-result-sources {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.search-result-sources summary {
+  margin-bottom: 6px;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.search-result-sources button {
+  margin: 0 6px 6px 0;
+}
+.source-failures {
+  padding: 10px 14px;
+  color: var(--color-danger);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.source-failures summary {
+  cursor: pointer;
+}
+.source-failures ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+.source-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.source-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+}
+.source-list-item:last-child {
+  border-bottom: 0;
 }
 .source-editor {
   padding: 12px 14px;

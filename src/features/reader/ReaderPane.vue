@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Chapter } from '../../services/api/health'
+import type { Chapter } from '../../services/api'
 import { onMounted, ref, watch } from 'vue'
 
 defineProps<{

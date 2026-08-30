@@ -1,1 +1,2 @@
-export { default as BookshelfView } from '../../app/AppShell.vue'
+export { default as BookshelfPage } from './BookshelfPage.vue'
+export { useBookshelf } from './useBookshelf'

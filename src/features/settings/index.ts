@@ -1,1 +1,2 @@
-export { default as SettingsView } from '../../app/AppShell.vue'
+export { default as SettingsPage } from './SettingsPage.vue'
+export { useSettings } from './useSettings'

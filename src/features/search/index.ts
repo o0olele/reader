@@ -1,1 +1,2 @@
-export { default as SearchView } from '../../app/AppShell.vue'
+export { default as SearchPage } from './SearchPage.vue'
+export { useSearch } from './useSearch'

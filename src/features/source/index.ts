@@ -1,1 +1,2 @@
-export { default as SourceView } from '../../app/AppShell.vue'
+export { default as SourceManager } from './SourceManager.vue'
+export { useSources } from './useSources'
