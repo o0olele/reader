@@ -301,11 +301,6 @@ pub async fn delete_book(state: State<'_, AppState>, book_id: i64) -> Result<(),
     BookService::new(pool(&state)?).delete(book_id).await
 }
 
-#[tauri::command]
-pub async fn list_book_sources(state: State<'_, AppState>) -> Result<Vec<BookSource>, AppError> {
-    SourceService::new(pool(&state)?).list().await
-}
-
 #[allow(dead_code)]
 async fn legacy_list_book_sources(state: State<'_, AppState>) -> Result<Vec<BookSource>, AppError> {
     let db = pool(&state)?;
@@ -385,6 +380,7 @@ async fn legacy_list_book_sources(state: State<'_, AppState>) -> Result<Vec<Book
         .collect()
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 pub struct BookSourceInput {
     pub name: String,
@@ -414,10 +410,12 @@ pub struct BookSourceInput {
     pub proxy_url: Option<String>,
 }
 
+#[allow(dead_code)]
 fn default_login_method() -> String {
     "POST".into()
 }
 
+#[allow(dead_code)]
 fn default_catalog_rule() -> CatalogRule {
     CatalogRule {
         item: "a".into(),
@@ -425,11 +423,13 @@ fn default_catalog_rule() -> CatalogRule {
         url: "a::attr(href)".into(),
     }
 }
+#[allow(dead_code)]
 fn default_content_selector() -> String {
     "body".into()
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn save_book_source(
     state: State<'_, AppState>,
     input: BookSourceInput,
@@ -527,18 +527,21 @@ pub struct AppSettings {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettings, AppError> {
     Ok(AppSettings {
         proxy_url: global_proxy(&state)?,
     })
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 pub struct AppSettingsInput {
     pub proxy_url: Option<String>,
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn save_app_settings(
     state: State<'_, AppState>,
     input: AppSettingsInput,
@@ -827,7 +830,7 @@ pub async fn search_books(
     if query.is_empty() || query.len() > 120 {
         return Err("搜索关键词需要为 1 到 120 个字符".into());
     }
-    let sources = list_book_sources(state.clone()).await?;
+    let sources = SourceService::new(pool(&state)?).list().await?;
     let sources = sources
         .into_iter()
         .filter(|source| source.enabled && source_id.is_none_or(|id| id == source.id))

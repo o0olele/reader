@@ -26,4 +26,8 @@ impl SourceService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))
     }
+
+    pub async fn upsert(&self, source: &BookSource) -> Result<i64, AppError> {
+        self.sources.upsert(source).await
+    }
 }
