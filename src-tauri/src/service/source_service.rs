@@ -247,6 +247,8 @@ impl SourceService {
             info_rule: source.info_rule.clone(),
             catalog_rule: source.catalog_rule.clone(),
             content_selector: source.content_selector.clone(),
+            next_toc_url_selector: source.next_toc_url_selector.clone(),
+            next_content_url_selector: source.next_content_url_selector.clone(),
             header: source.header.clone(),
             login_url: source.login_url.clone(),
             login_method: source.login_method.clone(),

@@ -30,6 +30,10 @@ pub struct BookSourceInput {
     #[serde(default = "default_content_selector")]
     pub content_selector: String,
     #[serde(default)]
+    pub next_toc_url_selector: Option<String>,
+    #[serde(default)]
+    pub next_content_url_selector: Option<String>,
+    #[serde(default)]
     pub header: Option<String>,
     #[serde(default)]
     pub login_url: Option<String>,
@@ -53,6 +57,7 @@ fn default_catalog_rule() -> CatalogRule {
         item: "a".into(),
         title: "a".into(),
         url: "a::attr(href)".into(),
+        next_url: None,
     }
 }
 fn default_content_selector() -> String {
@@ -95,6 +100,8 @@ pub async fn save_book_source_cmd(
         info_rule: input.info_rule,
         catalog_rule: input.catalog_rule,
         content_selector: input.content_selector,
+        next_toc_url_selector: input.next_toc_url_selector,
+        next_content_url_selector: input.next_content_url_selector,
         header: input.header,
         login_url: input.login_url,
         login_method: input.login_method,

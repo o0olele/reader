@@ -19,6 +19,8 @@ pub struct BookSource {
     pub info_rule: InfoRule,
     pub catalog_rule: CatalogRule,
     pub content_selector: String,
+    pub next_toc_url_selector: Option<String>,
+    pub next_content_url_selector: Option<String>,
     pub header: Option<String>,
     pub login_url: Option<String>,
     pub login_method: String,
@@ -37,6 +39,9 @@ pub struct InfoRule {
     pub title: Option<String>,
     pub author: Option<String>,
     pub intro: Option<String>,
+    pub cover: Option<String>,
+    pub kind: Option<String>,
+    pub latest_chapter: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +49,7 @@ pub struct CatalogRule {
     pub item: String,
     pub title: String,
     pub url: String,
+    pub next_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +68,8 @@ pub struct SourceImport {
     pub token_path: Option<String>,
     pub sign_script: Option<String>,
     pub proxy_url: Option<String>,
+    pub next_toc_url_selector: Option<String>,
+    pub next_content_url_selector: Option<String>,
     pub enabled: bool,
 }
 
@@ -73,4 +81,14 @@ pub struct BookSearchResult {
     pub author: Option<String>,
     pub cover: Option<String>,
     pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BookInfo {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub intro: Option<String>,
+    pub cover: Option<String>,
+    pub kind: Option<String>,
+    pub latest_chapter: Option<String>,
 }

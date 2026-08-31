@@ -23,6 +23,48 @@ impl SqliteBookRepository {
             .execute(&self.pool).await.map(|result| result.last_insert_rowid()).map_err(AppError::database)
     }
 
+    pub async fn update_info(
+        &self,
+        book_id: i64,
+        info: &crate::domain::source::BookInfo,
+    ) -> Result<(), AppError> {
+        sqlx::query("UPDATE books SET title = COALESCE(?, title), author = COALESCE(?, author), intro = ?, kind = ?, latest_chapter = ?, cover_url = COALESCE(?, cover_url), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(info.title.as_deref()).bind(info.author.as_deref()).bind(info.intro.as_deref()).bind(info.kind.as_deref()).bind(info.latest_chapter.as_deref()).bind(info.cover.as_deref()).bind(book_id)
+            .execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
+    }
+
+    pub async fn save_cover_data(&self, book_id: i64, data: &str) -> Result<(), AppError> {
+        sqlx::query("UPDATE books SET cover_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(data)
+            .bind(book_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(AppError::database)
+    }
+
+    pub async fn switch_source(
+        &self,
+        book_id: i64,
+        source_id: i64,
+        remote_url: &str,
+    ) -> Result<(), AppError> {
+        let mut tx = self.pool.begin().await.map_err(AppError::database)?;
+        sqlx::query("UPDATE books SET source_id = ?, remote_url = ?, intro = NULL, kind = NULL, latest_chapter = NULL, cover_url = NULL, cover_data = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(source_id).bind(remote_url).bind(book_id).execute(&mut *tx).await.map_err(AppError::database)?;
+        sqlx::query("DELETE FROM reading_progress WHERE book_id = ?")
+            .bind(book_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::database)?;
+        sqlx::query("DELETE FROM chapters WHERE book_id = ?")
+            .bind(book_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::database)?;
+        tx.commit().await.map_err(AppError::database)
+    }
+
     /// Inserts a locally imported book and its chapters in one transaction, so
     /// a failure part-way through leaves no half-imported book on the shelf.
     pub async fn create_local_with_chapters(
@@ -62,12 +104,32 @@ type BookRow = (
     Option<i64>,
     Option<i64>,
     Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
     i64,
     String,
 );
 
 fn map_book(
-    (id, title, author, path, group_id, source_id, remote_url, chapter_count, updated_at): BookRow,
+    (
+        id,
+        title,
+        author,
+        path,
+        group_id,
+        source_id,
+        remote_url,
+        intro,
+        kind,
+        latest_chapter,
+        cover_url,
+        cover_data,
+        chapter_count,
+        updated_at,
+    ): BookRow,
 ) -> Book {
     Book {
         id,
@@ -77,12 +139,17 @@ fn map_book(
         group_id,
         source_id,
         remote_url,
+        intro,
+        kind,
+        latest_chapter,
+        cover_url,
+        cover_data,
         chapter_count,
         updated_at,
     }
 }
 
-const BOOK_SELECT: &str = "SELECT b.id, b.title, b.author, b.path, b.group_id, b.source_id, b.remote_url, COUNT(c.id), b.updated_at FROM books b LEFT JOIN chapters c ON c.book_id = b.id";
+const BOOK_SELECT: &str = "SELECT b.id, b.title, b.author, b.path, b.group_id, b.source_id, b.remote_url, b.intro, b.kind, b.latest_chapter, b.cover_url, b.cover_data, COUNT(c.id), b.updated_at FROM books b LEFT JOIN chapters c ON c.book_id = b.id";
 
 impl BookRepository for SqliteBookRepository {
     async fn get(&self, id: i64) -> Result<Option<Book>, AppError> {

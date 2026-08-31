@@ -13,8 +13,45 @@ use crate::{
         ChapterRepository, ProgressRepository, SourceRepository,
     },
     service::settings_service::SettingsService,
-    source_engine::selector::{parse_catalog, parse_content},
+    source_engine::selector::{parse_catalog_page, parse_content_page},
 };
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    sync::{Mutex, OnceLock},
+};
+
+static MEMORY_CACHE: OnceLock<Mutex<MemoryChapterCache>> = OnceLock::new();
+struct MemoryChapterCache {
+    entries: HashMap<i64, String>,
+    order: VecDeque<i64>,
+}
+impl MemoryChapterCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+    fn get(&mut self, id: i64) -> Option<String> {
+        let value = self.entries.get(&id).cloned()?;
+        self.order.retain(|item| *item != id);
+        self.order.push_back(id);
+        Some(value)
+    }
+    fn put(&mut self, id: i64, content: String) {
+        self.entries.insert(id, content);
+        self.order.retain(|item| *item != id);
+        self.order.push_back(id);
+        while self.order.len() > 50 {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+    }
+}
+fn memory_cache() -> &'static Mutex<MemoryChapterCache> {
+    MEMORY_CACHE.get_or_init(|| Mutex::new(MemoryChapterCache::new()))
+}
 
 #[derive(Clone)]
 pub struct ReaderService {
@@ -37,9 +74,20 @@ impl ReaderService {
     }
 
     pub async fn cached_content(&self, chapter_id: i64) -> Result<Option<String>, AppError> {
+        if let Some(value) = memory_cache()
+            .lock()
+            .map_err(|_| AppError::Database("阅读缓存锁不可用".into()))?
+            .get(chapter_id)
+        {
+            return Ok(Some(value));
+        }
         self.chapters.cached_content(chapter_id).await
     }
     pub async fn cache_content(&self, chapter_id: i64, content: &str) -> Result<(), AppError> {
+        memory_cache()
+            .lock()
+            .map_err(|_| AppError::Database("阅读缓存锁不可用".into()))?
+            .put(chapter_id, content.to_owned());
         self.chapters.save_content(chapter_id, content).await
     }
     pub async fn list_chapters(&self, book_id: i64) -> Result<Vec<Chapter>, AppError> {
@@ -72,14 +120,28 @@ impl ReaderService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let response = send_source_request(&client, chapter_url, &source).await?;
-        if !response.status().is_success() {
-            return Err(AppError::Network(
-                response_error(response, &source.name).await,
-            ));
+        let mut current_url = chapter_url.to_owned();
+        let mut visited = HashSet::new();
+        let mut pages = Vec::new();
+        for _ in 0..20 {
+            if !visited.insert(current_url.clone()) {
+                break;
+            }
+            let response = send_source_request(&client, &current_url, &source).await?;
+            if !response.status().is_success() {
+                return Err(AppError::Network(
+                    response_error(response, &source.name).await,
+                ));
+            }
+            let html = response.text().await.map_err(AppError::network)?;
+            let (page, next) = parse_content_page(&source, &html).map_err(AppError::parse)?;
+            pages.push(page);
+            let Some(next) = next else {
+                break;
+            };
+            current_url = resolve_relative_url(&source.base_url, &next)?;
         }
-        let content = parse_content(&source, &response.text().await.map_err(AppError::network)?)
-            .map_err(AppError::parse)?;
+        let content = pages.join("\n");
         if let Some(id) = chapter_id {
             self.cache_content(id, &content).await?;
         }
@@ -109,14 +171,27 @@ impl ReaderService {
                 reqwest::Url::parse(&source.base_url).and_then(|base| base.join(&book_url))
             })
             .map_err(|e| AppError::InvalidArgument(format!("目录 URL无效: {e}")))?;
-        let response = send_source_request(&client, request_url.as_str(), &source).await?;
-        if !response.status().is_success() {
-            return Err(AppError::Network(
-                response_error(response, &source.name).await,
-            ));
+        let mut current_url = request_url.to_string();
+        let mut visited = HashSet::new();
+        let mut catalog = Vec::new();
+        for _ in 0..50 {
+            if !visited.insert(current_url.clone()) {
+                break;
+            }
+            let response = send_source_request(&client, &current_url, &source).await?;
+            if !response.status().is_success() {
+                return Err(AppError::Network(
+                    response_error(response, &source.name).await,
+                ));
+            }
+            let html = response.text().await.map_err(AppError::network)?;
+            let (page, next) = parse_catalog_page(&source, &html).map_err(AppError::parse)?;
+            catalog.extend(page);
+            let Some(next) = next else {
+                break;
+            };
+            current_url = resolve_relative_url(&source.base_url, &next)?;
         }
-        let catalog = parse_catalog(&source, &response.text().await.map_err(AppError::network)?)
-            .map_err(AppError::parse)?;
         tracing::info!(target: "reader", book_id, chapter_count = catalog.len(), "catalog refreshed");
         if catalog.is_empty() {
             return Err(AppError::Source("书源没有解析出目录".into()));
@@ -145,6 +220,13 @@ impl ReaderService {
             })
             .await
     }
+}
+
+fn resolve_relative_url(base: &str, value: &str) -> Result<String, AppError> {
+    reqwest::Url::parse(value)
+        .or_else(|_| reqwest::Url::parse(base).and_then(|url| url.join(value)))
+        .map(|url| url.to_string())
+        .map_err(|e| AppError::InvalidArgument(format!("分页 URL 无效: {e}")))
 }
 
 #[cfg(test)]

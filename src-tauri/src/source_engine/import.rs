@@ -66,7 +66,21 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 .or_else(|| object.get("ruleSearch")),
         );
         let catalog = json_value(object.get("catalog_rule").or_else(|| object.get("ruleToc")));
-        let content_selector = field(object, "content_selector", "ruleContent")
+        let info = json_value(
+            object
+                .get("info_rule")
+                .or_else(|| object.get("ruleBookInfo")),
+        );
+        let content = json_value(
+            object
+                .get("content_rule")
+                .or_else(|| object.get("ruleContent")),
+        );
+        let content_selector = content
+            .as_ref()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .or_else(|| rule(content.as_ref(), &["content", "selector", "main"]))
+            .or_else(|| field(object, "content_selector", "ruleContent"))
             .unwrap_or_else(|| "body".into())
             .split("&&")
             .next()
@@ -88,7 +102,14 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                     .map(|value| attr(value, "href"))
                     .unwrap_or_else(|| "a::attr(href)".into()),
             },
-            info_rule: InfoRule::default(),
+            info_rule: InfoRule {
+                title: rule(info.as_ref(), &["title", "name"]),
+                author: rule(info.as_ref(), &["author"]),
+                intro: rule(info.as_ref(), &["intro"]),
+                cover: rule(info.as_ref(), &["coverUrl", "cover"]).map(|value| attr(value, "src")),
+                kind: rule(info.as_ref(), &["kind"]),
+                latest_chapter: rule(info.as_ref(), &["lastChapter", "latestChapter"]),
+            },
             catalog_rule: CatalogRule {
                 item: rule(catalog.as_ref(), &["item", "chapterList"])
                     .unwrap_or_else(|| "a".into()),
@@ -97,6 +118,8 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 url: rule(catalog.as_ref(), &["url", "chapterUrl"])
                     .map(|value| attr(value, "href"))
                     .unwrap_or_else(|| "a::attr(href)".into()),
+                next_url: rule(catalog.as_ref(), &["nextTocUrl", "nextUrl"])
+                    .map(|value| attr(value, "href")),
             },
             content_selector,
             header: object
@@ -117,6 +140,13 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
             sign_script: field(object, "sign_script", "signScript")
                 .or_else(|| field(object, "js", "js")),
             proxy_url: field(object, "proxy_url", "proxyUrl"),
+            next_toc_url_selector: rule(catalog.as_ref(), &["nextTocUrl", "nextUrl"])
+                .map(|value| attr(value, "href")),
+            next_content_url_selector: rule(
+                content.as_ref(),
+                &["nextContentUrl", "next_url", "nextUrl"],
+            )
+            .map(|value| attr(value, "href")),
             enabled: object
                 .get("enabled")
                 .and_then(serde_json::Value::as_bool)

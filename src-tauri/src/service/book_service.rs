@@ -3,18 +3,30 @@ use crate::{
     domain::Book,
     error::AppError,
     infrastructure::ebook::{epub, title_from_filename, txt, ParsedBook},
+    infrastructure::http::{
+        client::build_source_client,
+        request::{response_error, send_source_request},
+    },
     repository::{book::SqliteBookRepository, BookRepository},
+    repository::{source::SqliteSourceRepository, SourceRepository},
+    service::settings_service::SettingsService,
+    source_engine::selector::parse_book_info,
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
 
 #[derive(Clone)]
 pub struct BookService {
     books: SqliteBookRepository,
+    sources: SqliteSourceRepository,
+    settings: SettingsService,
 }
 
 impl BookService {
     pub fn new(pool: sqlx::SqlitePool) -> Self {
         Self {
-            books: SqliteBookRepository::new(pool),
+            books: SqliteBookRepository::new(pool.clone()),
+            sources: SqliteSourceRepository::new(pool.clone()),
+            settings: SettingsService::new(pool),
         }
     }
 
@@ -40,6 +52,72 @@ impl BookService {
             )
             .await?;
         self.load(id).await
+    }
+
+    pub async fn fetch_info(&self, book_id: i64) -> Result<Book, AppError> {
+        let book = self.load(book_id).await?;
+        let source_id = book
+            .source_id
+            .ok_or_else(|| AppError::Source("本地书籍没有在线书源".into()))?;
+        let url = book
+            .remote_url
+            .as_deref()
+            .ok_or_else(|| AppError::Source("书籍没有远程地址".into()))?;
+        let source = self
+            .sources
+            .get(source_id)
+            .await?
+            .ok_or_else(|| AppError::Source("书源不存在".into()))?;
+        let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
+        let response = send_source_request(&client, url, &source).await?;
+        if !response.status().is_success() {
+            return Err(AppError::Network(
+                response_error(response, &source.name).await,
+            ));
+        }
+        let html = response.text().await.map_err(AppError::network)?;
+        let info = parse_book_info(&source, &html).map_err(AppError::parse)?;
+        let cover_url = info.cover.clone();
+        self.books.update_info(book_id, &info).await?;
+        if let Some(cover) = cover_url.as_deref() {
+            if let Ok(response) = send_source_request(&client, cover, &source).await {
+                if response.status().is_success() {
+                    let mime = response
+                        .headers()
+                        .get(reqwest::header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("image/jpeg")
+                        .split(';')
+                        .next()
+                        .unwrap_or("image/jpeg")
+                        .to_owned();
+                    if let Ok(bytes) = response.bytes().await {
+                        self.books
+                            .save_cover_data(
+                                book_id,
+                                &format!("data:{mime};base64,{}", STANDARD.encode(bytes)),
+                            )
+                            .await?;
+                    }
+                }
+            }
+        }
+        self.load(book_id).await
+    }
+
+    pub async fn switch_source(
+        &self,
+        book_id: i64,
+        result: &BookSearchResult,
+    ) -> Result<Book, AppError> {
+        let current = self.load(book_id).await?;
+        if current.source_id == Some(result.source_id) {
+            return Ok(current);
+        }
+        self.books
+            .switch_source(book_id, result.source_id, &result.url)
+            .await?;
+        self.load(book_id).await
     }
 
     pub async fn import_txt(&self, filename: &str, bytes: &[u8]) -> Result<Book, AppError> {

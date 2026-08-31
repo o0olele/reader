@@ -60,6 +60,8 @@ pub fn run() {
             command_api::search::search_books_cmd,
             command_api::search::test_book_source_cmd,
             command_api::book::add_online_book_cmd,
+            command_api::book::fetch_book_info_cmd,
+            command_api::book::switch_book_source_cmd,
             command_api::reader::fetch_online_content_cmd,
             command_api::source::login_book_source_cmd,
             command_api::source::clear_book_source_session_cmd,

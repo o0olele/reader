@@ -45,3 +45,24 @@ pub async fn add_online_book_cmd(
         .add_online(&result)
         .await
 }
+
+#[tauri::command(rename = "fetch_book_info")]
+pub async fn fetch_book_info_cmd(
+    state: State<'_, AppState>,
+    book_id: i64,
+) -> Result<Book, AppError> {
+    BookService::new(state.database()?)
+        .fetch_info(book_id)
+        .await
+}
+
+#[tauri::command(rename = "switch_book_source")]
+pub async fn switch_book_source_cmd(
+    state: State<'_, AppState>,
+    book_id: i64,
+    result: BookSearchResult,
+) -> Result<Book, AppError> {
+    BookService::new(state.database()?)
+        .switch_source(book_id, &result)
+        .await
+}

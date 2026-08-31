@@ -22,12 +22,23 @@ pub async fn refresh_catalog_cmd(
     state: State<'_, AppState>,
     book_id: i64,
 ) -> Result<Vec<Chapter>, AppError> {
+    let before = ReaderService::new(state.database()?)
+        .list_chapters(book_id)
+        .await?;
     let chapters = ReaderService::new(state.database()?)
         .refresh_catalog(book_id)
         .await?;
+    let known = before
+        .into_iter()
+        .map(|chapter| chapter.number)
+        .collect::<std::collections::HashSet<_>>();
+    let added = chapters
+        .iter()
+        .filter(|chapter| !known.contains(&chapter.number))
+        .count();
     app.emit(
         "chapter-updated",
-        serde_json::json!({ "book_id": book_id, "count": chapters.len() }),
+        serde_json::json!({ "book_id": book_id, "count": chapters.len(), "added": added }),
     )
     .map_err(AppError::database)?;
     Ok(chapters)

@@ -35,6 +35,12 @@ impl SqliteChapterRepository {
             .begin()
             .await
             .map_err(|error| AppError::Database(error.to_string()))?;
+        sqlx::query("DELETE FROM chapters WHERE book_id = ? AND number >= ?")
+            .bind(book_id)
+            .bind(catalog.len() as i64)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| AppError::Database(error.to_string()))?;
         for (number, (title, url)) in catalog.iter().enumerate() {
             sqlx::query("INSERT INTO chapters (book_id, number, title, content, remote_url) VALUES (?, ?, ?, '', ?) ON CONFLICT(book_id, number) DO UPDATE SET title = excluded.title, remote_url = excluded.remote_url")
                 .bind(book_id).bind(number as i64).bind(title).bind(url)
