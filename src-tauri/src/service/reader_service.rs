@@ -146,3 +146,71 @@ impl ReaderService {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn pool() -> sqlx::SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn fetch_online_content_returns_cached_body_before_network_lookup() {
+        let pool = pool().await;
+        sqlx::query("INSERT INTO books (title, path) VALUES ('Book', 'https://example.test/book')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO chapters (book_id, number, title, content, remote_url) VALUES (1, 0, 'One', '', 'https://example.test/chapter')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let service = ReaderService::new(pool);
+        service.cache_content(1, "cached body").await.unwrap();
+
+        let content = service
+            .fetch_online_content(999, "not a URL", Some(1))
+            .await
+            .unwrap();
+
+        assert_eq!(content, "cached body");
+    }
+
+    #[tokio::test]
+    async fn service_catalog_operations_preserve_cached_content() {
+        let pool = pool().await;
+        sqlx::query("INSERT INTO books (title, path) VALUES ('Book', 'local')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let service = ReaderService::new(pool);
+        service
+            .replace_catalog(1, &[("One".into(), "https://example.test/one".into())])
+            .await
+            .unwrap();
+        service.cache_content(1, "cached body").await.unwrap();
+        service
+            .replace_catalog(
+                1,
+                &[
+                    ("Updated".into(), "https://example.test/one".into()),
+                    ("Two".into(), "https://example.test/two".into()),
+                ],
+            )
+            .await
+            .unwrap();
+
+        let chapters = service.list_chapters(1).await.unwrap();
+        assert_eq!(chapters.len(), 2);
+        assert_eq!(chapters[0].content, "cached body");
+        assert_eq!(chapters[0].title, "Updated");
+    }
+}

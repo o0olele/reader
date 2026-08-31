@@ -486,6 +486,7 @@ fn raw_unsupported_source_names(input: &str) -> HashSet<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
 
     fn result(source_id: i64, title: &str, author: Option<&str>, url: &str) -> BookSearchResult {
         BookSearchResult {
@@ -496,6 +497,16 @@ mod tests {
             cover: None,
             url: url.into(),
         }
+    }
+
+    async fn pool() -> sqlx::SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
     }
 
     #[test]
@@ -581,8 +592,24 @@ mod tests {
             result(1, "第一本", None, "https://a.test/1"),
         ]);
         assert_eq!(
-            groups.iter().map(|group| group.title.as_str()).collect::<Vec<_>>(),
+            groups
+                .iter()
+                .map(|group| group.title.as_str())
+                .collect::<Vec<_>>(),
             ["第二本", "第一本"]
         );
+    }
+
+    #[tokio::test]
+    async fn imports_partial_source_and_persists_it() {
+        let service = SourceService::new(pool().await);
+        let input = r#"[{"bookSourceName":"XPath source","bookSourceUrl":"https://example.com","searchUrl":"https://example.com?q={{key}}","ruleSearch":{"bookList":"@XPath://article","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
+
+        let report = service.import_json(input).await.unwrap();
+
+        assert_eq!(report.imported, 1);
+        assert_eq!(report.failed, Vec::<String>::new());
+        assert_eq!(report.partial, vec!["XPath source"]);
+        assert_eq!(service.list().await.unwrap().len(), 1);
     }
 }
