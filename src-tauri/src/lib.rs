@@ -1,7 +1,7 @@
 mod app;
 #[path = "command/mod.rs"]
 mod command_api;
-mod domain;
+pub mod domain;
 mod error;
 mod infrastructure;
 mod repository;

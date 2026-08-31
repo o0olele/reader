@@ -526,8 +526,8 @@ src-tauri/tests/
 同时补 Step 0/1 欠的测试：`epub` 解析、`decode_text` 各编码、`split_chapters` 边界、B1–B5 各一条。
 
 **2026-08-31 现状：** `epub`（10 条）/ `txt`（11 条）/ B1–B4 均已补齐。
-仍缺的是**真实 HTML fixture** —— `tests/fixtures/` 下目前只有 `README.md` 与 `rules/legado_rules.jsonl`，
-上面画的 `source_a/` `source_b/` 目录**尚不存在**，`source_pipeline.rs` 端到端测试也还没有。
+真实 HTML fixture 已补齐：`tests/fixtures/source_a/` 与 `source_b/` 各含搜索、详情、目录、正文页面，
+并由 `tests/source_pipeline.rs` 端到端覆盖 CSS 选择器、相对 URL 和分页链接。仍缺的是基于公开语料的更大规模容错样本。
 这意味着 selector 层的测试全部依赖内联 HTML 字符串，无法覆盖真实站点的容错解析。
 
 ### 5.3 验收标准
@@ -624,7 +624,7 @@ src-tauri/tests/
 | Cloudflare / JS challenge | 部分站点完全不可用 | 已有识别提示（`infrastructure/http/request.rs`）；根治需 WebView 通道，列入 Step 7 评估 |
 | ~~架构重构引入回归~~ | ~~Step 0 拖长~~ | **已关闭** —— Step 0 与 08-31 的 `SourceService` 拆分均以小步提交 + 每步全绿完成，未发生回归 |
 | **业务在 service 层重新聚团** | 每个 Step 结束都会产生新的巨型文件 | **新增（2026-08-31）** —— Step 0 后 `SourceService` 涨到 617 行。约定：每个 Step 收尾时复查最大文件，非测试行 > 250 即拆 |
-| **缺真实 HTML fixture** | selector 只在内联字符串上测过，真实站点容错未知 | **新增（2026-08-31）** —— §5.2 的 `source_a/` `source_b/` 尚不存在；Step 2 开工前补齐，否则规则引擎无回归基线 |
+| **真实 HTML 语料规模不足** | 当前 fixture 只覆盖两种人工整理的站点结构，真实站点容错仍未知 | **更新（2026-08-31）** —— `source_a/` `source_b/` 与 `source_pipeline.rs` 已落地；继续补公开书源语料 |
 
 ---
 
@@ -719,7 +719,7 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 `source_engine/import.rs` 仍会截取 `&&` 并只处理 `@css:`，XPath、JSONPath 与 JS Runtime 执行器均未实现。
 下一步仍应先完成两项前置工作（见 §9 新增风险）：
 
-- 用公开真实书源语料补强当前 50 条语法夹具，并补 §5.2 的真实 HTML fixture（`source_a/` `source_b/`）
+- 用公开真实书源语料补强当前 50 条语法夹具，并扩充现有 `source_a/` `source_b/` fixture
 - 做 `rquickjs` 的跨平台构建 spike
 
 本轮可验证证据：
@@ -736,4 +736,4 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-
 npm run lint && npm run format:check && npm run build
 ```
 
-当前预期：**52 库单测 + 2 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
+当前预期：**57 库单测 + 3 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
