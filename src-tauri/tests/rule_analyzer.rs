@@ -52,8 +52,8 @@ fn matches_legado_rule_fixture() {
 
     assert_eq!(
         cases.len(),
-        50,
-        "the compatibility baseline must stay at 50 cases"
+        85,
+        "the compatibility baseline must stay at 85 cases"
     );
     for case in cases {
         let parsed = split_rule(&case.raw)

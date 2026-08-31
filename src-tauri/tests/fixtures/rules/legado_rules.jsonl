@@ -48,3 +48,38 @@
 {"origin":"standalone template","raw":"{{page}}","expected":"CD:{{page}}"}
 {"origin":"empty JS separator","raw":"<js></js>.book","expected":"CD:.book"}
 {"origin":"default bookSources.json chapter URL","raw":"$.id@js:java.put('chapterId', result);'/chapter?id=' + result + '&key={{key}}'","expected":"CJ:$.id > CS:java.put('chapterId', result);'/chapter?id=' + result + '&key={{key}}'"}
+{"origin":"legado search keyword template","raw":"@css:.result&&@css:.title@text","expected":"CD:.result > AD:.title@text"}
+{"origin":"legado XPath attribute","raw":"@xpath://article/@data-url","expected":"CX://article/@data-url"}
+{"origin":"legado XPath descendant text","raw":"/html/body//h1/text()","expected":"CX:/html/body//h1/text()"}
+{"origin":"legado JSON nested list","raw":"@json:$.data.books[*].volume.title","expected":"CJ:$.data.books[*].volume.title"}
+{"origin":"legado JSON filter","raw":"$.books[?(@.status=='完结')].name","expected":"CJ:$.books[?(@.status=='完结')].name"}
+{"origin":"legado regex replacement","raw":".content@text##\\s+## ##","expected":"CD:.content@text"}
+{"origin":"legado regex replacement first only","raw":".content@text##广告#####","expected":"CD:.content@text"}
+{"origin":"legado negative CSS rule","raw":"-@css:.ad","expected":"CD-:.ad"}
+{"origin":"legado negative XPath rule","raw":"-@xpath://div[@class='ad']","expected":"CX-://div[@class='ad']"}
+{"origin":"legado alternative with regex","raw":".title@text||:标题：([^<]+)","expected":"CD:.title@text || CR:标题：([^<]+)"}
+{"origin":"legado interleave fallback","raw":".cover@attr(src)%%.title@text||.backup","expected":"CD:.cover@attr(src) > ID:.title@text || CD:.backup"}
+{"origin":"legado chained put","raw":"@put:{\"id\":\"42\"}@get:{id}.chapter","expected":"CD:.chapter"}
+{"origin":"legado multiple get variables","raw":"@get:{bookId}@get:page.search","expected":"CD:.search"}
+{"origin":"legado JS block with markup","raw":".content@text<js>result.replace(/\\n/g, ' ')</js>","expected":"CD:.content@text > CS:result.replace(/\\n/g, ' ')"}
+{"origin":"legado WebJS block","raw":".content@webjs:return document.querySelector('.content').innerHTML","expected":"CD:.content > CW:return document.querySelector('.content').innerHTML"}
+{"origin":"legado JS then CSS chain","raw":"<js>java.get('url')</js>&&a@href","expected":"CS:java.get('url') > AD:a@href"}
+{"origin":"legado JSON fallback chain","raw":"$.book.title||@json:$.book.name||.title@text","expected":"CJ:$.book.title || CJ:$.book.name || CD:.title@text"}
+{"origin":"legado CSS pseudo selector","raw":"li:nth-child(2)@text&&li:nth-child(3)@text","expected":"CD:li:nth-child(2)@text > AD:li:nth-child(3)@text"}
+{"origin":"legado quoted ampersand selector","raw":"[data-query=\"a&&b\"]@text&&.author@text","expected":"CD:[data-query=\"a&&b\"]@text > AD:.author@text"}
+{"origin":"legado quoted percent selector","raw":"[data-label='a%%b']@text%%.title","expected":"CD:[data-label='a%%b']@text > ID:.title"}
+{"origin":"legado XPath predicate fallback","raw":"//a[contains(@href, 'book&&id')]/@href||//a/@data-url","expected":"CX://a[contains(@href, 'book&&id')]/@href || CX://a/@data-url"}
+{"origin":"legado JSON quoted operator","raw":"$.items[?(@.name=='a&&b')].url&&$.items[*].title","expected":"CJ:$.items[?(@.name=='a&&b')].url > AJ:$.items[*].title"}
+{"origin":"legado regex colon syntax","raw":":第[0-9]+章","expected":"CR:第[0-9]+章"}
+{"origin":"legado regex reverse colon syntax","raw":"-:广告[^<]*","expected":"CR-:广告[^<]*"}
+{"origin":"legado CSS attr chain","raw":".book@tag.a.0@attr(href)&&.book@tag.a.0@text","expected":"CD:.book@tag.a.0@attr(href) > AD:.book@tag.a.0@text"}
+{"origin":"legado CSS class selector","raw":"div.book-list li.book-item","expected":"CD:div.book-list li.book-item"}
+{"origin":"legado CSS text extraction","raw":".book-title@text","expected":"CD:.book-title@text"}
+{"origin":"legado CSS href extraction","raw":"a.chapter@href","expected":"CD:a.chapter@href"}
+{"origin":"legado XPath wildcard","raw":"//*[@id='content']","expected":"CX://*[@id='content']"}
+{"origin":"legado XPath sibling","raw":"//h2/following-sibling::p[1]","expected":"CX://h2/following-sibling::p[1]"}
+{"origin":"legado JSON scalar","raw":"@json:$.book.author","expected":"CJ:$.book.author"}
+{"origin":"legado JSON array fallback","raw":"$.authors[0]||$.author","expected":"CJ:$.authors[0] || CJ:$.author"}
+{"origin":"legado JS expression","raw":"@js:result.toUpperCase()","expected":"CS:result.toUpperCase()"}
+{"origin":"legado WebJS expression","raw":"@webjs:return fetch(url)","expected":"CW:return fetch(url)"}
+{"origin":"legado mixed fallback and concat","raw":".title&&.author||//h1/text()","expected":"CD:.title > AD:.author || CX://h1/text()"}

@@ -7,3 +7,5 @@ src-tauri/gen/
 *.db-shm
 *.db-wal
 .cargo-target/
+.codegraph/
+src-tauri/spikes/**/target/

@@ -391,7 +391,7 @@ pub fn expand_template(raw: &str, ctx: &RuleContext) -> String;  // {{}} 展开
 
 2026-08-31 进展：`source_engine/rule/` 已实现平衡扫描、`||` / `&&` / `%%` 组合、
 Default / XPath / JSONPath / JS / WebJS / Regex 模式识别、`##` 替换、`@put` / `@get` 与模板变量收集；
-`tests/rule_analyzer.rs` 对 `tests/fixtures/rules/legado_rules.jsonl` 的 50 条代表性语法逐条做快照断言。
+`tests/rule_analyzer.rs` 对 `tests/fixtures/rules/legado_rules.jsonl` 的 85 条代表性语法逐条做快照断言。
 当前夹具主要来自本机 legado 语法文档和默认源，**尚不能冒充 50 条公开真实书源样本**；4.2.1 的最终验收仍需用公开书源语料替换或补充。
 
 **4.2.2 XPath / JSONPath / Regex（3–4 天）**
@@ -514,7 +514,7 @@ src-tauri/tests/
 ├── fixtures/
 │   ├── source_a/{search.html, book.html, toc.html, chapter.html, source.json}
 │   ├── source_b/...
-│   └── rules/legado_rules.jsonl     ← 50 条真实规则串 + 期望切分结果
+│   └── rules/legado_rules.jsonl     ← 85 条代表性规则串 + 期望切分结果
 ├── rule_analyzer.rs
 ├── selector_css.rs
 ├── selector_xpath.rs
@@ -719,14 +719,17 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 `source_engine/import.rs` 仍会截取 `&&` 并只处理 `@css:`，XPath、JSONPath 与 JS Runtime 执行器均未实现。
 下一步仍应先完成两项前置工作（见 §9 新增风险）：
 
-- 用公开真实书源语料补强当前 50 条语法夹具，并扩充现有 `source_a/` `source_b/` fixture
-- 做 `rquickjs` 的跨平台构建 spike
+- 用公开真实书源语料补强当前 85 条语法夹具，并扩充现有 `source_a/` `source_b/` fixture
+- 做 `rquickjs` 的跨平台构建 spike（Windows 已通过，Linux 待复核）
 
 本轮可验证证据：
 
 - `source_engine/rule/{analyzer,directive,scanner,model}.rs` 最大 225 行，无新的聚团文件
-- `cargo test`：57 个库单测 + 3 个集成测试通过
+- `cargo test`：57 个库单测 + 3 个集成测试通过；规则分析器夹具扩展为 85 条
 - `cargo clippy --all-targets -- -D warnings`：通过
+- `src-tauri/spikes/rquickjs/`：Windows 上 `cargo check` 与 `cargo run` 均通过，已验证
+  `rquickjs 0.9.0` 的 QuickJS 创建、表达式执行、异常返回和 interrupt handler API。
+  Linux 构建仍需在 Linux 环境执行同一命令后才能关闭跨平台风险。
 
 ### 10.7 验收命令
 
