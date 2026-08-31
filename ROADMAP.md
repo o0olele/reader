@@ -4,33 +4,23 @@
 >
 > `plan.md` 回答"做什么"，本文件回答"接下来按什么顺序做、做到什么算完"。
 > 两者冲突时以本文件为准，并回头修订 `plan.md`。
+>
+> **最近复核：2026-08-31。** §0 是 2026-08-30 的**起点快照，已成历史记录**，保留用于对照；
+> **当前真实进度一律以 §10 为准。**§10 的每一条都要求「代码里能验证到什么」，不接受未经核对的打勾。
+
+**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 未开始。**
 
 ---
 
-## 0. 现状快照（2026-08-30 实测）
+## 0. 起点快照（2026-08-30 审计 · 历史记录）
 
-### 0.1 代码规模（审计时的原始快照，已过时；现状见 §10）
-
-| 层 | 文件 | 行数 |
-| --- | --- | ---: |
-| Rust | `src-tauri/src/command.rs` | 1226 |
-| Rust | `src-tauri/src/source.rs` | 484 |
-| Rust | `src-tauri/src/domain.rs` | 120 |
-| Rust | `src-tauri/src/lib.rs` | 66 |
-| Rust | `src-tauri/src/app.rs` | 42 |
-| Rust | `src-tauri/src/error.rs` | 10 |
-| 前端 | `src/App.vue` | 264（**整个应用只有这一个组件**） |
-| 前端 | `src/services/api/health.ts` | 87 |
-| 前端 | `src/services/events.ts` | 21 |
-| DB | `src-tauri/migrations/001..010` | 10 个文件 |
-
-单元测试合计 5 个（`domain.rs` 2 个、`source.rs` 3 个、`command.rs` 1 个）。无集成测试，无前端测试。
+### 0.1 代码规模（审计时的原始快照，已过时；现状见 §10.1）
 
 ### 0.2 里程碑定位
 
-**M1 完成 · M2 约 60% · M3 约 5%。**
+审计当时：**M1 完成 · M2 约 60% · M3 约 5%。**
 
-（注：`App.vue:199` 顶栏硬编码 `M0 基础骨架`，`ARCHITECTURE.md:5` 写 M2，两处均需在 Step 0 校正。）
+（注：`App.vue:199` 顶栏硬编码 `M0 基础骨架`，`ARCHITECTURE.md:5` 写 M2，两处均需在 Step 0 校正 —— **均已修**，见 §10.2。）
 
 ### 0.3 已跑通的能力
 
@@ -60,28 +50,30 @@
 
 `ARCHITECTURE.md:9-16` 声明了 `command / app / domain / service / repository / source_engine / infrastructure / scheduler` 八个模块边界，**目录中一个都不存在**。实际为 5 个平铺文件，其中 `command.rs` 同时承担：Tauri IPC + SQL + HTTP 客户端构建 + ZIP 解包 + XML 解析 + 签名计算 + 登录流程。
 
-对照 `plan.md` §39 八条原则：
+对照 `plan.md` §39 八条原则（末列为 2026-08-31 复核后的现状）：
 
-| # | 原则 | 状态 |
+| # | 原则 | 2026-08-30 | 现状 |
+| --- | --- | --- | --- |
+| 一 | Command 永远不要写业务 | ❌ 业务全在 `command.rs` | ✅ `command/` 7 个文件共 417 行，无 `sqlx::query` |
+| 二 | SQLite 不让 Vue 直接操作 | ✅ | ✅ |
+| 三 | Source Engine 独立于 BookService | ⚠️ `source.rs` 只有解析，HTTP 在 `command.rs` | ✅ `source_engine/` 纯解析；HTTP 在 `infrastructure/http/` |
+| 四 | JS Runtime 独立于 Source Engine | ❌ 没有 JS Runtime | ❌ 仍无（Step 2） |
+| 五 | 下载必须持久化任务状态 | ❌ 无下载系统 | ❌ 仍无（Step 4） |
+| 六 | 阅读器 UI 与章节获取分离 | ❌ 都在 `App.vue` | ✅ `ReaderPane.vue` + `useReader.ts` + `ReaderService` |
+| 七 | 前后端明确 Schema | ⚠️ 有 TS 类型，无 repository trait | ⚠️ repository trait 已有；TS 类型仍是**手写镜像**，无 codegen |
+| 八 | 第一天做 migration / logging / error | migration ✅；logging 仅 1 处；`AppError` 几乎未用 | ✅ 15 处 tracing 覆盖 5 个 target；全部 command 返回 `AppError` |
+
+`plan.md` §"第一批 10 个基础任务"（末列为现状）：
+
+| 项 | 2026-08-30 | 现状 |
 | --- | --- | --- |
-| 一 | Command 永远不要写业务 | ❌ 业务全在 `command.rs` |
-| 二 | SQLite 不让 Vue 直接操作 | ✅ |
-| 三 | Source Engine 独立于 BookService | ⚠️ `source.rs` 只有解析，HTTP 在 `command.rs` |
-| 四 | JS Runtime 独立于 Source Engine | ❌ 没有 JS Runtime |
-| 五 | 下载必须持久化任务状态 | ❌ 无下载系统 |
-| 六 | 阅读器 UI 与章节获取分离 | ❌ 都在 `App.vue` |
-| 七 | 前后端明确 Schema | ⚠️ 有 TS 类型，无 repository trait |
-| 八 | 第一天做 migration / logging / error | migration ✅；**logging 全项目仅 1 处 `tracing::info!`**；**`AppError` 已定义但几乎未用，所有 command 返回 `Result<_, String>`** |
+| Tailwind / shadcn-vue | 未安装 | **已决策不用** —— 改走原生 CSS + Design Tokens（`styles.css`），见 §2.5 |
+| ESLint / Prettier | 未配置 | ✅ 已配置并全绿，`vue-tsc --noEmit` 纳入 `npm run build` |
+| Rust workspace 结构 | 单 crate | 仍是单 crate（按 §2.5 决策，推迟到 Step 2 抽 `reader-core` 时一次性做） |
+| Repository trait | 无 | ✅ `repository/mod.rs` 定义 4 个 trait + SQLite 实现 |
+| Event 基础封装 | 纯内存 EventEmitter | ✅ `events.ts` 真实桥接 Tauri `listen`/`emit`，保留无 Tauri 时的内存降级 |
 
-`plan.md` §"第一批 10 个基础任务"未完成项：
-
-- [ ] Tailwind / shadcn-vue —— **未安装**
-- [ ] ESLint / Prettier —— **未配置**
-- [ ] Rust workspace 结构 —— **仍是单 crate**
-- [ ] Repository trait —— **无**
-- [ ] Event 基础封装 —— `services/events.ts` 是纯内存 EventEmitter，**从未接通 Tauri `emit`/`listen`**
-
-另：`vue-router` 与 `pinia` 已安装；`pinia` 仅在 `main.ts` 挂载未使用，`vue-router` 完全未引入。
+另：`pinia` 已移除（装了没用）；`vue-router` 已启用，但**三条路由目前都指向同一个 `AppShell`**，属登记而非真正的页面级路由，见 §10.4。
 
 ### 0.6 顺序偏差
 
@@ -101,18 +93,22 @@ migration `008_dynamic_auth`（登录 / token / 签名）属于 `plan.md` §41 �
 排序原则：**先还债 → 再让已有的在线链路真正可用 → 再攻规则引擎（含调试器同步）→ 最后才是下载 / RSS / 备份 / 发布。**
 
 ```
-Step 0  架构补债 + 修 bug        3~5 天   ← 阻塞一切
+Step 0  架构补债 + 修 bug        3~5 天   ✅ 已完成（2026-08-31）
    ↓
-Step 1  M2 收尾：在线阅读可用      1 周
+Step 1  M2 收尾：在线阅读可用      1 周    ✅ 代码项完成，待真实书源手工验收
    ↓
-Step 2  规则引擎（含 JS Runtime）  2~3 周  ┐
-Step 3  书源调试器 + 回归测试      1 周    ┘ 并行
+Step 2  规则引擎（含 JS Runtime）  2~3 周  ◀ 下一步，0%   ┐
+Step 3  书源调试器 + 回归测试      1 周                  ┘ 并行
    ↓
 Step 4  下载 / 缓存               2 周
 Step 5  阅读排版引擎              2 周
 Step 6  RSS / 备份 / 设置         2 周
 Step 7  性能 / 稳定性 / 发布       2 周
 ```
+
+> §1 第一条判断（"架构债现在还成本最低"）在 Step 0 之后**又验证了一次**：Step 0 拆干净 `command.rs`
+> 后，业务在 `SourceService` 里重新聚成 617 行。已于 2026-08-31 再次拆分，见 §10.3。
+> **教训：拆分不是一次性动作，每个 Step 结束都要复查最大文件。**
 
 ---
 
@@ -279,15 +275,15 @@ import { listen, emit as tauriEmit } from '@tauri-apps/api/event'
 - `ARCHITECTURE.md`：模块清单与实际目录对齐；把「introduced with M1/M2/M4」这类未兑现的注记改为真实状态
 - `App.vue`（迁移后的 AppShell）顶栏版本号改为从 `package.json` 读取，不再硬编码 `M0`
 
-### 2.8 验收标准
+### 2.8 验收标准（2026-08-31 逐条复核）
 
-- [ ] `command/` 下没有任何一个文件超过 200 行；无 `sqlx::query` 直接调用
-- [ ] `grep -r "map_err(|e| e.to_string())" src-tauri/src` 无结果
-- [ ] 所有 command 返回 `Result<_, AppError>`
-- [ ] 前端无任何文件超过 200 行；`App.vue` 不再存在
-- [ ] `cargo test` + `cargo clippy -- -D warnings` + `pnpm lint` + `vue-tsc --noEmit` 全绿
-- [ ] B1–B5 全部修复，并各有一条回归测试
-- [ ] 手工回归：导入 TXT → 导入 EPUB → 分组 → 阅读 → 退出重启 → 进度恢复；在线搜索 → 加入书架 → 读目录 → 读正文 → **二次打开同章不发网络请求**
+- [x] `command/` 下没有任何一个文件超过 200 行；无 `sqlx::query` 直接调用 —— 最大 `command/source.rs` 153 行
+- [x] `grep -r "map_err(|e| e.to_string())" src-tauri/src` 无结果 —— 0 处
+- [x] 所有 command 返回 `Result<_, AppError>` —— 25 个命令全部符合
+- [x] 前端无任何文件超过 200 行；`App.vue` 不再存在 —— 最大 `useSources.ts` 193 行
+- [x] `cargo test` + `cargo clippy -- -D warnings` + `npm run lint` + `vue-tsc --noEmit` 全绿
+- [x] B1–B5 全部修复，并各有一条回归测试 —— **但 B5 的"测试"是文本断言而非行为回归，见 §10.5**
+- [ ] 手工回归：导入 TXT → 导入 EPUB → 分组 → 阅读 → 退出重启 → 进度恢复；在线搜索 → 加入书架 → 读目录 → 读正文 → **二次打开同章不发网络请求** —— **未执行**，与 §3.3 一并归入 §10.6
 
 ---
 
@@ -329,11 +325,14 @@ fn legacy_rule(value: Option<&serde_json::Value>, keys: &[&str]) -> Option<Strin
 | 1.8 | 搜索结果排序与去重 | 现在只按 `url` 去重（`command.rs:960`）。改为按 `(标题, 作者)` 归并同一本书的多书源结果，UI 折叠展示。 |
 | 1.9 | 搜索失败可见性 | 现在只要有一个源成功就吞掉全部失败（`command.rs:956`）。改为始终返回 `{ results, failures }`，UI 折叠显示失败原因。 |
 
-### 3.3 验收标准
+### 3.3 验收标准（2026-08-31 复核：**代码项全部落地，三条验收均未执行**）
 
 - [ ] 用 3 个真实、纯 CSS 可解析的书源，完成：搜索 → 详情 → 加书架 → 目录（含分页）→ 正文（含分页）→ 换源 → 刷新目录出新章
-- [ ] 同一章第二次打开零网络请求
+- [ ] 同一章第二次打开零网络请求 —— 代码路径已具备（LRU 50 → `chapter_contents`），但未在真实书源上实测
 - [ ] 导入一份真实 legado 书源 JSON（≥100 个源），报告能准确区分「完全支持 / 部分支持 / 不支持」
+
+> 这三条是 **v0.2.0 的发布门槛**，也是当前唯一阻塞 Step 2 开工的事项（见 §10.6）。
+> 需要人工提供 3 个可用书源；代码侧无待办。
 
 ---
 
@@ -521,6 +520,11 @@ src-tauri/tests/
 
 同时补 Step 0/1 欠的测试：`epub` 解析、`decode_text` 各编码、`split_chapters` 边界、B1–B5 各一条。
 
+**2026-08-31 现状：** `epub`（10 条）/ `txt`（11 条）/ B1–B4 均已补齐。
+仍缺的是**真实 HTML fixture** —— `tests/fixtures/` 下目前只有 `README.md` 与 `rules/legado_rules.jsonl`，
+上面画的 `source_a/` `source_b/` 目录**尚不存在**，`source_pipeline.rs` 端到端测试也还没有。
+这意味着 selector 层的测试全部依赖内联 HTML 字符串，无法覆盖真实站点的容错解析。
+
 ### 5.3 验收标准
 
 - [ ] 调试器能定位一个真实失败书源的失败步骤，并在不重启应用的前提下改规则重试
@@ -592,15 +596,15 @@ src-tauri/tests/
 
 ## 8. 里程碑与版本
 
-| 版本 | 对应 Step | 内容 |
-| --- | --- | --- |
-| v0.1.0 | 现状 + Step 0 | 本地阅读闭环 + 干净架构（内部版，不发布） |
-| v0.2.0 | Step 1 | 在线阅读可用（CSS 书源） |
-| v0.3.0 | Step 2 + 3 | 完整规则引擎 + 调试器 —— **真正的「Legado 桌面版」起点** |
-| v0.4.0 | Step 4 | 下载 / 缓存 |
-| v0.5.0 | Step 5 | 阅读排版引擎 |
-| v0.6.0 | Step 6 | RSS / 备份 / 设置 |
-| v1.0.0 | Step 7 | 性能 / 稳定性 / 打包发布 |
+| 版本 | 对应 Step | 内容 | 状态 |
+| --- | --- | --- | --- |
+| v0.1.0 | 现状 + Step 0 | 本地阅读闭环 + 干净架构（内部版，不发布） | ✅ **已达成**（`package.json` 现为 0.1.0） |
+| v0.2.0 | Step 1 | 在线阅读可用（CSS 书源） | 🟡 代码就绪，卡在 §3.3 手工验收 |
+| v0.3.0 | Step 2 + 3 | 完整规则引擎 + 调试器 —— **真正的「Legado 桌面版」起点** | ⬜ 未开始 |
+| v0.4.0 | Step 4 | 下载 / 缓存 | ⬜ |
+| v0.5.0 | Step 5 | 阅读排版引擎 | ⬜ |
+| v0.6.0 | Step 6 | RSS / 备份 / 设置 | ⬜ |
+| v1.0.0 | Step 7 | 性能 / 稳定性 / 打包发布 | ⬜ |
 
 ---
 
@@ -612,16 +616,36 @@ src-tauri/tests/
 | `rquickjs` 引入 C 工具链，影响跨平台构建 | Linux/macOS 构建失败 | Step 2 开始前先做 spike：在 Windows + Linux 各构建一次 hello-world |
 | XPath crate 与 HTML 容错解析不匹配 | XPath 规则大面积失败 | spike 阶段用真实 HTML 验证 `scraper` → XML DOM 的转换质量；不行则退回 `libxml` 绑定 |
 | Java 正则与 Rust `regex` 语义差异 | 部分书源正则规则失效 | 建立差异清单；不支持的语法（反向引用等）明确降级并在调试器提示 |
-| Cloudflare / JS challenge | 部分站点完全不可用 | 已有识别提示（`command.rs:717`）；根治需 WebView 通道，列入 Step 7 评估 |
-| 架构重构引入回归 | Step 0 拖长 | 重构前先补 Step 3 的部分 fixture 测试作为安全网；小步提交 |
+| Cloudflare / JS challenge | 部分站点完全不可用 | 已有识别提示（`infrastructure/http/request.rs`）；根治需 WebView 通道，列入 Step 7 评估 |
+| ~~架构重构引入回归~~ | ~~Step 0 拖长~~ | **已关闭** —— Step 0 与 08-31 的 `SourceService` 拆分均以小步提交 + 每步全绿完成，未发生回归 |
+| **业务在 service 层重新聚团** | 每个 Step 结束都会产生新的巨型文件 | **新增（2026-08-31）** —— Step 0 后 `SourceService` 涨到 617 行。约定：每个 Step 收尾时复查最大文件，非测试行 > 250 即拆 |
+| **缺真实 HTML fixture** | selector 只在内联字符串上测过，真实站点容错未知 | **新增（2026-08-31）** —— §5.2 的 `source_a/` `source_b/` 尚不存在；Step 2 开工前补齐，否则规则引擎无回归基线 |
 
 ---
 
 ## 10. 当前进度（2026-08-31 复核后重写）
 
-> 上一版本此处 11 项全部打勾，与实测不符。本节按「代码里能验证到什么」重写。
+> 本节是**唯一权威的进度来源**。上一版本此处曾 11 项全部打勾、与实测不符；
+> 本次复核逐条回到代码验证，并把**验证不通过的三条如实降级**（见 §10.5）。
+> 规则：这里的每一条都必须能用一条命令或一个文件路径证明。
 
-### 10.1 Step 0 · 已完成
+### 10.1 代码规模现状（2026-08-31 实测）
+
+| 层 | 规模 |
+| --- | --- |
+| Rust | 4 049 行，45 个文件；最大 `service/search_service/mod.rs` 208 行 |
+| 前端 | 1 494 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
+| DB | `migrations/001..013` 共 13 个文件 |
+| 测试 | **52 个库单测**（分布于 14 个文件）**+ 2 个集成测试** |
+
+对照 §0.1 的起点：`command.rs` 1 226 行 + `source.rs` 484 行 + `App.vue` 264 行这三座大山已全部拆散，
+单文件最大值从 1 226 降到 208。
+
+模块目录与 §2.1 规划**完全一致**（`app` / `command` / `domain` / `service` / `repository` / `source_engine` / `infrastructure`），仅 `scheduler/` 按计划留到 Step 4。
+
+`cargo clippy --all-targets -- -D warnings` 通过，且**全项目零 `allow(dead_code)` / `allow(unused)`**。
+
+### 10.2 Step 0 · 已完成
 
 | 项 | 证据 |
 | --- | --- |
@@ -629,65 +653,74 @@ src-tauri/tests/
 | B2 目录刷新 | `refresh_catalog` command；`list_chapters` 改为纯本地读；发 `chapter-updated` |
 | B3 proxy_url | `repository/source.rs` upsert 含该列 + `upsert_round_trips_proxy_url` |
 | B4 sign_script | 签名逻辑移出 `header` 分支；`infrastructure/http/request.rs` 5 条测试 |
-| B5 migration 漂移 | 012 空操作迁移 + 回归测试 |
-| AppError | `map_err(\|e\| e.to_string())` 与 `Result<_, String>` 均为 0 |
-| command/ 边界 | 6 个文件均 < 100 行；`command/` 下无任何 `sqlx::query` |
-| ebook 解析下沉 | `infrastructure/ebook/{mod,txt,epub}.rs`，纯函数、无 DB 依赖，21 条测试 |
+| B5 migration 漂移 | 012 空操作迁移 + 回归测试（**仅文本断言，见 §10.5**） |
+| AppError | `map_err(\|e\| e.to_string())` 为 0；**全部 26 个 command（`command/` 25 个 + `lib.rs` 的 `health_check`）返回 `AppError`** |
+| command/ 边界 | 7 个文件共 417 行，最大 153 行；`command/` 下无任何 `sqlx::query` |
+| ebook 解析下沉 | `infrastructure/ebook/{mod,txt,epub}.rs`，纯函数、无 DB 依赖，23 条测试 |
 | 导入编排 | `BookService::{import_txt, import_epub}`；书+章节单事务写入；不再用 `list_books()` 全表扫描查单本 |
 | 前端 feature 拆分 | 每 feature 一个 composable + 一个组件；无文件超过 200 行且不靠压行 |
-| 死代码清理 | 删除 `legacy_command.rs`；删除 `NewBook`/`BookRepository::create`、无用 pinia store、`lib.rs` 的 blanket `#[allow(dead_code)]` |
+| 死代码清理 | 删除 `legacy_command.rs`、`NewBook`/`BookRepository::create`、无用 pinia store、`lib.rs` 的 blanket `#[allow(dead_code)]` |
 | 工具链 | 原生 CSS + Design Tokens；ESLint / Prettier / vue-tsc 全绿 |
+| 日志 | 15 处 `tracing`，覆盖 `book`(3) / `reader`(3) / `source`(4) / `network`(3) / `database`(2) 五个 target |
+| 事件桥接 | `events.ts` 真实 `listen`/`emit`，无 Tauri 时降级内存 bus；前端已订阅 `chapter-updated` |
+| 文档校正 | `AppShell` 版本号改读 `package.json`；`ARCHITECTURE.md` 模块清单与实际目录对齐 |
 
-**测试：47 个库单测 + 2 个集成回归测试。** `cargo clippy --all-targets -- -D warnings` 在**没有任何 blanket allow** 的前提下通过。
-
-### 10.2 Step 1 · 已完成
+### 10.3 Step 1 · 代码项已完成
 
 - **1.1 正文缓存** — 进程级 50 章 LRU → SQLite `chapter_contents` 二级缓存
-- **1.2 目录刷新** — 可用；事件包含本次刷新识别出的新增章节数（目录按章节序号 diff）
+- **1.2 目录刷新** — 事件包含本次识别出的新增章节数（按章节序号 diff）
 - **1.3 `nextTocUrl` 分页目录** — 最多 50 页，绝对 URL 归一化并做环检测
 - **1.4 `nextContentUrl` 分页正文** — 最多 20 页，拼接后统一落入正文缓存并做环检测
-- **1.5 书籍详情页** — `fetch_book_info` command；简介/作者/封面 URL 写回书籍并在阅读器展示简介
-- **1.6 封面本地缓存** — Rust 侧按书源请求封面，保存为 data URL；书架优先展示本地缓存
-- **1.7 换源** — 阅读器按书名重搜并选择其他源，切换后清理章节、正文缓存和阅读进度
-- **1.8 搜索去重** — 改为按 (标题, 作者) 归并跨源结果，UI 折叠展示；同源重复 URL 丢弃；8 条测试
-- **1.9 搜索失败可见性** — `search_books` 返回 `{ groups, failures, searched_sources }`，不再「一个源成功就吞掉全部失败」；UI 折叠显示每个失败源及原因
-- **3.1 导入警告** — `SourceImportReport.partial` + UI 提示（无 `import_warnings` 列，但目的达到）
-- **额外修复** — 新加入的在线书打开时目录为空（`list_chapters` 本地化的副作用），`useReader.openBook` 现在自动拉一次目录
+- **1.5 书籍详情页** — `fetch_book_info` command；简介/作者/封面 URL 写回书籍并在阅读器展示
+- **1.6 封面本地缓存** — Rust 侧按书源请求封面并存为 data URL；书架优先展示本地缓存
+- **1.7 换源** — 按书名重搜切换书源，切换后清理章节、正文缓存与阅读进度
+- **1.8 搜索去重** — 按 (标题, 作者) 归并跨源结果，同源重复 URL 丢弃；8 条测试
+- **1.9 搜索失败可见性** — `search_books` 返回 `{ groups, failures, searched_sources }`，UI 折叠显示每个失败源及原因
+- **3.1 导入警告** — `SourceImportReport.partial` + UI 提示（未加 `import_warnings` 列，但目的达到）
+- **额外修复** — 新加入的在线书目录为空（`list_chapters` 本地化的副作用），`useReader.openBook` 现在自动拉一次目录
 
-**测试：48 个库单测 + 2 个集成回归测试。** `cargo clippy --all-targets -- -D warnings`、ESLint、Prettier、`vue-tsc` 与 Vite 构建均通过。
+### 10.4 Step 2 前置准备：拆分 `SourceService`（2026-08-31）
 
-### 10.3 Step 0 收尾完成（2026-08-31）
+Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新聚成 **617 行** —— 全项目最大文件，且 Step 2 要重写的导入与规则检测路径正落在其中，故先行拆分：
 
-- 在线流程位于 `SourceService` / `ReaderService`；`command/` 只保留 Tauri IPC 适配与事件发布。
-- `source.rs` 只保留书源数据契约；现有 CSS selector 与 legado 导入实现已分别迁入 `source_engine/{selector,import}.rs`。
-- `database` 增加 migration 耗时日志；`book` / `reader` / `source` / `network` 日志边界均已建立。
-- 前端订阅 `chapter-updated`，打开中的目录会从本地仓库同步；事件桥接不再是零消费者。
-- `vue-router` 已提供书架、在线搜索、设置三个可直接访问的路由；未使用的 Pinia 依赖及挂载已移除。
-- 组件样式颜色统一引用 `styles.css` Design Tokens；主题专用颜色也集中定义，不再散落在规则中。
+- `service/search_service/` —— `SearchService` 接管并发搜索、结果归并与单源探测；`grouping.rs` 单独承载去重归并与 8 条测试
+- `source_engine/compat.rs` —— 不支持规则检测从 service 层下沉到规则引擎层，Step 2 将直接取代该模块
+- `domain/source.rs` —— 新增 `BookSource::from_import`，取代原 23 行字段拷贝；用具名构造器而非 `From`，因该转换会伪造 `id: 0` 并丢弃会话凭据
+- `infrastructure/http/url.rs` —— `resolve_url` 三份重复实现合并为一处，错误文案统一为 `{label} 无效`（顺带修两处空格笔误）
+- `infrastructure/http/client.rs` —— 抽出 `base_builder` + `build_shared_client`；`import_url` 的客户端刻意保留手写（cookie/redirect 语义不同）
 
-### 10.4 Step 1 验收状态与下一步
+结果：`SourceService` 降至 230 行（非测试 202），只余书源 CRUD、legado 导入与鉴权。鉴权按 §0.6 冻结决定原地保留。**纯重构：零行为变化、零 serde 形状变化、前端零改动**（`git status src/` 为空）。库单测 48 → 52。
 
-Step 1 的代码项已全部落地；剩余的是用 3 个真实纯 CSS 书源完成手工端到端验收，并补充真实分页/详情/封面/换源 fixture。当前仍不支持跨页面 legado 规则串，不能提前进入 Step 2 的完整规则引擎验收。
+### 10.5 复核中发现的名不副实项（已如实降级）
 
-**Step 2：0%。** `source_engine/import.rs` 的 CSS 兼容导入仍会截取 `&&` 并只处理 `@css:`；`RuleAnalyzer`、XPath、JSONPath、Regex 与 JS Runtime 均未实现。
+| # | 原声明 | 实测 | 处置 |
+| --- | --- | --- | --- |
+| 1 | 「`Result<_, String>` 均为 0」 | `source_engine/` 仍有 **7 个函数**返回 `Result<_, String>`（`parse_search` / `parse_catalog{,_page}` / `parse_content{,_page}` / `parse_book_info` / `parse_sources_json`） | 正式验收标准（§2.8）只要求 **command** 层，该条达标。但 §10 的表述过头，已改正。**Step 2 重写 selector 时一并收敛到 `AppError`。** |
+| 2 | 「`command/` 6 个文件均 < 100 行」 | 7 个文件，最大 `command/source.rs` **153 行** | §2.8 的口径是 200 行，达标。表述已按实测改写。 |
+| 3 | 「B1–B5 各有一条回归测试」 | B1–B4 是真实行为测试；**B5 的两条集成测试是文本断言**（`include_str!` 后查字符串），不验证 migration 行为 | 保留（migration 空操作本身难以行为化断言），但已在 §10.2 标注，不再宣称为行为回归。 |
+| 4 | 「vue-router 提供三个可直接访问的路由」 | 三条路由 `/` `/search` `/settings` **全部指向同一个 `AppShell`**，页面切换实际靠组件内部状态 | 字面成立（hash 地址可进入），但不是页面级路由。已在 §0.5 注明，真正拆分留到 Step 5 阅读器独立成页时。 |
 
-### 10.5 Step 2 前置准备：拆分 `SourceService`（2026-08-31）
+### 10.6 下一步（唯一阻塞项）
 
-Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新聚成 617 行 —— 全项目最大文件。Step 2 要重写的导入与规则检测路径正落在其中，故先行拆分：
+**代码侧无待办。** 唯一阻塞是 §3.3 的三条手工验收，需要人工提供 3 个真实、纯 CSS 可解析的书源：
 
-- `service/search_service/` —— `SearchService` 接管并发搜索、结果归并与单源探测；`grouping.rs` 单独承载去重归并逻辑与 8 条测试。`command/search.rs` 的两个命令改由它服务。
-- `source_engine/compat.rs` —— 不支持规则检测（`@XPath:` / `$.` / `<js>` / `&&` 等）从 service 层下沉到规则引擎层，Step 2 将直接取代该模块。
-- `domain/source.rs` —— 新增 `BookSource::from_import`，取代原 `persist_imported_source` 里的 23 行字段拷贝。用具名构造器而非 `From`，因为该转换会伪造 `id: 0` 并丢弃会话凭据。
-- `infrastructure/http/url.rs` —— `resolve_url` 原有三份重复实现（`source_service` 一份、`reader_service` 两份，其中两处错误文案有空格笔误）合并为一处，文案统一为 `{label} 无效`。
-- `infrastructure/http/client.rs` —— 抽出 `base_builder`，新增 `build_shared_client`；`import_url` 的客户端刻意保留手写，因其 cookie/redirect 语义与共享客户端不同。
+1. 搜索 → 详情 → 加书架 → 目录（含分页）→ 正文（含分页）→ 换源 → 刷新目录出新章
+2. 同一章第二次打开零网络请求
+3. 导入 ≥100 源的真实 legado JSON，核对「完全支持 / 部分支持 / 不支持」的判定准确性
 
-拆分后 `SourceService` 只余书源 CRUD、legado 导入与鉴权。鉴权按 §0.6 的冻结决定原地保留，未另立 service。**纯重构：零行为变化、零 serde 形状变化、前端零改动。** 库单测 48 → 52（新增 `resolve_url` 3 条、`from_import` 1 条），全部文件非测试行 ≤ 220。
+通过即发 **v0.2.0**。
 
-### 10.6 验收命令
+**Step 2：0%。** `source_engine/import.rs` 仍会截取 `&&` 并只处理 `@css:`；`RuleAnalyzer`、XPath、JSONPath、Regex 与 JS Runtime 均未实现。开工前建议先做两件事（见 §9 新增风险）：
+
+- 补 §5.2 的真实 HTML fixture（`source_a/` `source_b/`），否则规则引擎没有回归基线
+- 做 `rquickjs` 的跨平台构建 spike
+
+### 10.7 验收命令
 
 ```bash
 cargo test   --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target
-cargo clippy --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target \
-             --all-targets -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target              --all-targets -- -D warnings
 npm run lint && npm run format:check && npm run build
 ```
+
+当前预期：**52 库单测 + 2 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
