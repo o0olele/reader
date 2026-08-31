@@ -6,6 +6,7 @@ use crate::{
     infrastructure::http::{
         client::build_source_client,
         request::{response_error, send_source_request},
+        url::resolve_url,
     },
     repository::{
         book::SqliteBookRepository, chapter::SqliteChapterRepository,
@@ -139,7 +140,7 @@ impl ReaderService {
             let Some(next) = next else {
                 break;
             };
-            current_url = resolve_relative_url(&source.base_url, &next)?;
+            current_url = resolve_url(&source.base_url, &next, "分页 URL")?.to_string();
         }
         let content = pages.join("\n");
         if let Some(id) = chapter_id {
@@ -166,12 +167,7 @@ impl ReaderService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let request_url = reqwest::Url::parse(&book_url)
-            .or_else(|_| {
-                reqwest::Url::parse(&source.base_url).and_then(|base| base.join(&book_url))
-            })
-            .map_err(|e| AppError::InvalidArgument(format!("目录 URL无效: {e}")))?;
-        let mut current_url = request_url.to_string();
+        let mut current_url = resolve_url(&source.base_url, &book_url, "目录 URL")?.to_string();
         let mut visited = HashSet::new();
         let mut catalog = Vec::new();
         for _ in 0..50 {
@@ -190,7 +186,7 @@ impl ReaderService {
             let Some(next) = next else {
                 break;
             };
-            current_url = resolve_relative_url(&source.base_url, &next)?;
+            current_url = resolve_url(&source.base_url, &next, "分页 URL")?.to_string();
         }
         tracing::info!(target: "reader", book_id, chapter_count = catalog.len(), "catalog refreshed");
         if catalog.is_empty() {
@@ -220,13 +216,6 @@ impl ReaderService {
             })
             .await
     }
-}
-
-fn resolve_relative_url(base: &str, value: &str) -> Result<String, AppError> {
-    reqwest::Url::parse(value)
-        .or_else(|_| reqwest::Url::parse(base).and_then(|url| url.join(value)))
-        .map(|url| url.to_string())
-        .map_err(|e| AppError::InvalidArgument(format!("分页 URL 无效: {e}")))
 }
 
 #[cfg(test)]

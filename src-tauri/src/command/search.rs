@@ -1,7 +1,7 @@
 use crate::{
     app::AppState,
     error::AppError,
-    service::source_service::{SearchResponse, SourceService, SourceTestResult},
+    service::search_service::{SearchResponse, SearchService, SourceTestResult},
 };
 use tauri::State;
 
@@ -11,7 +11,7 @@ pub async fn search_books_cmd(
     query: String,
     source_id: Option<i64>,
 ) -> Result<SearchResponse, AppError> {
-    SourceService::new(state.database()?)
+    SearchService::new(state.database()?)
         .search(&query, source_id)
         .await
 }
@@ -22,7 +22,7 @@ pub async fn test_book_source_cmd(
     source_id: i64,
     query: String,
 ) -> Result<SourceTestResult, AppError> {
-    SourceService::new(state.database()?)
+    SearchService::new(state.database()?)
         .test(source_id, &query)
         .await
 }

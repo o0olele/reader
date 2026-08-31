@@ -671,7 +671,19 @@ Step 1 的代码项已全部落地；剩余的是用 3 个真实纯 CSS 书源�
 
 **Step 2：0%。** `source_engine/import.rs` 的 CSS 兼容导入仍会截取 `&&` 并只处理 `@css:`；`RuleAnalyzer`、XPath、JSONPath、Regex 与 JS Runtime 均未实现。
 
-### 10.5 验收命令
+### 10.5 Step 2 前置准备：拆分 `SourceService`（2026-08-31）
+
+Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新聚成 617 行 —— 全项目最大文件。Step 2 要重写的导入与规则检测路径正落在其中，故先行拆分：
+
+- `service/search_service/` —— `SearchService` 接管并发搜索、结果归并与单源探测；`grouping.rs` 单独承载去重归并逻辑与 8 条测试。`command/search.rs` 的两个命令改由它服务。
+- `source_engine/compat.rs` —— 不支持规则检测（`@XPath:` / `$.` / `<js>` / `&&` 等）从 service 层下沉到规则引擎层，Step 2 将直接取代该模块。
+- `domain/source.rs` —— 新增 `BookSource::from_import`，取代原 `persist_imported_source` 里的 23 行字段拷贝。用具名构造器而非 `From`，因为该转换会伪造 `id: 0` 并丢弃会话凭据。
+- `infrastructure/http/url.rs` —— `resolve_url` 原有三份重复实现（`source_service` 一份、`reader_service` 两份，其中两处错误文案有空格笔误）合并为一处，文案统一为 `{label} 无效`。
+- `infrastructure/http/client.rs` —— 抽出 `base_builder`，新增 `build_shared_client`；`import_url` 的客户端刻意保留手写，因其 cookie/redirect 语义与共享客户端不同。
+
+拆分后 `SourceService` 只余书源 CRUD、legado 导入与鉴权。鉴权按 §0.6 的冻结决定原地保留，未另立 service。**纯重构：零行为变化、零 serde 形状变化、前端零改动。** 库单测 48 → 52（新增 `resolve_url` 3 条、`from_import` 1 条），全部文件非测试行 ≤ 220。
+
+### 10.6 验收命令
 
 ```bash
 cargo test   --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target
