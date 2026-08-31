@@ -20,3 +20,11 @@ export function deleteBook(bookId: number): Promise<void> {
 export function addOnlineBook(result: BookSearchResult): Promise<Book> {
   return invoke<Book>('add_online_book', { result })
 }
+
+export function fetchBookInfo(bookId: number): Promise<Book> {
+  return invoke<Book>('fetch_book_info', { bookId })
+}
+
+export function switchBookSource(bookId: number, result: BookSearchResult): Promise<Book> {
+  return invoke<Book>('switch_book_source', { bookId, result })
+}

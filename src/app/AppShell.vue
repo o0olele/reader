@@ -60,6 +60,14 @@ const chooseFile = () => fileInput.value?.click()
             <button type="button" class="back-button" @click="reader.closeBook()">返回书架</button>
             <p class="eyebrow">正在阅读</p>
             <h1>{{ reader.selectedBook.title }}</h1>
+            <p
+              v-if="reader.selectedBook.author || reader.selectedBook.kind || reader.selectedBook.latest_chapter"
+              class="book-summary"
+            >
+              {{ reader.selectedBook.author || '作者未知' }}
+              <span v-if="reader.selectedBook.kind"> · {{ reader.selectedBook.kind }}</span>
+              <span v-if="reader.selectedBook.latest_chapter"> · 最新：{{ reader.selectedBook.latest_chapter }}</span>
+            </p>
           </div>
           <button
             v-if="reader.selectedBook.source_id"
@@ -69,6 +77,15 @@ const chooseFile = () => fileInput.value?.click()
             @click="reader.refreshCatalogForBook()"
           >
             {{ reader.refreshingCatalog ? '刷新中...' : '刷新目录' }}
+          </button>
+          <button
+            v-if="reader.selectedBook.source_id"
+            type="button"
+            class="secondary"
+            :disabled="reader.switchingSource"
+            @click="reader.switchSource()"
+          >
+            {{ reader.switchingSource ? '换源中...' : '换源' }}
           </button>
           <div class="reader-settings">
             <label>
@@ -132,6 +149,7 @@ const chooseFile = () => fileInput.value?.click()
           :theme="reader.theme"
           :font-size="reader.fontSize"
           :loading="reader.loadingChapter"
+          :book="reader.selectedBook"
           @select-chapter="reader.selectChapter"
           @scroll="reader.scheduleProgressSave"
           @reader-content="reader.readerContent = $event"

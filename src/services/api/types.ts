@@ -6,6 +6,11 @@ export interface Book {
   group_id?: number
   source_id?: number
   remote_url?: string
+  intro?: string
+  kind?: string
+  latest_chapter?: string
+  cover_url?: string
+  cover_data?: string
   chapter_count: number
   updated_at: string
 }
@@ -56,6 +61,8 @@ export interface BookSource {
   session_expires_at?: string
   sign_script?: string
   proxy_url?: string
+  next_toc_url_selector?: string
+  next_content_url_selector?: string
 }
 
 /** One book as returned by a single source. */

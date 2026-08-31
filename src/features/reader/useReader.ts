@@ -2,10 +2,13 @@
 import { nextTick, reactive, ref, watch } from 'vue'
 import {
   fetchOnlineContent,
+  fetchBookInfo,
   getReadingProgress,
   listChapters,
   refreshCatalog,
   saveReadingProgress,
+  searchBooks,
+  switchBookSource,
   type Book,
   type Chapter,
 } from '../../services/api'
@@ -19,6 +22,7 @@ export function useReader(report: (cause: unknown) => void) {
   const selectedChapter = ref<Chapter>()
   const loadingChapter = ref(false)
   const refreshingCatalog = ref(false)
+  const switchingSource = ref(false)
   const readerContent = ref<HTMLElement | null>(null)
   const fontSize = ref(Number(localStorage.getItem('reader-font-size') ?? '17'))
   const theme = ref(localStorage.getItem('reader-theme') ?? 'light')
@@ -33,6 +37,9 @@ export function useReader(report: (cause: unknown) => void) {
   async function openBook(book: Book) {
     selectedBook.value = book
     try {
+      if (isOnline(book) && !book.intro && !book.cover_data) {
+        selectedBook.value = await fetchBookInfo(book.id).catch(() => book)
+      }
       chapters.value = await listChapters(book.id)
       // `list_chapters` is deliberately local-only, so a book just added from a
       // search has no catalog yet. Fetch it once instead of showing an empty list.
@@ -69,6 +76,28 @@ export function useReader(report: (cause: unknown) => void) {
         chapters.value.find((chapter) => chapter.id === selectedChapter.value?.id) ?? chapters.value[0]
     } catch (cause) {
       report(cause)
+    }
+  }
+
+  async function switchSource() {
+    const book = selectedBook.value
+    if (!book?.source_id) return
+    switchingSource.value = true
+    try {
+      const response = await searchBooks(book.title)
+      const group = response.groups.find((item) => item.title.replace(/\s/g, '') === book.title.replace(/\s/g, ''))
+      const alternative = group?.sources.find((source) => source.source_id !== book.source_id)
+      if (!alternative) throw new Error('没有找到其他可用书源')
+      selectedBook.value = await switchBookSource(book.id, alternative)
+      chapters.value = []
+      selectedChapter.value = undefined
+      await loadCatalog()
+      selectedChapter.value = chapters.value[0]
+      await loadChapterContent(selectedChapter.value)
+    } catch (cause) {
+      report(cause)
+    } finally {
+      switchingSource.value = false
     }
   }
 
@@ -127,11 +156,13 @@ export function useReader(report: (cause: unknown) => void) {
     selectedChapter,
     loadingChapter,
     refreshingCatalog,
+    switchingSource,
     readerContent,
     fontSize,
     theme,
     openBook,
     refreshCatalogForBook,
+    switchSource,
     handleCatalogUpdated,
     selectChapter,
     closeBook,

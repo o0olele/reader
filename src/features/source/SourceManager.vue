@@ -24,6 +24,8 @@ const FIELDS = [
   { key: 'token_path', label: 'Token 路径', placeholder: 'Token 路径' },
   { key: 'sign_script', label: '签名表达式', placeholder: '签名表达式' },
   { key: 'proxy_url', label: '代理 URL', placeholder: '代理 URL（可选）' },
+  { key: 'next_toc_url_selector', label: '目录下一页 CSS', placeholder: '目录下一页 CSS，如 .next::attr(href)' },
+  { key: 'next_content_url_selector', label: '正文下一页 CSS', placeholder: '正文下一页 CSS，如 .next::attr(href)' },
 ] as const
 </script>
 

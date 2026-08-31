@@ -29,6 +29,8 @@ function emptyForm(): SourceForm {
     token_path: '',
     sign_script: '',
     proxy_url: '',
+    next_toc_url_selector: '',
+    next_content_url_selector: '',
   }
 }
 
@@ -89,6 +91,8 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
         token_path: current.token_path || undefined,
         sign_script: current.sign_script || undefined,
         proxy_url: current.proxy_url || undefined,
+        next_toc_url_selector: current.next_toc_url_selector || undefined,
+        next_content_url_selector: current.next_content_url_selector || undefined,
         enabled: true,
       })
       form.value = emptyForm()

@@ -24,7 +24,10 @@ const emit = defineEmits<{
       @click="emit('open', book)"
       @keydown.enter="emit('open', book)"
     >
-      <div class="book-cover">{{ book.title.slice(0, 1) }}</div>
+      <div class="book-cover">
+        <img v-if="book.cover_data" :src="book.cover_data" :alt="book.title" />
+        <template v-else>{{ book.title.slice(0, 1) }}</template>
+      </div>
       <div class="book-meta">
         <h2>{{ book.title }}</h2>
         <p>{{ book.chapter_count }} 个章节</p>

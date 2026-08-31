@@ -8,6 +8,7 @@ defineProps<{
   theme: string
   fontSize: number
   loading: boolean
+  book?: { intro?: string; kind?: string; latest_chapter?: string; cover_data?: string }
 }>()
 
 const emit = defineEmits<{
@@ -42,6 +43,7 @@ watch(contentRef, (element) => emit('readerContent', element))
       @scroll="emit('scroll')"
     >
       <h2>{{ selectedChapter.title }}</h2>
+      <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
       <p v-if="loading" class="reader-loading">正在获取正文...</p>
       <template v-else>
         <p

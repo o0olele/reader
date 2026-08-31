@@ -642,12 +642,19 @@ src-tauri/tests/
 
 ### 10.2 Step 1 · 已完成
 
-- **1.1 正文缓存** — SQLite 层完成；**内存 LRU 仍未做**
-- **1.2 目录刷新** — 可用；**仍是全量 upsert，没有 diff 出「新增了哪几章」**，事件只带总数
+- **1.1 正文缓存** — 进程级 50 章 LRU → SQLite `chapter_contents` 二级缓存
+- **1.2 目录刷新** — 可用；事件包含本次刷新识别出的新增章节数（目录按章节序号 diff）
+- **1.3 `nextTocUrl` 分页目录** — 最多 50 页，绝对 URL 归一化并做环检测
+- **1.4 `nextContentUrl` 分页正文** — 最多 20 页，拼接后统一落入正文缓存并做环检测
+- **1.5 书籍详情页** — `fetch_book_info` command；简介/作者/封面 URL 写回书籍并在阅读器展示简介
+- **1.6 封面本地缓存** — Rust 侧按书源请求封面，保存为 data URL；书架优先展示本地缓存
+- **1.7 换源** — 阅读器按书名重搜并选择其他源，切换后清理章节、正文缓存和阅读进度
 - **1.8 搜索去重** — 改为按 (标题, 作者) 归并跨源结果，UI 折叠展示；同源重复 URL 丢弃；8 条测试
 - **1.9 搜索失败可见性** — `search_books` 返回 `{ groups, failures, searched_sources }`，不再「一个源成功就吞掉全部失败」；UI 折叠显示每个失败源及原因
 - **3.1 导入警告** — `SourceImportReport.partial` + UI 提示（无 `import_warnings` 列，但目的达到）
 - **额外修复** — 新加入的在线书打开时目录为空（`list_chapters` 本地化的副作用），`useReader.openBook` 现在自动拉一次目录
+
+**测试：48 个库单测 + 2 个集成回归测试。** `cargo clippy --all-targets -- -D warnings`、ESLint、Prettier、`vue-tsc` 与 Vite 构建均通过。
 
 ### 10.3 Step 0 收尾完成（2026-08-31）
 
@@ -658,9 +665,9 @@ src-tauri/tests/
 - `vue-router` 已提供书架、在线搜索、设置三个可直接访问的路由；未使用的 Pinia 依赖及挂载已移除。
 - 组件样式颜色统一引用 `styles.css` Design Tokens；主题专用颜色也集中定义，不再散落在规则中。
 
-### 10.4 尚未完成（下一步）
+### 10.4 Step 1 验收状态与下一步
 
-**Step 1 剩余：** 1.3 `nextTocUrl`、1.4 `nextContentUrl`、1.5 书籍详情页（尚无 `fetch_book_info` command 和 UI）、1.6 封面代理下载与本地缓存（当前直接用远端 URL，未处理 Referer 防盗链）、1.7 换源。
+Step 1 的代码项已全部落地；剩余的是用 3 个真实纯 CSS 书源完成手工端到端验收，并补充真实分页/详情/封面/换源 fixture。当前仍不支持跨页面 legado 规则串，不能提前进入 Step 2 的完整规则引擎验收。
 
 **Step 2：0%。** `source_engine/import.rs` 的 CSS 兼容导入仍会截取 `&&` 并只处理 `@css:`；`RuleAnalyzer`、XPath、JSONPath、Regex 与 JS Runtime 均未实现。
 
