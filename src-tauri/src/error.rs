@@ -47,5 +47,4 @@ impl AppError {
     pub fn io(error: impl Display) -> Self {
         Self::Io(error.to_string())
     }
-
 }

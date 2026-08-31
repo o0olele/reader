@@ -101,23 +101,21 @@ fn read_manifest_and_spine(opf: &[u8]) -> Result<(HashMap<String, String>, Vec<S
     let mut buffer = Vec::new();
     loop {
         match reader.read_event_into(&mut buffer) {
-            Ok(Event::Empty(event)) | Ok(Event::Start(event)) => {
-                match event.name().as_ref() {
-                    b"item" => {
-                        if let (Some(id), Some(href)) =
-                            (xml_attribute(&event, b"id"), xml_attribute(&event, b"href"))
-                        {
-                            manifest.insert(id, href);
-                        }
+            Ok(Event::Empty(event)) | Ok(Event::Start(event)) => match event.name().as_ref() {
+                b"item" => {
+                    if let (Some(id), Some(href)) =
+                        (xml_attribute(&event, b"id"), xml_attribute(&event, b"href"))
+                    {
+                        manifest.insert(id, href);
                     }
-                    b"itemref" => {
-                        if let Some(idref) = xml_attribute(&event, b"idref") {
-                            spine.push(idref);
-                        }
-                    }
-                    _ => {}
                 }
-            }
+                b"itemref" => {
+                    if let Some(idref) = xml_attribute(&event, b"idref") {
+                        spine.push(idref);
+                    }
+                }
+                _ => {}
+            },
             Ok(Event::Eof) => break,
             Err(error) => return Err(AppError::Parse(format!("EPUB OPF 解析失败: {error}"))),
             _ => {}
@@ -288,7 +286,10 @@ mod tests {
                     r#"<itemref idref="c1"/><itemref idref="gone"/>"#,
                 ),
             ),
-            ("OEBPS/c1.xhtml", "<html><body><p>仅此一章</p></body></html>"),
+            (
+                "OEBPS/c1.xhtml",
+                "<html><body><p>仅此一章</p></body></html>",
+            ),
         ]);
         let book = parse(bytes, "兜底书名".into()).unwrap();
         assert_eq!(book.chapters.len(), 1);
@@ -348,7 +349,8 @@ mod tests {
 
     #[test]
     fn unwraps_markup_inside_the_heading() {
-        let (title, _) = clean_xhtml(b"<h2><span>\xe7\xac\xac\xe4\xb8\x89\xe7\xab\xa0</span></h2><p>x</p>");
+        let (title, _) =
+            clean_xhtml(b"<h2><span>\xe7\xac\xac\xe4\xb8\x89\xe7\xab\xa0</span></h2><p>x</p>");
         assert_eq!(title, "第三章");
     }
 

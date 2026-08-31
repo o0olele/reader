@@ -41,5 +41,7 @@ pub async fn add_online_book_cmd(
     state: State<'_, AppState>,
     result: BookSearchResult,
 ) -> Result<Book, AppError> {
-    BookService::new(state.database()?).add_online(&result).await
+    BookService::new(state.database()?)
+        .add_online(&result)
+        .await
 }

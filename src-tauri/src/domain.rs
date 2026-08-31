@@ -38,4 +38,3 @@ pub struct BookshelfGroup {
     pub name: String,
     pub book_count: i64,
 }
-

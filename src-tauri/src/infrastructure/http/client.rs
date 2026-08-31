@@ -20,7 +20,5 @@ pub fn build_source_client(
             .map_err(|error| AppError::InvalidArgument(format!("代理 URL 无效: {error}")))?;
         builder = builder.proxy(proxy);
     }
-    builder
-        .build()
-        .map_err(AppError::network)
+    builder.build().map_err(AppError::network)
 }

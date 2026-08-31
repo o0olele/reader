@@ -72,7 +72,10 @@ fn is_heading(trimmed: &str) -> bool {
 pub fn parse(bytes: &[u8], title: String) -> Result<ParsedBook, AppError> {
     let text = decode_text(bytes).map_err(AppError::parse)?;
     let chapters = split_chapters(&text);
-    if chapters.iter().all(|(_, content)| content.trim().is_empty()) {
+    if chapters
+        .iter()
+        .all(|(_, content)| content.trim().is_empty())
+    {
         return Err(AppError::Parse("TXT 文件中没有可读取的正文".into()));
     }
     Ok(ParsedBook {
