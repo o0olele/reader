@@ -1,2 +1,50 @@
-{"rule":".book && a::attr(href)","mode":"css-chain"}
-{"rule":"@XPath://article","mode":"unsupported-step0"}
+{"origin":"syntax.md default selector","raw":".book","expected":"CD:.book"}
+{"origin":"syntax.md CSS prefix","raw":"@CSS:.book-list li@text","expected":"CD:.book-list li@text"}
+{"origin":"syntax.md default prefix","raw":"@@class.odd.0@tag.a.0@text","expected":"CD:class.odd.0@tag.a.0@text"}
+{"origin":"syntax.md XPath prefix","raw":"@XPath://article","expected":"CX://article"}
+{"origin":"syntax.md implicit XPath","raw":"//div[@class=\"book-list\"]/ul/li","expected":"CX://div[@class=\"book-list\"]/ul/li"}
+{"origin":"syntax.md JSON prefix","raw":"@Json:$.data.books[*]","expected":"CJ:$.data.books[*]"}
+{"origin":"syntax.md implicit JSON object","raw":"$.data.books[0].title","expected":"CJ:$.data.books[0].title"}
+{"origin":"syntax.md implicit JSON array","raw":"$[0].title","expected":"CJ:$[0].title"}
+{"origin":"syntax.md tail JS","raw":"@js:result.trim()","expected":"CS:result.trim()"}
+{"origin":"syntax.md JS block","raw":"<js>java.get('x')</js>","expected":"CS:java.get('x')"}
+{"origin":"syntax.md default then JS","raw":"@css:.book@text@js:result.replace(\"旧\", \"新\")","expected":"CD:.book@text > CS:result.replace(\"旧\", \"新\")"}
+{"origin":"syntax.md JS separator","raw":"tag.li<js>result</js>//a","expected":"CD:tag.li > CS:result > CX://a"}
+{"origin":"syntax.md concat","raw":"tag.a@text&&tag.span@text","expected":"CD:tag.a@text > AD:tag.span@text"}
+{"origin":"syntax.md interleave","raw":"tag.a@href%%tag.a@text","expected":"CD:tag.a@href > ID:tag.a@text"}
+{"origin":"syntax.md fallback","raw":"tag.a@text||tag.span@text","expected":"CD:tag.a@text || CD:tag.span@text"}
+{"origin":"combined fallback chain","raw":".name&&.author||.title","expected":"CD:.name > AD:.author || CD:.title"}
+{"origin":"RuleAnalyzer quoted CSS filter","raw":".book[data-op='a&&b']@text&&.author","expected":"CD:.book[data-op='a&&b']@text > AD:.author"}
+{"origin":"RuleAnalyzer JSON filter concat","raw":"$.items[?(@.ready&&@.free)]","expected":"CJ:$.items[?(@.ready&&@.free)]"}
+{"origin":"RuleAnalyzer JSON filter fallback","raw":"$.items[?(@.name=='a||b')]||$.backup","expected":"CJ:$.items[?(@.name=='a||b')] || CJ:$.backup"}
+{"origin":"RuleAnalyzer tail JS operators","raw":"@js:ready && (left || right)","expected":"CS:ready && (left || right)"}
+{"origin":"RuleAnalyzer JS block operators","raw":"<js>ready && (left || right)</js>","expected":"CS:ready && (left || right)"}
+{"origin":"syntax.md all-in-one regex","raw":":<li><a[^\"]+\"([^\"]*)\">([^<]*)","expected":"CR:<li><a[^\"]+\"([^\"]*)\">([^<]*)"}
+{"origin":"syntax.md reversed all-in-one regex","raw":"-:<li>([^<]*)","expected":"CR-:<li>([^<]*)"}
+{"origin":"syntax.md cleanup replacement","raw":"tag.p@text##去除的文字##替换为的文字","expected":"CD:tag.p@text"}
+{"origin":"syntax.md only-one regex","raw":"##:book_name\"[^\"]+\"([^\"]+)##$1###","expected":"CR:"}
+{"origin":"syntax.md reverse selector","raw":"-tag.dd@tag.a@text","expected":"CD-:tag.dd@tag.a@text"}
+{"origin":"XPath concat","raw":"//a/@href&&//a/text()","expected":"CX://a/@href > AX://a/text()"}
+{"origin":"JSON interleave","raw":"$.items[*].url%%$.items[*].title","expected":"CJ:$.items[*].url > IJ:$.items[*].title"}
+{"origin":"cross-mode fallback","raw":"@XPath://title||$.title","expected":"CX://title || CJ:$.title"}
+{"origin":"case-insensitive prefixes","raw":"@xPaTh://main&&@jSoN:$.main","expected":"CX://main > AJ:$.main"}
+{"origin":"AnalyzeRule WebJS mode","raw":"@webjs:return document.title","expected":"CW:return document.title"}
+{"origin":"syntax.md template rule","raw":"/search?key={{key}}&page={{page}}","expected":"CX:/search?key={{key}}&page={{page}}"}
+{"origin":"RuleAnalyzer template operators","raw":".item{{left && right}}&&.next","expected":"CD:.item{{left && right}} > AD:.next"}
+{"origin":"syntax.md strict put","raw":"@put:{\"bid\":\"//*[@data-bid]/@data-bid\"}.book","expected":"CD:.book"}
+{"origin":"syntax.md legacy get","raw":"@get:bid.book","expected":"CD:.book"}
+{"origin":"AnalyzeRule braced get","raw":"@get:{bid}.book","expected":"CD:.book"}
+{"origin":"concat into JS block","raw":".book&&<js>result && keep</js>","expected":"CD:.book > AS:result && keep"}
+{"origin":"JS block fallback","raw":"<js>result || backup</js>||.book","expected":"CS:result || backup || CD:.book"}
+{"origin":"tail WebJS operators","raw":".book@webjs:return left || right","expected":"CD:.book > CW:return left || right"}
+{"origin":"CSS functional selector fallback","raw":"div:not([data-x='a||b'])||main","expected":"CD:div:not([data-x='a||b']) || CD:main"}
+{"origin":"quoted interleave marker","raw":"[data-label=\"a%%b\"]%%.label","expected":"CD:[data-label=\"a%%b\"] > ID:.label"}
+{"origin":"unicode selector","raw":".章节&&.作者","expected":"CD:.章节 > AD:.作者"}
+{"origin":"three-way concat","raw":".a&&.b&&.c","expected":"CD:.a > AD:.b > AD:.c"}
+{"origin":"three-way fallback","raw":".a||.b||.c","expected":"CD:.a || CD:.b || CD:.c"}
+{"origin":"mixed combinators","raw":".url%%.title&&.author","expected":"CD:.url > ID:.title > AD:.author"}
+{"origin":"XPath predicate operators","raw":"//a[@data-op='x&&y']/@href&&//a/text()","expected":"CX://a[@data-op='x&&y']/@href > AX://a/text()"}
+{"origin":"JSON quoted fallback marker","raw":"$.items[?(@.value=='x||y')].name","expected":"CJ:$.items[?(@.value=='x||y')].name"}
+{"origin":"standalone template","raw":"{{page}}","expected":"CD:{{page}}"}
+{"origin":"empty JS separator","raw":"<js></js>.book","expected":"CD:.book"}
+{"origin":"default bookSources.json chapter URL","raw":"$.id@js:java.put('chapterId', result);'/chapter?id=' + result + '&key={{key}}'","expected":"CJ:$.id > CS:java.put('chapterId', result);'/chapter?id=' + result + '&key={{key}}'"}

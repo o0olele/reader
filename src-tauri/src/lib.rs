@@ -6,7 +6,7 @@ mod error;
 mod infrastructure;
 mod repository;
 mod service;
-mod source_engine;
+pub mod source_engine;
 
 use app::AppState;
 use tauri::Manager;

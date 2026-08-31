@@ -8,7 +8,7 @@
 > **最近复核：2026-08-31。** §0 是 2026-08-30 的**起点快照，已成历史记录**，保留用于对照；
 > **当前真实进度一律以 §10 为准。**§10 的每一条都要求「代码里能验证到什么」，不接受未经核对的打勾。
 
-**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 未开始。**
+**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 已启动（RuleAnalyzer 基线完成）。**
 
 ---
 
@@ -97,7 +97,7 @@ Step 0  架构补债 + 修 bug        3~5 天   ✅ 已完成（2026-08-31）
    ↓
 Step 1  M2 收尾：在线阅读可用      1 周    ✅ 代码项完成，待真实书源手工验收
    ↓
-Step 2  规则引擎（含 JS Runtime）  2~3 周  ◀ 下一步，0%   ┐
+Step 2  规则引擎（含 JS Runtime）  2~3 周  ◀ 进行中：RuleAnalyzer 基线完成   ┐
 Step 3  书源调试器 + 回归测试      1 周                  ┘ 并行
    ↓
 Step 4  下载 / 缓存               2 周
@@ -367,7 +367,7 @@ legado 侧（`app/src/main/java/io/legado/app/model/analyzeRule/`）：
 
 ### 4.2 实施顺序（**不要直接上 XPath**）
 
-**4.2.1 先写 `RuleAnalyzer`（1 周，最关键）**
+**4.2.1 先写 `RuleAnalyzer`（1 周，最关键）— 🟡 解析器与 50 条代表性语法基线已完成**
 
 规则字符串解析器是所有 selector 的前置。当前 `split("&&").next()` 就是缺它的直接后果。
 
@@ -388,6 +388,11 @@ pub fn expand_template(raw: &str, ctx: &RuleContext) -> String;  // {{}} 展开
 ```
 
 必须先有一套**基于 legado 真实规则串的单元测试**（从 `legado-with-MD3` 的测试资源或公开书源集抽 50 条），红→绿驱动。
+
+2026-08-31 进展：`source_engine/rule/` 已实现平衡扫描、`||` / `&&` / `%%` 组合、
+Default / XPath / JSONPath / JS / WebJS / Regex 模式识别、`##` 替换、`@put` / `@get` 与模板变量收集；
+`tests/rule_analyzer.rs` 对 `tests/fixtures/rules/legado_rules.jsonl` 的 50 条代表性语法逐条做快照断言。
+当前夹具主要来自本机 legado 语法文档和默认源，**尚不能冒充 50 条公开真实书源样本**；4.2.1 的最终验收仍需用公开书源语料替换或补充。
 
 **4.2.2 XPath / JSONPath / Regex（3–4 天）**
 
@@ -636,7 +641,7 @@ src-tauri/tests/
 | Rust | 4 049 行，45 个文件；最大 `service/search_service/mod.rs` 208 行 |
 | 前端 | 1 494 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
 | DB | `migrations/001..013` 共 13 个文件 |
-| 测试 | **52 个库单测**（分布于 14 个文件）**+ 2 个集成测试** |
+| 测试 | **57 个库单测 + 3 个集成测试**（其中规则分析器集成测试逐条覆盖 50 条夹具） |
 
 对照 §0.1 的起点：`command.rs` 1 226 行 + `source.rs` 484 行 + `App.vue` 264 行这三座大山已全部拆散，
 单文件最大值从 1 226 降到 208。
@@ -710,10 +715,18 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 通过即发 **v0.2.0**。
 
-**Step 2：0%。** `source_engine/import.rs` 仍会截取 `&&` 并只处理 `@css:`；`RuleAnalyzer`、XPath、JSONPath、Regex 与 JS Runtime 均未实现。开工前建议先做两件事（见 §9 新增风险）：
+**Step 2：已启动。** `source_engine/rule/` 的 `RuleAnalyzer` 基线已落地，但尚未接入现有 selector/import 路径；
+`source_engine/import.rs` 仍会截取 `&&` 并只处理 `@css:`，XPath、JSONPath 与 JS Runtime 执行器均未实现。
+下一步仍应先完成两项前置工作（见 §9 新增风险）：
 
-- 补 §5.2 的真实 HTML fixture（`source_a/` `source_b/`），否则规则引擎没有回归基线
+- 用公开真实书源语料补强当前 50 条语法夹具，并补 §5.2 的真实 HTML fixture（`source_a/` `source_b/`）
 - 做 `rquickjs` 的跨平台构建 spike
+
+本轮可验证证据：
+
+- `source_engine/rule/{analyzer,directive,scanner,model}.rs` 最大 225 行，无新的聚团文件
+- `cargo test`：57 个库单测 + 3 个集成测试通过
+- `cargo clippy --all-targets -- -D warnings`：通过
 
 ### 10.7 验收命令
 

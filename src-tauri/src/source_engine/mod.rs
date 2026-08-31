@@ -1,5 +1,6 @@
 //! Source rule execution boundary.
 
-pub mod compat;
-pub mod import;
-pub mod selector;
+pub(crate) mod compat;
+pub(crate) mod import;
+pub mod rule;
+pub(crate) mod selector;
