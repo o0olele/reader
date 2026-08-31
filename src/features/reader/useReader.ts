@@ -72,6 +72,15 @@ export function useReader(report: (cause: unknown) => void) {
     }
   }
 
+  // Keep an open reader in sync when another surface refreshes this book's catalog.
+  async function handleCatalogUpdated(payload?: unknown) {
+    const bookId = (payload as { book_id?: unknown } | undefined)?.book_id
+    if (!selectedBook.value || (typeof bookId === 'number' && bookId !== selectedBook.value.id)) return
+    const selectedId = selectedChapter.value?.id
+    chapters.value = await listChapters(selectedBook.value.id)
+    selectedChapter.value = chapters.value.find((chapter) => chapter.id === selectedId) ?? chapters.value[0]
+  }
+
   async function loadChapterContent(chapter?: Chapter) {
     const book = selectedBook.value
     if (!chapter || chapter.content || !book?.source_id || !chapter.remote_url) return
@@ -123,6 +132,7 @@ export function useReader(report: (cause: unknown) => void) {
     theme,
     openBook,
     refreshCatalogForBook,
+    handleCatalogUpdated,
     selectChapter,
     closeBook,
     scheduleProgressSave,
