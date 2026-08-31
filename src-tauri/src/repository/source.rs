@@ -28,6 +28,26 @@ impl SqliteSourceRepository {
             .await
             .map_err(|error| AppError::Database(error.to_string()))
     }
+
+    pub async fn update_session(
+        &self,
+        source_id: i64,
+        access_token: Option<&str>,
+        session_cookie: Option<&str>,
+    ) -> Result<(), AppError> {
+        sqlx::query("UPDATE book_sources SET access_token = ?, session_cookie = ?, session_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(access_token)
+            .bind(session_cookie)
+            .bind(source_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(AppError::database)
+    }
+
+    pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
+        self.update_session(source_id, None, None).await
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -140,9 +160,19 @@ mod tests {
             name: "proxy-test".into(),
             base_url: "https://example.com".into(),
             search_url: "https://example.com/?q={{key}}".into(),
-            search_rule: SearchRule { item: ".book".into(), title: ".title".into(), author: None, cover: None, url: "a".into() },
+            search_rule: SearchRule {
+                item: ".book".into(),
+                title: ".title".into(),
+                author: None,
+                cover: None,
+                url: "a".into(),
+            },
             info_rule: InfoRule::default(),
-            catalog_rule: CatalogRule { item: "a".into(), title: "a".into(), url: "a::attr(href)".into() },
+            catalog_rule: CatalogRule {
+                item: "a".into(),
+                title: "a".into(),
+                url: "a::attr(href)".into(),
+            },
             content_selector: "body".into(),
             header: None,
             login_url: None,
@@ -157,6 +187,15 @@ mod tests {
             enabled: true,
         };
         let id = repository.upsert(&source).await.unwrap();
-        assert_eq!(repository.get(id).await.unwrap().unwrap().proxy_url.as_deref(), Some("socks5://127.0.0.1:1080"));
+        assert_eq!(
+            repository
+                .get(id)
+                .await
+                .unwrap()
+                .unwrap()
+                .proxy_url
+                .as_deref(),
+            Some("socks5://127.0.0.1:1080")
+        );
     }
 }

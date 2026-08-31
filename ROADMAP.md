@@ -635,7 +635,7 @@ src-tauri/tests/
 | ebook 解析下沉 | `infrastructure/ebook/{mod,txt,epub}.rs`，纯函数、无 DB 依赖，21 条测试 |
 | 导入编排 | `BookService::{import_txt, import_epub}`；书+章节单事务写入；不再用 `list_books()` 全表扫描查单本 |
 | 前端 feature 拆分 | 每 feature 一个 composable + 一个组件；无文件超过 200 行且不靠压行 |
-| 死代码清理 | `legacy_command.rs` 1322 → 742 行（净减 580 行实现，另加 190 行测试）；删除 `NewBook`/`BookRepository::create`、无用 pinia store、`lib.rs` 的 blanket `#[allow(dead_code)]` |
+| 死代码清理 | 删除 `legacy_command.rs`；删除 `NewBook`/`BookRepository::create`、无用 pinia store、`lib.rs` 的 blanket `#[allow(dead_code)]` |
 | 工具链 | 原生 CSS + Design Tokens；ESLint / Prettier / vue-tsc 全绿 |
 
 **测试：13 → 46。** `cargo clippy --all-targets -- -D warnings` 在**没有任何 blanket allow** 的前提下通过。
@@ -653,7 +653,7 @@ src-tauri/tests/
 
 **Step 0 收尾：**
 
-- `legacy_command.rs` 仍有 742 行，含在线搜索、书源登录、legado 导入、在线正文抓取，且直接写 SQL（`login_book_source` / `clear_book_source_session` / `refresh_catalog`）。这些函数仍持有 `State<'_, AppState>` 与 `AppHandle`，迁入 `service/` 前需要先把 Tauri 类型从签名里摘掉。
+- 在线流程已从 `legacy_command.rs` 迁入 `SourceService` / `ReaderService`；`command/` 现在只保留 Tauri IPC 适配与 `chapter-updated` 事件发布。书源会话更新已下沉到 `SqliteSourceRepository`。
 - `source_engine/{selector,import}.rs` 仍是指向 `source.rs` 的 3 行 re-export；`source.rs` 486 行是规则引擎的真正所在地，Step 2 会重写。
 - 日志：`book` / `reader` / `source` / `network` 已有埋点，`database` 仍只有启动一处。
 - `services/events.ts` 桥接已可用，但**目前没有任何消费者**（后端 `chapter-updated` 是唯一生产者）。等 Step 4 下载任务出现后再接。

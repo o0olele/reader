@@ -1,4 +1,5 @@
 //! Concurrent source search orchestration.
 //!
-//! The pipeline still lives in `legacy_command::search_books` pending the
-//! Step 2 rule engine, which changes the per-source execution contract.
+//! Search workflows currently live in `SourceService`; this module remains as
+//! the future home for a standalone search service once the rule engine is
+//! extracted.

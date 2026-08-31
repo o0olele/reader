@@ -32,13 +32,6 @@ impl AppState {
             .ok_or_else(|| AppError::Database("数据库尚未初始化".into()))
     }
 
-    pub fn proxy(&self) -> Result<Option<String>, AppError> {
-        self.global_proxy
-            .lock()
-            .map_err(|_| AppError::Database("代理状态锁不可用".into()))
-            .map(|value| value.clone())
-    }
-
     pub async fn initialize_database(&self, path: &Path) -> Result<(), sqlx::Error> {
         let options = SqliteConnectOptions::new()
             .filename(path)

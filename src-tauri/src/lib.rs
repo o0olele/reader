@@ -1,8 +1,6 @@
 mod app;
 #[path = "command/mod.rs"]
 mod command_api;
-#[path = "legacy_command.rs"]
-mod command_legacy;
 mod domain;
 mod error;
 mod infrastructure;

@@ -52,7 +52,9 @@ fn source_request(
                 request = request
                     .header(name.trim(), value.trim())
                     .try_clone()
-                    .ok_or_else(|| AppError::InvalidArgument(format!("非法请求头: {}", name.trim())))?;
+                    .ok_or_else(|| {
+                        AppError::InvalidArgument(format!("非法请求头: {}", name.trim()))
+                    })?;
             }
         }
     }
@@ -121,6 +123,23 @@ pub async fn send_source_request(
         }
     }
     Err(AppError::Network(last_error))
+}
+
+pub async fn response_error(response: reqwest::Response, source_name: &str) -> String {
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    let detail = detail.split_whitespace().collect::<Vec<_>>().join(" ");
+    let lower = detail.to_ascii_lowercase();
+    if lower.contains("just a moment") || lower.contains("cf-chl-") || lower.contains("cloudflare")
+    {
+        return format!("{source_name} 需要浏览器执行 JavaScript 验证（Cloudflare challenge），HTTP 客户端无法直接通过");
+    }
+    let detail = detail.chars().take(180).collect::<String>();
+    if detail.is_empty() {
+        format!("{source_name} 返回 HTTP {status}")
+    } else {
+        format!("{source_name} 返回 HTTP {status}: {detail}")
+    }
 }
 
 #[cfg(test)]
