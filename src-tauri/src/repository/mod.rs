@@ -32,6 +32,6 @@ pub trait ProgressRepository: Send + Sync {
 }
 
 pub trait SourceRepository: Send + Sync {
-    async fn get(&self, id: i64) -> Result<Option<crate::source::BookSource>, AppError>;
-    async fn list(&self) -> Result<Vec<crate::source::BookSource>, AppError>;
+    async fn get(&self, id: i64) -> Result<Option<crate::domain::source::BookSource>, AppError>;
+    async fn list(&self) -> Result<Vec<crate::domain::source::BookSource>, AppError>;
 }

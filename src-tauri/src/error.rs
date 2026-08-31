@@ -1,7 +1,6 @@
 use serde::Serialize;
 use std::fmt::Display;
 
-#[allow(dead_code)]
 #[derive(Debug, thiserror::Error, Serialize)]
 #[serde(tag = "kind", content = "message")]
 pub enum AppError {

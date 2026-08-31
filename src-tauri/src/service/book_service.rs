@@ -1,9 +1,9 @@
 use crate::{
+    domain::source::BookSearchResult,
     domain::Book,
     error::AppError,
     infrastructure::ebook::{epub, title_from_filename, txt, ParsedBook},
     repository::{book::SqliteBookRepository, BookRepository},
-    source::BookSearchResult,
 };
 
 #[derive(Clone)]

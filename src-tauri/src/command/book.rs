@@ -1,6 +1,6 @@
 use crate::{
-    app::AppState, domain::Book, error::AppError, service::book_service::BookService,
-    source::BookSearchResult,
+    app::AppState, domain::source::BookSearchResult, domain::Book, error::AppError,
+    service::book_service::BookService,
 };
 use tauri::State;
 

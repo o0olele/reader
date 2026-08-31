@@ -1,7 +1,7 @@
 use super::SourceRepository;
 use crate::{
+    domain::source::{BookSource, CatalogRule, InfoRule, SearchRule},
     error::AppError,
-    source::{BookSource, CatalogRule, InfoRule, SearchRule},
 };
 
 #[derive(Clone)]

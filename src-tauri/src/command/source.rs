@@ -1,10 +1,10 @@
 use crate::{
     app::AppState,
+    domain::source::{BookSource, CatalogRule, InfoRule, SearchRule},
     error::AppError,
     service::source_service::{
         SourceImportReport, SourceLoginInput, SourceLoginResult, SourceService,
     },
-    source::{BookSource, CatalogRule, InfoRule, SearchRule},
 };
 use serde::Deserialize;
 use tauri::State;

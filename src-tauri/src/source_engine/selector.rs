@@ -1,6 +1,6 @@
 //! CSS selector execution for the currently supported source-rule subset.
 
-use crate::source::{BookSearchResult, BookSource};
+use crate::domain::source::{BookSearchResult, BookSource};
 use scraper::{ElementRef, Html, Selector};
 
 fn text(element: ElementRef<'_>) -> Option<String> {
@@ -108,7 +108,7 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::{CatalogRule, InfoRule, SearchRule};
+    use crate::domain::source::{CatalogRule, InfoRule, SearchRule};
 
     fn source() -> BookSource {
         BookSource {

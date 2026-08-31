@@ -1,6 +1,6 @@
 //! Legado source import normalization for the CSS-compatible subset.
 
-use crate::source::{CatalogRule, InfoRule, SearchRule, SourceImport};
+use crate::domain::source::{CatalogRule, InfoRule, SearchRule, SourceImport};
 
 fn rule(value: Option<&serde_json::Value>, keys: &[&str]) -> Option<String> {
     value

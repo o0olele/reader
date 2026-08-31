@@ -1,4 +1,4 @@
-use crate::{error::AppError, source::BookSource};
+use crate::{domain::source::BookSource, error::AppError};
 
 pub fn build_source_client(
     source: &BookSource,

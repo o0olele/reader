@@ -6,7 +6,6 @@ mod error;
 mod infrastructure;
 mod repository;
 mod service;
-mod source;
 mod source_engine;
 
 use app::AppState;
@@ -36,7 +35,7 @@ pub fn run() {
             let data_dir = app.path().app_data_dir().map_err(error::AppError::io)?;
             std::fs::create_dir_all(&data_dir).map_err(error::AppError::io)?;
             let db_path = data_dir.join("app.db");
-            tauri::async_runtime::block_on(state.initialize_database(&db_path))
+            tauri::async_runtime::block_on(app::bootstrap::initialize_database(&state, &db_path))
                 .map_err(error::AppError::database)?;
             tracing::info!(target: "database", path = %db_path.display(), "database initialized");
             Ok(())

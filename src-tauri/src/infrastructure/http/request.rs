@@ -1,4 +1,4 @@
-use crate::{error::AppError, source::BookSource};
+use crate::{domain::source::BookSource, error::AppError};
 use sha2::{Digest, Sha256};
 
 /// Builds a GET carrying the browser-ish headers, stored session credentials,
@@ -145,7 +145,7 @@ pub async fn response_error(response: reqwest::Response, source_name: &str) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::{CatalogRule, InfoRule, SearchRule};
+    use crate::domain::source::{CatalogRule, InfoRule, SearchRule};
 
     fn test_source(sign_script: Option<&str>, header: Option<&str>) -> BookSource {
         BookSource {

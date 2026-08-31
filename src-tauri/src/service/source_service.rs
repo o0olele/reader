@@ -1,6 +1,7 @@
 //! Book-source workflows: search, import, probing and authentication.
 
 use crate::{
+    domain::source::{BookSearchResult, BookSource, SourceImport},
     error::AppError,
     infrastructure::http::{
         client::build_source_client,
@@ -8,7 +9,6 @@ use crate::{
     },
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
-    source::{BookSearchResult, BookSource, SourceImport},
     source_engine::{import::parse_sources_json, selector::parse_search},
 };
 use serde::{Deserialize, Serialize};

@@ -1,5 +1,3 @@
-//! Book-source data contracts shared by persistence, services, and the source engine.
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

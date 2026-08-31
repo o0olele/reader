@@ -638,7 +638,7 @@ src-tauri/tests/
 | 死代码清理 | 删除 `legacy_command.rs`；删除 `NewBook`/`BookRepository::create`、无用 pinia store、`lib.rs` 的 blanket `#[allow(dead_code)]` |
 | 工具链 | 原生 CSS + Design Tokens；ESLint / Prettier / vue-tsc 全绿 |
 
-**测试：13 → 46。** `cargo clippy --all-targets -- -D warnings` 在**没有任何 blanket allow** 的前提下通过。
+**测试：47 个库单测 + 2 个集成回归测试。** `cargo clippy --all-targets -- -D warnings` 在**没有任何 blanket allow** 的前提下通过。
 
 ### 10.2 Step 1 · 已完成
 
@@ -649,22 +649,22 @@ src-tauri/tests/
 - **3.1 导入警告** — `SourceImportReport.partial` + UI 提示（无 `import_warnings` 列，但目的达到）
 - **额外修复** — 新加入的在线书打开时目录为空（`list_chapters` 本地化的副作用），`useReader.openBook` 现在自动拉一次目录
 
-### 10.3 尚未完成（下一步）
+### 10.3 Step 0 收尾完成（2026-08-31）
 
-**Step 0 收尾：**
+- 在线流程位于 `SourceService` / `ReaderService`；`command/` 只保留 Tauri IPC 适配与事件发布。
+- `source.rs` 只保留书源数据契约；现有 CSS selector 与 legado 导入实现已分别迁入 `source_engine/{selector,import}.rs`。
+- `database` 增加 migration 耗时日志；`book` / `reader` / `source` / `network` 日志边界均已建立。
+- 前端订阅 `chapter-updated`，打开中的目录会从本地仓库同步；事件桥接不再是零消费者。
+- `vue-router` 已提供书架、在线搜索、设置三个可直接访问的路由；未使用的 Pinia 依赖及挂载已移除。
+- 组件样式颜色统一引用 `styles.css` Design Tokens；主题专用颜色也集中定义，不再散落在规则中。
 
-- 在线流程已从 `legacy_command.rs` 迁入 `SourceService` / `ReaderService`；`command/` 现在只保留 Tauri IPC 适配与 `chapter-updated` 事件发布。书源会话更新已下沉到 `SqliteSourceRepository`。
-- `source_engine/{selector,import}.rs` 仍是指向 `source.rs` 的 3 行 re-export；`source.rs` 486 行是规则引擎的真正所在地，Step 2 会重写。
-- 日志：`book` / `reader` / `source` / `network` 已有埋点，`database` 仍只有启动一处。
-- `services/events.ts` 桥接已可用，但**目前没有任何消费者**（后端 `chapter-updated` 是唯一生产者）。等 Step 4 下载任务出现后再接。
-- `vue-router` 仍只有 `/ → AppShell` 一条路由；前端改用 composable 而非 pinia store，`pinia` 依赖当前未使用（`main.ts` 仍挂载插件）——**需决定是保留待 Step 5 还是移除**。
-- `styles.css` 定义了 Design Tokens，但大量规则仍写死十六进制颜色（如 `.book-cover` 的 `#276749`），Step 5 做主题前必须收敛。
+### 10.4 尚未完成（下一步）
 
-**Step 1 剩余：** 1.3 `nextTocUrl`、1.4 `nextContentUrl`、1.5 书籍详情页（`parse_book_info` 仍是零调用者的死代码）、1.6 封面代理下载与本地缓存（当前直接用远端 URL，未处理 Referer 防盗链）、1.7 换源。
+**Step 1 剩余：** 1.3 `nextTocUrl`、1.4 `nextContentUrl`、1.5 书籍详情页（尚无 `fetch_book_info` command 和 UI）、1.6 封面代理下载与本地缓存（当前直接用远端 URL，未处理 Referer 防盗链）、1.7 换源。
 
-**Step 2：0%。** `source.rs:69` 的 `legacy_rule` 仍在 `split("&&").next()` 与 `strip_prefix("@css:")`。
+**Step 2：0%。** `source_engine/import.rs` 的 CSS 兼容导入仍会截取 `&&` 并只处理 `@css:`；`RuleAnalyzer`、XPath、JSONPath、Regex 与 JS Runtime 均未实现。
 
-### 10.4 验收命令
+### 10.5 验收命令
 
 ```bash
 cargo test   --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target
