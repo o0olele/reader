@@ -1,3 +1,4 @@
+use crate::source_engine::rule::JsHttpContext;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +101,43 @@ pub struct SourceImport {
 }
 
 impl BookSource {
+    pub fn session_expired(&self) -> bool {
+        let Some(raw) = self.session_expires_at.as_deref() else {
+            return false;
+        };
+        let expiry = raw.parse::<u64>().ok().or_else(|| {
+            let value = raw.strip_suffix('Z')?.parse::<u64>().ok();
+            value
+        });
+        expiry.is_some_and(|value| {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_secs())
+                .unwrap_or(u64::MAX);
+            value <= now
+        })
+    }
+
+    pub fn session_state(&self) -> &'static str {
+        if self.access_token.is_none() && self.session_cookie.is_none() {
+            "anonymous"
+        } else if self.session_expired() {
+            "expired"
+        } else {
+            "authenticated"
+        }
+    }
+
+    pub fn http_context(&self) -> JsHttpContext {
+        JsHttpContext {
+            base_url: self.base_url.clone(),
+            headers: self.header.clone(),
+            access_token: self.access_token.clone(),
+            session_cookie: self.session_cookie.clone(),
+            sign_script: self.sign_script.clone(),
+        }
+    }
+
     /// Builds an unsaved source from an import record.
     ///
     /// `id` is 0 and session credentials are cleared, so the caller must
@@ -198,5 +236,44 @@ mod tests {
         assert!(source.session_expires_at.is_none());
         assert_eq!(source.name, "示例");
         assert!(source.enabled);
+    }
+
+    #[test]
+    fn session_state_distinguishes_anonymous_and_expired_credentials() {
+        let mut source = BookSource::from_import(&SourceImport {
+            name: "state".into(),
+            base_url: "https://example.com".into(),
+            search_url: "https://example.com?q={{key}}".into(),
+            search_rule: SearchRule {
+                item: "a".into(),
+                title: "a".into(),
+                author: None,
+                cover: None,
+                url: "a".into(),
+            },
+            info_rule: InfoRule::default(),
+            catalog_rule: CatalogRule {
+                item: "a".into(),
+                title: "a".into(),
+                url: "a".into(),
+                next_url: None,
+            },
+            content_selector: "body".into(),
+            header: None,
+            login_url: None,
+            login_method: "POST".into(),
+            login_body: None,
+            token_path: None,
+            sign_script: None,
+            proxy_url: None,
+            next_toc_url_selector: None,
+            next_content_url_selector: None,
+            enabled: true,
+            raw_rules: RawSourceRules::default(),
+        });
+        assert_eq!(source.session_state(), "anonymous");
+        source.access_token = Some("token".into());
+        source.session_expires_at = Some("0".into());
+        assert_eq!(source.session_state(), "expired");
     }
 }

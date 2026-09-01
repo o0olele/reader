@@ -46,6 +46,7 @@ pub fn execute_js(
     let js_context = JsContext {
         result: input.to_owned(),
         variables: context.snapshot(),
+        http: context.http.clone(),
         ..Default::default()
     };
     let (value, variables) = runtime

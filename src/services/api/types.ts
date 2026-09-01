@@ -133,6 +133,15 @@ export interface SourceLoginResult {
   authenticated: boolean
   has_token: boolean
   has_cookie: boolean
+  session_expires_at?: string
+}
+
+export interface SourceSessionStatus {
+  source_id: number
+  state: 'anonymous' | 'authenticated' | 'expired' | string
+  has_token: boolean
+  has_cookie: boolean
+  expires_at?: string
 }
 
 export interface AppSettings {

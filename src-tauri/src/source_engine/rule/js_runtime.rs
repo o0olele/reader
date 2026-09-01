@@ -5,6 +5,7 @@
 //! future WebView-backed implementations can provide another runtime.
 
 use crate::error::AppError;
+use crate::infrastructure::http::request::evaluate_sign_script;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use rquickjs::{Context, Ctx, Function, Object, Runtime};
@@ -15,11 +16,25 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Credentials and request defaults exposed to a source's JavaScript rules.
+/// Network access is deliberately only available through these injected
+/// functions; the QuickJS sandbox has no filesystem, process, or environment
+/// access.
+#[derive(Clone, Debug, Default)]
+pub struct JsHttpContext {
+    pub base_url: String,
+    pub headers: Option<String>,
+    pub access_token: Option<String>,
+    pub session_cookie: Option<String>,
+    pub sign_script: Option<String>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct JsContext {
     pub result: String,
     pub url: Option<String>,
     pub variables: HashMap<String, String>,
+    pub http: Option<JsHttpContext>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -75,7 +90,7 @@ impl QuickJsRuntime {
             .map_err(|error| AppError::Source(format!("JS context: {error}")))?;
         let values = Arc::new(Mutex::new(context.variables));
         let output = quick_context
-            .with(|ctx| install_globals(ctx, &values, context.result, context.url))
+            .with(|ctx| install_globals(ctx, &values, context.result, context.url, context.http))
             .and_then(|()| quick_context.with(|ctx| evaluate_script(ctx, script)))?;
         let variables = values
             .lock()
@@ -113,6 +128,7 @@ fn install_globals<'js>(
     variables: &Arc<Mutex<HashMap<String, String>>>,
     result: String,
     url: Option<String>,
+    http: Option<JsHttpContext>,
 ) -> Result<(), AppError> {
     let globals = ctx.globals();
     globals.set("result", result).map_err(js_error)?;
@@ -122,14 +138,22 @@ fn install_globals<'js>(
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
     let get_values = Arc::clone(variables);
+    let get_http = http.clone();
     java.set(
         "get",
         Function::new(ctx.clone(), move |key: String| {
-            get_values
+            if let Some(http) = get_http.as_ref().filter(|_| {
+                key.starts_with("http://") || key.starts_with("https://") || key.starts_with('/')
+            }) {
+                return blocking_http_request(http, "GET", &key, None).map_err(|error| {
+                    rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
+                });
+            }
+            Ok(get_values
                 .lock()
                 .ok()
                 .and_then(|values| values.get(&key).cloned())
-                .unwrap_or_default()
+                .unwrap_or_default())
         }),
     )
     .map_err(js_error)?;
@@ -174,7 +198,116 @@ fn install_globals<'js>(
         }),
     )
     .map_err(js_error)?;
+    if let Some(http) = http {
+        install_http_functions(ctx.clone(), &java, http)?;
+    }
     globals.set("java", java).map_err(js_error)
+}
+
+fn install_http_functions<'js>(
+    ctx: Ctx<'js>,
+    java: &Object<'js>,
+    http: JsHttpContext,
+) -> Result<(), AppError> {
+    let post_http = http.clone();
+    java.set(
+        "post",
+        Function::new(ctx.clone(), move |url: String, body: String| {
+            blocking_http_request(&post_http, "POST", &url, Some(body)).map_err(|error| {
+                rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
+            })
+        }),
+    )
+    .map_err(js_error)?;
+    let head_http = http.clone();
+    java.set(
+        "head",
+        Function::new(ctx.clone(), move |url: String| {
+            blocking_http_request(&head_http, "HEAD", &url, None).map_err(|error| {
+                rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
+            })
+        }),
+    )
+    .map_err(js_error)?;
+    let connect_http = http.clone();
+    java.set(
+        "connect",
+        Function::new(ctx.clone(), move |url: String| {
+            blocking_http_request(&connect_http, "GET", &url, None).map_err(|error| {
+                rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
+            })
+        }),
+    )
+    .map_err(js_error)?;
+    let ajax_http = http;
+    java.set(
+        "ajax",
+        Function::new(ctx, move |url: String, method: String, body: String| {
+            blocking_http_request(
+                &ajax_http,
+                &method,
+                &url,
+                (!body.is_empty()).then_some(body),
+            )
+            .map_err(|error| {
+                rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
+            })
+        }),
+    )
+    .map_err(js_error)
+}
+
+fn blocking_http_request(
+    context: &JsHttpContext,
+    method: &str,
+    raw_url: &str,
+    body: Option<String>,
+) -> Result<String, AppError> {
+    let url = reqwest::Url::parse(raw_url)
+        .or_else(|_| reqwest::Url::parse(&context.base_url).and_then(|base| base.join(raw_url)))
+        .map_err(AppError::network)?;
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("Reader Desktop/0.1")
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(AppError::network)?;
+    let method = reqwest::Method::from_bytes(method.as_bytes())
+        .map_err(|error| AppError::InvalidArgument(format!("HTTP method 无效: {error}")))?;
+    let mut request = client.request(method, url.clone());
+    if let Some(token) = context.access_token.as_deref().filter(|v| !v.is_empty()) {
+        request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    if let Some(cookie) = context.session_cookie.as_deref().filter(|v| !v.is_empty()) {
+        request = request.header(reqwest::header::COOKIE, cookie);
+    }
+    if let Some(script) = context.sign_script.as_deref() {
+        if let Some(signature) = evaluate_sign_script(script, url.as_str()) {
+            request = request.header("x-signature", signature);
+        }
+    }
+    if let Some(raw) = context.headers.as_deref() {
+        if let Ok(headers) = serde_json::from_str::<serde_json::Map<String, JsonValue>>(raw) {
+            for (name, value) in headers {
+                request = request.header(
+                    name,
+                    value
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| value.to_string()),
+                );
+            }
+        }
+    }
+    if let Some(body) = body {
+        request = request.body(body);
+    }
+    let response = request.send().map_err(AppError::network)?;
+    let status = response.status();
+    let text = response.text().map_err(AppError::network)?;
+    if !status.is_success() {
+        return Err(AppError::Network(format!("HTTP {status}: {text}")));
+    }
+    Ok(text)
 }
 
 fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError> {

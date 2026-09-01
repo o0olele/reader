@@ -42,12 +42,14 @@ pub struct SourceRule {
 #[derive(Clone, Debug, Default)]
 pub struct RuleContext {
     values: HashMap<String, String>,
+    pub(crate) http: Option<super::JsHttpContext>,
 }
 
 impl RuleContext {
     pub fn new(values: impl IntoIterator<Item = (String, String)>) -> Self {
         Self {
             values: values.into_iter().collect(),
+            http: None,
         }
     }
 
@@ -65,6 +67,10 @@ impl RuleContext {
 
     pub(crate) fn extend(&mut self, values: HashMap<String, String>) {
         self.values.extend(values);
+    }
+
+    pub(crate) fn with_http(&mut self, http: super::JsHttpContext) {
+        self.http = Some(http);
     }
 }
 

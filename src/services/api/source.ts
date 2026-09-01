@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { BookSource, BookSourceInput, SourceImportReport, SourceLoginResult, SourceTestResult } from './types'
+import type { BookSource, BookSourceInput, SourceImportReport, SourceLoginResult, SourceSessionStatus, SourceTestResult } from './types'
 
 export function listBookSources(): Promise<BookSource[]> {
   return invoke<BookSource[]>('list_book_sources')
@@ -29,4 +29,14 @@ export function loginBookSource(sourceId: number, username: string, password: st
 
 export function clearBookSourceSession(sourceId: number): Promise<void> {
   return invoke<void>('clear_book_source_session', { sourceId })
+}
+
+export function getBookSourceSessionStatus(sourceId: number): Promise<SourceSessionStatus> {
+  return invoke<SourceSessionStatus>('get_book_source_session_status', { sourceId })
+}
+
+export function refreshBookSourceSession(sourceId: number, username: string, password: string): Promise<SourceLoginResult> {
+  return invoke<SourceLoginResult>('refresh_book_source_session', {
+    input: { source_id: sourceId, username, password },
+  })
 }

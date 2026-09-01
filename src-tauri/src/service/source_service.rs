@@ -13,7 +13,9 @@ use crate::{
         import::parse_sources_json,
     },
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct SourceService {
@@ -127,11 +129,13 @@ impl SourceService {
                 .ok()
                 .and_then(|value| json_path(&value, path))
         });
+        let session_expires_at = session_expiry(response_text.as_str(), token.as_deref());
         self.sources
             .update_session(
                 input.source_id,
                 token.as_deref(),
                 (!cookies.is_empty()).then_some(cookies.as_str()),
+                session_expires_at.as_deref(),
             )
             .await?;
         Ok(SourceLoginResult {
@@ -139,7 +143,28 @@ impl SourceService {
             authenticated: token.is_some() || !cookies.is_empty(),
             has_token: token.is_some(),
             has_cookie: !cookies.is_empty(),
+            session_expires_at,
         })
+    }
+
+    pub async fn session_status(&self, source_id: i64) -> Result<SourceSessionStatus, AppError> {
+        let source = self.get(source_id).await?;
+        Ok(SourceSessionStatus {
+            source_id,
+            state: source.session_state().to_owned(),
+            has_token: source.access_token.is_some(),
+            has_cookie: source.session_cookie.is_some(),
+            expires_at: source.session_expires_at,
+        })
+    }
+
+    /// Refreshes a protocol session using the source's configured login flow.
+    /// Credentials are intentionally supplied per call and are never stored.
+    pub async fn refresh_session(
+        &self,
+        input: SourceLoginInput,
+    ) -> Result<SourceLoginResult, AppError> {
+        self.login(input).await
     }
 
     pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
@@ -165,6 +190,46 @@ pub struct SourceLoginResult {
     pub authenticated: bool,
     pub has_token: bool,
     pub has_cookie: bool,
+    pub session_expires_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SourceSessionStatus {
+    pub source_id: i64,
+    pub state: String,
+    pub has_token: bool,
+    pub has_cookie: bool,
+    pub expires_at: Option<String>,
+}
+
+fn session_expiry(response: &str, token: Option<&str>) -> Option<String> {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(response) {
+        if let Some(expiry) = value.get("expires_at").and_then(expiry_value) {
+            return Some(expiry);
+        }
+        if let Some(seconds) = value.get("expires_in").and_then(|v| v.as_u64()) {
+            return Some((now_epoch().saturating_add(seconds)).to_string());
+        }
+    }
+    let token = token?;
+    let payload = token.split('.').nth(1)?;
+    let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value.get("exp").and_then(expiry_value)
+}
+
+fn expiry_value(value: &serde_json::Value) -> Option<String> {
+    value
+        .as_u64()
+        .map(|value| value.to_string())
+        .or_else(|| value.as_str().map(str::to_owned))
+}
+
+fn now_epoch() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or_default()
 }
 fn apply_headers(
     mut request: reqwest::RequestBuilder,
@@ -236,5 +301,11 @@ mod tests {
         assert_eq!(search["bookUrl"], "a");
         assert_eq!(raw.content.as_deref(), Some("\".content\""));
         assert!(raw.book_info.is_none());
+    }
+
+    #[test]
+    fn extracts_expiry_from_jwt_payload() {
+        let token = "eyJhbGciOiJub25lIn0.eyJleHAiOjQyMDB9.signature";
+        assert_eq!(session_expiry("{}", Some(token)).as_deref(), Some("4200"));
     }
 }

@@ -65,6 +65,8 @@ pub fn run() {
             command_api::reader::fetch_online_content_cmd,
             command_api::source::login_book_source_cmd,
             command_api::source::clear_book_source_session_cmd,
+            command_api::source::get_book_source_session_status_cmd,
+            command_api::source::refresh_book_source_session_cmd,
             command_api::settings::get_app_settings_cmd,
             command_api::settings::save_app_settings_cmd
         ])

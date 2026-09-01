@@ -23,11 +23,15 @@ fn source_request(
     if let Some(referer) = referer {
         request = request.header(reqwest::header::REFERER, referer);
     }
-    if let Some(token) = source.access_token.as_deref().filter(|v| !v.is_empty()) {
-        request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
-    }
-    if let Some(cookie) = source.session_cookie.as_deref().filter(|v| !v.is_empty()) {
-        request = request.header(reqwest::header::COOKIE, cookie);
+    if !source.session_expired() {
+        if let Some(token) = source.access_token.as_deref().filter(|v| !v.is_empty()) {
+            request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        if let Some(cookie) = source.session_cookie.as_deref().filter(|v| !v.is_empty()) {
+            request = request.header(reqwest::header::COOKIE, cookie);
+        }
+    } else {
+        tracing::debug!(target: "network", source = %source.name, "source session expired; omitting credentials");
     }
     if let Some(raw) = source.header.as_deref() {
         if let Ok(headers) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(raw)
@@ -66,7 +70,7 @@ fn source_request(
     Ok(request)
 }
 
-fn evaluate_sign_script(script: &str, url: &str) -> Option<String> {
+pub fn evaluate_sign_script(script: &str, url: &str) -> Option<String> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -239,5 +243,18 @@ mod tests {
             "Bearer tok"
         );
         assert_eq!(request.headers()[reqwest::header::COOKIE], "sid=1");
+    }
+
+    #[test]
+    fn omits_expired_session_credentials() {
+        let mut source = test_source(None, None);
+        source.access_token = Some("tok".into());
+        source.session_cookie = Some("sid=1".into());
+        source.session_expires_at = Some("0".into());
+        let request = build(&source, "https://example.com/chapter");
+        assert!(!request
+            .headers()
+            .contains_key(reqwest::header::AUTHORIZATION));
+        assert!(!request.headers().contains_key(reqwest::header::COOKIE));
     }
 }

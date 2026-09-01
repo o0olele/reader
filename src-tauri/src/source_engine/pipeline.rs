@@ -21,6 +21,7 @@ use crate::{
 /// is expected while the engine's coverage grows.
 fn values(source: &BookSource, rule: &str, input: &str, want: Extraction) -> Vec<String> {
     let mut context = RuleContext::default();
+    context.with_http(source.http_context());
     match evaluate(rule, input, want, &mut context) {
         Ok(values) => values,
         Err(error) => {
@@ -33,6 +34,7 @@ fn values(source: &BookSource, rule: &str, input: &str, want: Extraction) -> Vec
 fn first(source: &BookSource, rule: Option<&String>, input: &str) -> Option<String> {
     let rule = rule?;
     let mut context = RuleContext::default();
+    context.with_http(source.http_context());
     match evaluate_first(rule, input, &mut context) {
         Ok(value) => value,
         Err(error) => {

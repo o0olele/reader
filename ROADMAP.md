@@ -79,7 +79,14 @@
 
 migration `008_dynamic_auth`（登录 / token / 签名）属于 `plan.md` §41 优先级中的 **P5**，却在 P2 的 CSS/XPath/JSONPath 尚未完成时就已落地 —— 正是 `plan.md` §41 结尾明确警告的情况。
 
-**决策：认证相关功能自即日起冻结，Step 0–3 期间只修 bug（B3/B4）不加特性。**
+**原决策已调整（2026-09-01）：认证不再整体冻结。** 现实书源普遍要求登录、Cookie、token 或签名，
+这些能力是在线阅读的前置条件。认证工作拆成两条轨道：
+
+- **协议认证**（登录表单、Cookie/token 持久化、刷新、header/sign）：随 Step 2 的 JS Runtime
+  立即补齐，并在 Step 3 调试器中可观测、可重试。
+- **浏览器挑战**（Cloudflare JS challenge、Turnstile、指纹校验）：Step 2 先做 WebView
+  spike，Step 3 提供“在浏览器中认证并回写 Cookie”的最小闭环；复杂挑战和自动化绕过仍留到 Step 7，
+  不承诺无浏览器环境绕过 Cloudflare。
 
 ---
 
@@ -97,8 +104,8 @@ Step 0  架构补债 + 修 bug        3~5 天   ✅ 已完成（2026-08-31）
    ↓
 Step 1  M2 收尾：在线阅读可用      1 周    ✅ 代码项完成，待真实书源手工验收
    ↓
-Step 2  规则引擎（含 JS Runtime）  2~3 周  ◀ 进行中：引擎已接入管线，剩 JS Runtime ┐
-Step 3  书源调试器 + 回归测试      1 周                  ┘ 并行
+Step 2  规则引擎（含 JS Runtime）  2~3 周  ◀ 进行中：基础 Runtime 已接入；先补协议认证 + WebView spike
+Step 3  书源调试器 + 认证闭环      1 周                  ┘ 并行：认证状态可见、浏览器 Cookie 回写
    ↓
 Step 4  下载 / 缓存               2 周
 Step 5  阅读排版引擎              2 周
@@ -331,14 +338,14 @@ fn legacy_rule(value: Option<&serde_json::Value>, keys: &[&str]) -> Option<Strin
 - [ ] 同一章第二次打开零网络请求 —— 代码路径已具备（LRU 50 → `chapter_contents`），但未在真实书源上实测
 - [ ] 导入一份真实 legado 书源 JSON（≥100 个源），报告能准确区分「完全支持 / 部分支持 / 不支持」
 
-> 这三条是 **v0.2.0 的发布门槛**，也是当前唯一阻塞 Step 2 开工的事项（见 §10.6）。
+> 这三条是 **v0.2.0 的发布门槛**；认证轨道已可并行推进，不再阻塞 Step 2 开工（见 §10.6）。
 > 需要人工提供 3 个可用书源；代码侧无待办。
 
 ---
 
 ## 4. Step 2 · 规则引擎（2–3 周，项目成败点）
 
-**目标：能执行真实 legado 书源的规则语法。**
+**目标：能执行真实 legado 书源的规则语法，并让需要登录/token/Cookie/sign 的书源具备可用的协议认证链路。**
 
 ### 4.1 参考实现对照
 
@@ -646,7 +653,7 @@ src-tauri/tests/
 | 字体反爬 | `queryTTF` / `replaceFont` | 单独立项，工作量大 |
 | UMD / MOBI / PDF | `localBook/{Umd,Mobi,Pdf}File.kt` | Step 5 之后按需求评估 |
 | 词典 | `ui/dict`, `DictRule` | 低频 |
-| WebView 登录 | `ui/login`, `JsExtensions.webView*` | Step 7 之后评估 |
+| WebView 登录 | `ui/login`, `JsExtensions.webView*` | Step 2/3 先做认证与 Cookie 回写最小闭环；复杂自动化挑战 Step 7 后评估 |
 
 ---
 
@@ -656,6 +663,7 @@ src-tauri/tests/
 | --- | --- | --- | --- |
 | v0.1.0 | 现状 + Step 0 | 本地阅读闭环 + 干净架构（内部版，不发布） | ✅ **已达成**（`package.json` 现为 0.1.0） |
 | v0.2.0 | Step 1 | 在线阅读可用（CSS 书源） | 🟡 代码就绪，卡在 §3.3 手工验收 |
+| v0.2.1 | Step 2/3 | 协议认证 + WebView Cookie 回写（Cloudflare/Turnstile 人工认证） | ⬜ |
 | v0.3.0 | Step 2 + 3 | 完整规则引擎 + 调试器 —— **真正的「Legado 桌面版」起点** | ⬜ 未开始 |
 | v0.4.0 | Step 4 | 下载 / 缓存 | ⬜ |
 | v0.5.0 | Step 5 | 阅读排版引擎 | ⬜ |
@@ -672,7 +680,7 @@ src-tauri/tests/
 | `rquickjs` 引入 C 工具链，影响跨平台构建 | Linux/macOS 构建失败 | Step 2 开始前先做 spike：在 Windows + Linux 各构建一次 hello-world |
 | XPath crate 与 HTML 容错解析不匹配 | XPath 规则大面积失败 | spike 阶段用真实 HTML 验证 `scraper` → XML DOM 的转换质量；不行则退回 `libxml` 绑定 |
 | Java 正则与 Rust `regex` 语义差异 | 部分书源正则规则失效 | 建立差异清单；不支持的语法（反向引用等）明确降级并在调试器提示 |
-| Cloudflare / JS challenge | 部分站点完全不可用 | 已有识别提示（`infrastructure/http/request.rs`）；根治需 WebView 通道，列入 Step 7 评估 |
+| Cloudflare / JS challenge | 部分站点完全不可用 | Step 2/3 先做 WebView 认证 + Cookie 回写 spike；复杂挑战与自动化绕过仍列入 Step 7 评估 |
 | ~~架构重构引入回归~~ | ~~Step 0 拖长~~ | **已关闭** —— Step 0 与 08-31 的 `SourceService` 拆分均以小步提交 + 每步全绿完成，未发生回归 |
 | **业务在 service 层重新聚团** | 每个 Step 结束都会产生新的巨型文件 | **新增（2026-08-31）** —— Step 0 后 `SourceService` 涨到 617 行。约定：每个 Step 收尾时复查最大文件，非测试行 > 250 即拆 |
 | **真实 HTML 语料规模不足** | 当前 fixture 只覆盖三种人工整理的站点结构，真实站点容错仍未知 | **升级（2026-09-01）** —— 已补 `source_c/`（legado 原生语法）。但发现 `source_a/source.json` 原本是**照着导入器行为写的、并非 legado 真实写法**，说明自造夹具会迁就实现。公开语料从「补量」升级为**验收前置** |
@@ -757,15 +765,19 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 | 3 | 「B1–B5 各有一条回归测试」 | B1–B4 是真实行为测试；**B5 的两条集成测试是文本断言**（`include_str!` 后查字符串），不验证 migration 行为 | 保留（migration 空操作本身难以行为化断言），但已在 §10.2 标注，不再宣称为行为回归。 |
 | 4 | 「vue-router 提供三个可直接访问的路由」 | 三条路由 `/` `/search` `/settings` **全部指向同一个 `AppShell`**，页面切换实际靠组件内部状态 | 字面成立（hash 地址可进入），但不是页面级路由。已在 §0.5 注明，真正拆分留到 Step 5 阅读器独立成页时。 |
 
-### 10.6 下一步（唯一阻塞项）
+### 10.6 下一步（认证优先级调整后）
 
-**代码侧无待办。** 唯一阻塞是 §3.3 的三条手工验收，需要人工提供 3 个真实、纯 CSS 可解析的书源：
+**Step 1 的纯 CSS 验收仍需人工提供 3 个真实书源，但不再是后续开发的唯一阻塞。**
+认证相关工作按新的 Step 2/3 轨道推进；手工验收分为“无需浏览器认证”和“需浏览器认证”两组：
+
+下一项代码顺序：协议认证补齐（JS `java.*` 网络 API、会话刷新与过期状态）→ WebView
+认证 spike（Cloudflare/Turnstile Cookie 回写）→ 调试器展示认证请求与失败步骤。
 
 1. 搜索 → 详情 → 加书架 → 目录（含分页）→ 正文（含分页）→ 换源 → 刷新目录出新章
 2. 同一章第二次打开零网络请求
 3. 导入 ≥100 源的真实 legado JSON，核对「完全支持 / 部分支持 / 不支持」的判定准确性
 
-通过即发 **v0.2.0**。
+通过无需浏览器认证的链路即可发 **v0.2.0**；Cloudflare/WebView 认证闭环单独作为 **v0.2.1** 发布门槛。
 
 **Step 2：规则引擎已接入真实管线（2026-09-01）。**
 
@@ -791,7 +803,11 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 1. **JS Runtime（4.2.3）+ `java.*` 兼容层（4.2.4）** —— 基础 QuickJS Runtime 已接入 `Js` 规则：
    `result`/`url`/变量上下文、`java.get`/`put`、Base64、URI 编码、日志、内存上限与异步超时均已覆盖，
    并有运行时及链式规则回归测试。仍待 `WebJs`、完整网络型 `java.*` API、Linux 构建验证；
-2. **公开真实书源语料** —— 当前 85 条语法夹具与 3 份 HTML fixture 都是人工整理的，
+2. **协议认证补齐** —— 将现有登录/token/cookie/sign 能力接入 JS `java.*` 网络 API，增加会话刷新、
+   过期处理和调试器中的请求/认证状态展示；这是下一项代码优先级，完成后再扩大真实书源验收。
+3. **WebView 认证 spike** —— 在 Step 2/3 期间验证 Cloudflare/Turnstile 页面认证后 Cookie 回写；
+   只做用户可控的浏览器认证，不实现无头绕过。
+4. **公开真实书源语料** —— 当前 85 条语法夹具与 3 份 HTML fixture 都是人工整理的，
    §4.4 的「≥300 源导入，可搜索 ≥ 60%」无法在本机度量。需要外部语料
 3. **`fixtures/source_a/source.json` 此前不忠实** —— 它是照着导入器的 `attr()` 补全行为写的
    （`bookUrl: "h2 a"` 靠导入器补 `::attr(href)`），并非 legado 真实写法。本轮已改为 `h2 a@href`。

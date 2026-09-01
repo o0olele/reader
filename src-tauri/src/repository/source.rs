@@ -37,10 +37,12 @@ impl SqliteSourceRepository {
         source_id: i64,
         access_token: Option<&str>,
         session_cookie: Option<&str>,
+        session_expires_at: Option<&str>,
     ) -> Result<(), AppError> {
-        sqlx::query("UPDATE book_sources SET access_token = ?, session_cookie = ?, session_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        sqlx::query("UPDATE book_sources SET access_token = ?, session_cookie = ?, session_expires_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
             .bind(access_token)
             .bind(session_cookie)
+            .bind(session_expires_at)
             .bind(source_id)
             .execute(&self.pool)
             .await
@@ -49,7 +51,7 @@ impl SqliteSourceRepository {
     }
 
     pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
-        self.update_session(source_id, None, None).await
+        self.update_session(source_id, None, None, None).await
     }
 }
 

@@ -3,7 +3,7 @@ use crate::{
     domain::source::{BookSource, CatalogRule, InfoRule, RawSourceRules, SearchRule},
     error::AppError,
     service::source_service::{
-        SourceImportReport, SourceLoginInput, SourceLoginResult, SourceService,
+        SourceImportReport, SourceLoginInput, SourceLoginResult, SourceService, SourceSessionStatus,
     },
 };
 use serde::Deserialize;
@@ -153,5 +153,25 @@ pub async fn clear_book_source_session_cmd(
 ) -> Result<(), AppError> {
     SourceService::new(state.database()?)
         .clear_session(source_id)
+        .await
+}
+
+#[tauri::command(rename = "get_book_source_session_status")]
+pub async fn get_book_source_session_status_cmd(
+    state: State<'_, AppState>,
+    source_id: i64,
+) -> Result<SourceSessionStatus, AppError> {
+    SourceService::new(state.database()?)
+        .session_status(source_id)
+        .await
+}
+
+#[tauri::command(rename = "refresh_book_source_session")]
+pub async fn refresh_book_source_session_cmd(
+    state: State<'_, AppState>,
+    input: SourceLoginInput,
+) -> Result<SourceLoginResult, AppError> {
+    SourceService::new(state.database()?)
+        .refresh_session(input)
         .await
 }
