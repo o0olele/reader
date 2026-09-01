@@ -8,7 +8,7 @@
 > **最近复核：2026-08-31。** §0 是 2026-08-30 的**起点快照，已成历史记录**，保留用于对照；
 > **当前真实进度一律以 §10 为准。**§10 的每一条都要求「代码里能验证到什么」，不接受未经核对的打勾。
 
-**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 已启动（RuleAnalyzer 基线完成）。**
+**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 进行中（RuleAnalyzer + XPath/JSONPath/Regex evaluator 已完成）。**
 
 ---
 
@@ -394,13 +394,19 @@ Default / XPath / JSONPath / JS / WebJS / Regex 模式识别、`##` 替换、`@p
 `tests/rule_analyzer.rs` 对 `tests/fixtures/rules/legado_rules.jsonl` 的 85 条代表性语法逐条做快照断言。
 当前夹具主要来自本机 legado 语法文档和默认源，**尚不能冒充 50 条公开真实书源样本**；4.2.1 的最终验收仍需用公开书源语料替换或补充。
 
-**4.2.2 XPath / JSONPath / Regex（3–4 天）**
+**4.2.2 XPath / JSONPath / Regex（3–4 天）— 🟡 evaluator 已完成，待真实语料验证**
 
 | 能力 | Rust crate 建议 | 备注 |
 | --- | --- | --- |
 | XPath | `sxd-xpath` + `sxd-document`，或 `skyscraper` | 需先把 `scraper` 的 HTML 转成 XML DOM；注意 HTML 容错解析 |
 | JSONPath | `jsonpath-rust` | 成熟度好 |
 | Regex | `regex`（已有依赖） | 注意 legado 用的是 Java 正则，`\p{...}`、反向引用有差异，需做兼容层与降级 |
+
+2026-09-01 进展：`source_engine::rule::execute_rule` 已提供统一模式调度；
+`execute_json` 支持 legado 常用的对象键、数组索引、`[*]` 通配符，`execute_xpath` 支持容错 HTML
+上的节点、`text()`、属性、属性等值/包含谓词与位置谓词，Regex 保留捕获组、替换、反向处理。
+三种模式均有单元测试，当前不支持的复杂 XPath（轴、函数组合）和 JSONPath 递归下降会返回明确错误，
+不会静默返回空结果。
 
 **4.2.3 JS Runtime（1 周）**
 
@@ -641,7 +647,7 @@ src-tauri/tests/
 | Rust | 4 049 行，45 个文件；最大 `service/search_service/mod.rs` 208 行 |
 | 前端 | 1 494 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
 | DB | `migrations/001..014` 共 14 个文件 |
-| 测试 | **64 个库单测 + 3 个集成测试**（其中规则分析器集成测试逐条覆盖 85 条夹具） |
+| 测试 | **66 个库单测 + 5 个集成测试**（其中规则分析器集成测试逐条覆盖 85 条夹具） |
 
 对照 §0.1 的起点：`command.rs` 1 226 行 + `source.rs` 484 行 + `App.vue` 264 行这三座大山已全部拆散，
 单文件最大值从 1 226 降到 208。
@@ -727,10 +733,13 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 - 用公开真实书源语料补强当前 85 条语法夹具，并扩充现有 `source_a/` `source_b/` fixture
 - 做 `rquickjs` 的跨平台构建 spike（Windows 已通过，Linux 待复核）
 
+4.2.2 evaluator 已在 Windows 完成并通过 clippy；真实公开书源语料与 Linux 构建仍需外部环境，
+因此不能将 Step 2 标记为完成。
+
 本轮可验证证据：
 
 - `source_engine/rule/{analyzer,directive,scanner,model}.rs` 最大 225 行，无新的聚团文件
-- `cargo test`：64 个库单测 + 3 个集成测试通过；规则分析器夹具扩展为 85 条
+- `cargo test`：66 个库单测 + 5 个集成测试通过；规则分析器夹具扩展为 85 条
 - `cargo clippy --all-targets -- -D warnings`：通过
 - `src-tauri/spikes/rquickjs/`：Windows 上 `cargo check` 与 `cargo run` 均通过，已验证
   `rquickjs 0.9.0` 的 QuickJS 创建、表达式执行、异常返回和 interrupt handler API。
@@ -744,4 +753,4 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-
 npm run lint && npm run format:check && npm run build
 ```
 
-当前预期：**57 库单测 + 3 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
+当前实测：**66 库单测 + 5 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
