@@ -51,6 +51,28 @@ impl SqliteSourceRepository {
     pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
         self.update_session(source_id, None, None).await
     }
+
+    pub async fn save_raw_rules(
+        &self,
+        source_id: i64,
+        search: Option<&str>,
+        book_info: Option<&str>,
+        toc: Option<&str>,
+        content: Option<&str>,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "UPDATE book_sources SET rule_search = ?, rule_book_info = ?, rule_toc = ?, rule_content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(search)
+        .bind(book_info)
+        .bind(toc)
+        .bind(content)
+        .bind(source_id)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(AppError::database)
+    }
 }
 
 #[derive(sqlx::FromRow)]

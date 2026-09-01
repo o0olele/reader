@@ -640,8 +640,8 @@ src-tauri/tests/
 | --- | --- |
 | Rust | 4 049 行，45 个文件；最大 `service/search_service/mod.rs` 208 行 |
 | 前端 | 1 494 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
-| DB | `migrations/001..013` 共 13 个文件 |
-| 测试 | **57 个库单测 + 3 个集成测试**（其中规则分析器集成测试逐条覆盖 50 条夹具） |
+| DB | `migrations/001..014` 共 14 个文件 |
+| 测试 | **64 个库单测 + 3 个集成测试**（其中规则分析器集成测试逐条覆盖 85 条夹具） |
 
 对照 §0.1 的起点：`command.rs` 1 226 行 + `source.rs` 484 行 + `App.vue` 264 行这三座大山已全部拆散，
 单文件最大值从 1 226 降到 208。
@@ -715,8 +715,13 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 通过即发 **v0.2.0**。
 
-**Step 2：已启动。** `source_engine/rule/` 的 `RuleAnalyzer` 基线已落地，但尚未接入现有 selector/import 路径；
-`source_engine/import.rs` 仍会截取 `&&` 并只处理 `@css:`，XPath、JSONPath 与 JS Runtime 执行器均未实现。
+**Step 2：已启动。** `source_engine/rule/` 的 `RuleAnalyzer` 基线已落地，并已接入
+`source_engine/compat.rs` 的导入兼容性判定：现在会解析所有搜索/详情/目录/正文规则字段，
+将 XPath、JSONPath、JS、串联/替代、反向、替换、`@put`/`@get`/模板以及语法错误统一标记为部分支持。
+`source_engine/import.rs` 的投影列仍保留 CSS 兼容行为，但原始 legado 规则对象已通过 `014` migration
+写入 `rule_search/rule_book_info/rule_toc/rule_content`，不再因投影而丢失；XPath、JSONPath 与 JS Runtime
+执行器仍未实现。`source_engine/rule/evaluator.rs` 已先落地 Regex 执行（捕获组、替换、反向），
+作为后续统一规则执行入口的第一种模式。
 下一步仍应先完成两项前置工作（见 §9 新增风险）：
 
 - 用公开真实书源语料补强当前 85 条语法夹具，并扩充现有 `source_a/` `source_b/` fixture
@@ -725,7 +730,7 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 本轮可验证证据：
 
 - `source_engine/rule/{analyzer,directive,scanner,model}.rs` 最大 225 行，无新的聚团文件
-- `cargo test`：57 个库单测 + 3 个集成测试通过；规则分析器夹具扩展为 85 条
+- `cargo test`：64 个库单测 + 3 个集成测试通过；规则分析器夹具扩展为 85 条
 - `cargo clippy --all-targets -- -D warnings`：通过
 - `src-tauri/spikes/rquickjs/`：Windows 上 `cargo check` 与 `cargo run` 均通过，已验证
   `rquickjs 0.9.0` 的 QuickJS 创建、表达式执行、异常返回和 interrupt handler API。

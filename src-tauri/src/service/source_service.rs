@@ -44,12 +44,24 @@ impl SourceService {
     pub async fn import_json(&self, input: &str) -> Result<SourceImportReport, AppError> {
         let sources = parse_sources_json(input)?;
         let raw_partial = raw_unsupported_source_names(input);
+        let raw_rules = raw_rule_objects(input)?;
         let mut report = SourceImportReport::default();
         for source in sources {
             let partial =
                 raw_partial.contains(&source.name) || source_has_unsupported_rules(&source);
             match self.upsert(&BookSource::from_import(&source)).await {
-                Ok(_) => {
+                Ok(id) => {
+                    if let Some(raw) = raw_rules.get(&source.name) {
+                        self.sources
+                            .save_raw_rules(
+                                id,
+                                raw.search.as_deref(),
+                                raw.book_info.as_deref(),
+                                raw.toc.as_deref(),
+                                raw.content.as_deref(),
+                            )
+                            .await?;
+                    }
                     report.imported += 1;
                     if partial {
                         report.partial.push(source.name);
@@ -147,6 +159,52 @@ impl SourceService {
     }
 }
 
+#[derive(Default)]
+struct RawRuleObjects {
+    search: Option<String>,
+    book_info: Option<String>,
+    toc: Option<String>,
+    content: Option<String>,
+}
+
+fn raw_rule_objects(
+    input: &str,
+) -> Result<std::collections::HashMap<String, RawRuleObjects>, AppError> {
+    let value: serde_json::Value = serde_json::from_str(input)
+        .map_err(|error| AppError::Parse(format!("书源 JSON 格式无效: {error}")))?;
+    let values = value.as_array().cloned().unwrap_or_else(|| vec![value]);
+    let mut result = std::collections::HashMap::new();
+    for value in values {
+        let Some(object) = value.as_object() else {
+            continue;
+        };
+        let Some(name) = object
+            .get("name")
+            .or_else(|| object.get("bookSourceName"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        else {
+            continue;
+        };
+        let encode = |keys: &[&str]| {
+            keys.iter()
+                .find_map(|key| object.get(*key))
+                .and_then(|rule| serde_json::to_string(rule).ok())
+        };
+        result.insert(
+            name.to_owned(),
+            RawRuleObjects {
+                search: encode(&["search_rule", "ruleSearch"]),
+                book_info: encode(&["info_rule", "ruleBookInfo"]),
+                toc: encode(&["catalog_rule", "ruleToc"]),
+                content: encode(&["content_rule", "ruleContent"]),
+            },
+        );
+    }
+    Ok(result)
+}
+
 #[derive(Debug, Default, Serialize)]
 pub struct SourceImportReport {
     pub imported: usize,
@@ -217,7 +275,8 @@ mod tests {
 
     #[tokio::test]
     async fn imports_partial_source_and_persists_it() {
-        let service = SourceService::new(pool().await);
+        let database = pool().await;
+        let service = SourceService::new(database.clone());
         let input = r#"[{"bookSourceName":"XPath source","bookSourceUrl":"https://example.com","searchUrl":"https://example.com?q={{key}}","ruleSearch":{"bookList":"@XPath://article","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
 
         let report = service.import_json(input).await.unwrap();
@@ -226,5 +285,15 @@ mod tests {
         assert_eq!(report.failed, Vec::<String>::new());
         assert_eq!(report.partial, vec!["XPath source"]);
         assert_eq!(service.list().await.unwrap().len(), 1);
+        let row: (String, String) =
+            sqlx::query_as("SELECT rule_search, rule_content FROM book_sources WHERE name = ?")
+                .bind("XPath source")
+                .fetch_one(&database)
+                .await
+                .unwrap();
+        let raw_search: serde_json::Value = serde_json::from_str(&row.0).unwrap();
+        assert_eq!(raw_search["bookList"], "@XPath://article");
+        assert_eq!(raw_search["bookUrl"], "a");
+        assert_eq!(row.1, "\".content\"");
     }
 }

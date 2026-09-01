@@ -86,17 +86,26 @@ fn source_a_pipeline_parses_all_stages_from_fixtures() {
     assert_eq!(search.len(), 2);
     assert_eq!(search[0].title, "The Long Road");
     assert_eq!(search[0].url, "https://fiction.example/books/long-road");
-    assert_eq!(search[0].cover.as_deref(), Some("https://fiction.example/covers/long.jpg"));
+    assert_eq!(
+        search[0].cover.as_deref(),
+        Some("https://fiction.example/covers/long.jpg")
+    );
 
     let info = parse_book_info(&source, include_str!("fixtures/source_a/book.html")).unwrap();
     assert_eq!(info.title.as_deref(), Some("The Long Road"));
     assert_eq!(info.author.as_deref(), Some("A. Writer"));
-    assert_eq!(info.cover.as_deref(), Some("https://fiction.example/covers/long.jpg"));
+    assert_eq!(
+        info.cover.as_deref(),
+        Some("https://fiction.example/covers/long.jpg")
+    );
 
     let (chapters, next) =
         parse_catalog_page(&source, include_str!("fixtures/source_a/toc.html")).unwrap();
     assert_eq!(chapters.len(), 2);
-    assert_eq!(chapters[1].1, "https://fiction.example/books/long-road/chapter-2");
+    assert_eq!(
+        chapters[1].1,
+        "https://fiction.example/books/long-road/chapter-2"
+    );
     assert_eq!(next.as_deref(), Some("/books/long-road/toc?page=2"));
 
     let (content, next) =
@@ -111,11 +120,17 @@ fn source_b_pipeline_handles_relative_and_absolute_markup() {
     let search = parse_search(&source, include_str!("fixtures/source_b/search.html")).unwrap();
     assert_eq!(search.len(), 1);
     assert_eq!(search[0].url, "https://mirror.example/novels/book-7");
-    assert_eq!(search[0].cover.as_deref(), Some("https://cdn.example/covers/book-7.webp"));
+    assert_eq!(
+        search[0].cover.as_deref(),
+        Some("https://cdn.example/covers/book-7.webp")
+    );
 
     let info = parse_book_info(&source, include_str!("fixtures/source_b/book.html")).unwrap();
     assert_eq!(info.title.as_deref(), Some("Seven Signals"));
-    assert_eq!(info.intro.as_deref(), Some("A station hears seven impossible signals."));
+    assert_eq!(
+        info.intro.as_deref(),
+        Some("A station hears seven impossible signals.")
+    );
 
     let (chapters, next) =
         parse_catalog_page(&source, include_str!("fixtures/source_b/toc.html")).unwrap();
