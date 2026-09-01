@@ -14,9 +14,12 @@ fn extract(element: ElementRef<'_>, rule: &str) -> Option<String> {
         .split_once("::attr(")
         .and_then(|(selector, rest)| rest.strip_suffix(')').map(|attr| (selector, Some(attr))))
         .unwrap_or((rule, None));
-    let node = element
-        .select(&Selector::parse(selector.trim()).ok()?)
-        .next()?;
+    let selector = selector.trim();
+    let node = if selector == "*" {
+        element
+    } else {
+        element.select(&Selector::parse(selector).ok()?).next()?
+    };
     attribute
         .map(|name| {
             node.value()
@@ -223,6 +226,23 @@ mod tests {
             "https://example.com/c1"
         );
         assert_eq!(parse_content(&source(), html).unwrap(), "第一段\n第二段");
+    }
+
+    #[test]
+    fn extracts_text_and_attributes_from_the_current_item() {
+        let mut source = source();
+        source.catalog_rule = CatalogRule {
+            item: ".chapter a".into(),
+            title: "*".into(),
+            url: "*::attr(href)".into(),
+            next_url: None,
+        };
+        let chapters = parse_catalog(
+            &source,
+            r#"<ul><li class="chapter"><a href="/c1">第一章</a></li></ul>"#,
+        )
+        .unwrap();
+        assert_eq!(chapters, vec![("第一章".into(), "https://example.com/c1".into())]);
     }
 
     #[test]

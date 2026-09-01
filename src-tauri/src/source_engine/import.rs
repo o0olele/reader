@@ -5,17 +5,46 @@ use crate::domain::source::{CatalogRule, InfoRule, SearchRule, SourceImport};
 fn rule(value: Option<&serde_json::Value>, keys: &[&str]) -> Option<String> {
     value
         .and_then(|object| keys.iter().find_map(|key| object.get(*key)?.as_str()))
-        .map(|value| {
-            value
-                .split("&&")
-                .next()
-                .unwrap_or(value)
-                .trim()
-                .trim_start_matches("@css:")
-                .trim()
-                .to_owned()
-        })
+        .map(normalize_rule)
         .filter(|value| !value.is_empty())
+}
+
+/// Normalize the selector spellings used by Legado's JSON exports.
+///
+/// Besides `@css:` Legado commonly emits `css:` and uses `@href`/`@src`
+/// suffixes instead of the explicit `::attr(...)` form used internally.
+fn normalize_rule(value: &str) -> String {
+    let value = value.split("&&").next().unwrap_or(value).trim();
+    let value = value
+        .strip_prefix("@css:")
+        .or_else(|| value.strip_prefix("css:"))
+        .map(str::trim)
+        .unwrap_or(value);
+    if value.eq_ignore_ascii_case("text") || value.eq_ignore_ascii_case("@text") {
+        return "*".into();
+    }
+    if let Some(attribute) = value.strip_prefix('@') {
+        if !attribute.is_empty()
+            && attribute
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return format!("*::attr({attribute})");
+        }
+    }
+    if !value.contains("::attr(") {
+        if let Some((selector, attribute)) = value.rsplit_once('@') {
+            if !selector.is_empty()
+                && !attribute.is_empty()
+                && attribute
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                return format!("{}::attr({attribute})", selector.trim());
+            }
+        }
+    }
+    value.to_owned()
 }
 fn json_value(value: Option<&serde_json::Value>) -> Option<serde_json::Value> {
     let value = value?;
@@ -55,9 +84,9 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
         let name = field(object, "name", "bookSourceName").unwrap_or_default();
         let base_url = field(object, "base_url", "bookSourceUrl").unwrap_or_default();
         let search_url = field(object, "search_url", "searchUrl")
-            .unwrap_or_default()
+            .unwrap_or_else(|| base_url.clone())
             .replace("<searchKey>", "{{key}}");
-        if name.is_empty() || base_url.is_empty() || search_url.is_empty() {
+        if name.is_empty() || base_url.is_empty() {
             continue;
         }
         let search = json_value(
@@ -78,7 +107,7 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
         );
         let content_selector = content
             .as_ref()
-            .and_then(|value| value.as_str().map(str::to_owned))
+            .and_then(|value| value.as_str().map(normalize_rule))
             .or_else(|| rule(content.as_ref(), &["content", "selector", "main"]))
             .or_else(|| field(object, "content_selector", "ruleContent"))
             .unwrap_or_else(|| "body".into())
@@ -92,13 +121,13 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
             base_url,
             search_url,
             search_rule: SearchRule {
-                item: rule(search.as_ref(), &["item", "bookList"])
+                item: rule(search.as_ref(), &["item", "bookList", "list"])
                     .unwrap_or_else(|| ".book".into()),
                 title: rule(search.as_ref(), &["title", "name"]).unwrap_or_else(|| ".title".into()),
                 author: rule(search.as_ref(), &["author"]),
                 cover: rule(search.as_ref(), &["cover", "coverUrl"])
                     .map(|value| attr(value, "src")),
-                url: rule(search.as_ref(), &["url", "bookUrl"])
+                url: rule(search.as_ref(), &["url", "bookUrl", "detail"])
                     .map(|value| attr(value, "href"))
                     .unwrap_or_else(|| "a::attr(href)".into()),
             },
@@ -111,14 +140,14 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 latest_chapter: rule(info.as_ref(), &["lastChapter", "latestChapter"]),
             },
             catalog_rule: CatalogRule {
-                item: rule(catalog.as_ref(), &["item", "chapterList"])
+                item: rule(catalog.as_ref(), &["item", "chapterList", "list"])
                     .unwrap_or_else(|| "a".into()),
-                title: rule(catalog.as_ref(), &["title", "chapterName"])
+                title: rule(catalog.as_ref(), &["title", "chapterName", "name"])
                     .unwrap_or_else(|| "a".into()),
                 url: rule(catalog.as_ref(), &["url", "chapterUrl"])
                     .map(|value| attr(value, "href"))
                     .unwrap_or_else(|| "a::attr(href)".into()),
-                next_url: rule(catalog.as_ref(), &["nextTocUrl", "nextUrl"])
+                next_url: rule(catalog.as_ref(), &["nextTocUrl", "nextUrl", "next"])
                     .map(|value| attr(value, "href")),
             },
             content_selector,
@@ -140,11 +169,11 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
             sign_script: field(object, "sign_script", "signScript")
                 .or_else(|| field(object, "js", "js")),
             proxy_url: field(object, "proxy_url", "proxyUrl"),
-            next_toc_url_selector: rule(catalog.as_ref(), &["nextTocUrl", "nextUrl"])
+            next_toc_url_selector: rule(catalog.as_ref(), &["nextTocUrl", "nextUrl", "next"])
                 .map(|value| attr(value, "href")),
             next_content_url_selector: rule(
                 content.as_ref(),
-                &["nextContentUrl", "next_url", "nextUrl"],
+                &["nextContentUrl", "next_url", "nextUrl", "next"],
             )
             .map(|value| attr(value, "href")),
             enabled: object
@@ -171,5 +200,26 @@ mod tests {
         assert_eq!(sources[0].name, "Demo");
         assert_eq!(sources[0].search_rule.url, "a::attr(href)");
         assert_eq!(sources[0].catalog_rule.item, ".chapter");
+    }
+
+    #[test]
+    fn imports_sources_without_search_url_and_normalizes_common_legado_rules() {
+        let input = r#"[{"bookSourceUrl":"https://m.example.com","bookSourceName":"燃文小说","ruleSearch":{"list":"css: article","name":"css: .title","cover":"css: div.image img@src","detail":"css: div.image a@href"},"ruleBookInfo":{"name":"css: .info .title"},"ruleToc":{"list":"css: .chapter li a","name":"text","url":"@href","next":"css: .listpage .right a@href"},"ruleContent":{"content":"css: #text p","next":"css: .pagebar a:nth-child(4)@href"}}]"#;
+        let sources = parse_sources_json(input).unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].search_url, "https://m.example.com");
+        assert_eq!(sources[0].search_rule.item, "article");
+        assert_eq!(
+            sources[0].search_rule.cover.as_deref(),
+            Some("div.image img::attr(src)")
+        );
+        assert_eq!(sources[0].search_rule.url, "div.image a::attr(href)");
+        assert_eq!(sources[0].catalog_rule.title, "*");
+        assert_eq!(sources[0].catalog_rule.url, "*::attr(href)");
+        assert_eq!(sources[0].content_selector, "#text p");
+        assert_eq!(
+            sources[0].next_content_url_selector.as_deref(),
+            Some(".pagebar a:nth-child(4)::attr(href)")
+        );
     }
 }

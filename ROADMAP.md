@@ -647,7 +647,7 @@ src-tauri/tests/
 | Rust | 4 049 行，45 个文件；最大 `service/search_service/mod.rs` 208 行 |
 | 前端 | 1 494 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
 | DB | `migrations/001..014` 共 14 个文件 |
-| 测试 | **66 个库单测 + 5 个集成测试**（其中规则分析器集成测试逐条覆盖 85 条夹具） |
+| 测试 | **68 个库单测 + 5 个集成测试**（其中规则分析器集成测试逐条覆盖 85 条夹具） |
 
 对照 §0.1 的起点：`command.rs` 1 226 行 + `source.rs` 484 行 + `App.vue` 264 行这三座大山已全部拆散，
 单文件最大值从 1 226 降到 208。
@@ -739,7 +739,7 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 本轮可验证证据：
 
 - `source_engine/rule/{analyzer,directive,scanner,model}.rs` 最大 225 行，无新的聚团文件
-- `cargo test`：66 个库单测 + 5 个集成测试通过；规则分析器夹具扩展为 85 条
+- `cargo test`：68 个库单测 + 5 个集成测试通过；规则分析器夹具扩展为 85 条
 - `cargo clippy --all-targets -- -D warnings`：通过
 - `src-tauri/spikes/rquickjs/`：Windows 上 `cargo check` 与 `cargo run` 均通过，已验证
   `rquickjs 0.9.0` 的 QuickJS 创建、表达式执行、异常返回和 interrupt handler API。
@@ -753,4 +753,4 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-
 npm run lint && npm run format:check && npm run build
 ```
 
-当前实测：**66 库单测 + 5 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
+当前实测：**68 库单测 + 5 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
