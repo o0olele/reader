@@ -1,6 +1,10 @@
 //! Legado source import normalization for the CSS-compatible subset.
+//!
+//! The flat selector fields produced here are a lossy projection kept as a
+//! fallback; the untouched legado rule objects travel alongside them in
+//! [`SourceImport::raw_rules`] and are what the rule engine actually executes.
 
-use crate::domain::source::{CatalogRule, InfoRule, SearchRule, SourceImport};
+use crate::domain::source::{CatalogRule, InfoRule, RawSourceRules, SearchRule, SourceImport};
 
 fn rule(value: Option<&serde_json::Value>, keys: &[&str]) -> Option<String> {
     value
@@ -66,6 +70,15 @@ fn field(
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }
+/// Re-encodes a legado rule object verbatim, so the engine can read it back
+/// without inheriting any of the normalization applied above.
+fn raw_rule(object: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| object.get(*key))
+        .filter(|value| !value.is_null())
+        .and_then(|value| serde_json::to_string(value).ok())
+}
+
 fn attr(rule: String, name: &str) -> String {
     if rule.contains("::attr(") {
         rule
@@ -180,6 +193,12 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 .get("enabled")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(true),
+            raw_rules: RawSourceRules {
+                search: raw_rule(object, &["search_rule", "ruleSearch"]),
+                book_info: raw_rule(object, &["info_rule", "ruleBookInfo"]),
+                toc: raw_rule(object, &["catalog_rule", "ruleToc"]),
+                content: raw_rule(object, &["content_rule", "ruleContent"]),
+            },
         });
     }
     if sources.is_empty() {

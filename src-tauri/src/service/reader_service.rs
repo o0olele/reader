@@ -14,7 +14,7 @@ use crate::{
         ChapterRepository, ProgressRepository, SourceRepository,
     },
     service::settings_service::SettingsService,
-    source_engine::selector::{parse_catalog_page, parse_content_page},
+    source_engine::pipeline::{parse_catalog_page, parse_content_page},
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -135,7 +135,7 @@ impl ReaderService {
                 ));
             }
             let html = response.text().await.map_err(AppError::network)?;
-            let (page, next) = parse_content_page(&source, &html).map_err(AppError::parse)?;
+            let (page, next) = parse_content_page(&source, &html)?;
             pages.push(page);
             let Some(next) = next else {
                 break;
@@ -181,7 +181,7 @@ impl ReaderService {
                 ));
             }
             let html = response.text().await.map_err(AppError::network)?;
-            let (page, next) = parse_catalog_page(&source, &html).map_err(AppError::parse)?;
+            let (page, next) = parse_catalog_page(&source, &html)?;
             catalog.extend(page);
             let Some(next) = next else {
                 break;

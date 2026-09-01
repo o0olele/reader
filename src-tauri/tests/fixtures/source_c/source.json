@@ -1,0 +1,30 @@
+{
+  "bookSourceName": "Fixture C",
+  "bookSourceUrl": "https://legado.example",
+  "searchUrl": "https://legado.example/s?wd={{key}}",
+  "ruleSearch": {
+    "bookList": "class.result-list@tag.li",
+    "name": "class.bookname@tag.a@text",
+    "author": "class.author@text##作者：##",
+    "bookUrl": "class.bookname@tag.a@href",
+    "coverUrl": "tag.img@data-original||tag.img@src"
+  },
+  "ruleBookInfo": {
+    "name": "class.detail@tag.h1@text",
+    "author": "@XPath://span[@class='writer']/text()",
+    "intro": "id.intro@textNodes",
+    "coverUrl": "class.cover@tag.img@src",
+    "kind": "class.tags@tag.span.0@text",
+    "lastChapter": "class.latest@tag.a@text"
+  },
+  "ruleToc": {
+    "chapterList": "class.chapter-list@tag.dd",
+    "chapterName": "tag.a@text",
+    "chapterUrl": "tag.a@href",
+    "nextTocUrl": "text.下一页@href"
+  },
+  "ruleContent": {
+    "content": "id.chaptercontent@textNodes",
+    "nextContentUrl": "class.pager@text.下一页@href"
+  }
+}

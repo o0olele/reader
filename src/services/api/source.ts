@@ -1,11 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { BookSource, SourceImportReport, SourceLoginResult, SourceTestResult } from './types'
+import type { BookSource, BookSourceInput, SourceImportReport, SourceLoginResult, SourceTestResult } from './types'
 
 export function listBookSources(): Promise<BookSource[]> {
   return invoke<BookSource[]>('list_book_sources')
 }
 
-export function saveBookSource(input: Omit<BookSource, 'id'>): Promise<BookSource> {
+export function saveBookSource(input: BookSourceInput): Promise<BookSource> {
   return invoke<BookSource>('save_book_source', { input })
 }
 

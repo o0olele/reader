@@ -181,6 +181,7 @@ mod tests {
             sign_script: sign_script.map(str::to_owned),
             proxy_url: None,
             enabled: true,
+            raw_rules: Default::default(),
         }
     }
 

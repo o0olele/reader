@@ -10,7 +10,7 @@ use crate::{
     repository::{book::SqliteBookRepository, BookRepository},
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
-    source_engine::selector::parse_book_info,
+    source_engine::pipeline::parse_book_info,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 
@@ -76,7 +76,7 @@ impl BookService {
             ));
         }
         let html = response.text().await.map_err(AppError::network)?;
-        let info = parse_book_info(&source, &html).map_err(AppError::parse)?;
+        let info = parse_book_info(&source, &html)?;
         let cover_url = info.cover.clone();
         self.books.update_info(book_id, &info).await?;
         if let Some(cover) = cover_url.as_deref() {

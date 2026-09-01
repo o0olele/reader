@@ -61,6 +61,26 @@ impl RuleContext {
 }
 
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
+pub enum RuleExecutionError {
+    #[error("rule is empty")]
+    EmptyRule,
+    #[error("regex rule is invalid: {0}")]
+    InvalidRegex(String),
+    #[error("rule mode {0} is not supported by this evaluator")]
+    UnsupportedMode(&'static str),
+    #[error("json rule is invalid: {0}")]
+    InvalidJson(String),
+    #[error("json path is invalid: {0}")]
+    InvalidJsonPath(String),
+    #[error("xpath rule is invalid: {0}")]
+    InvalidXPath(String),
+    #[error("default-mode rule is not supported: {0}")]
+    UnsupportedJsoup(String),
+    #[error("rule could not be parsed: {0}")]
+    Parse(#[from] RuleParseError),
+}
+
+#[derive(Debug, thiserror::Error, Eq, PartialEq)]
 pub enum RuleParseError {
     #[error("rule contains an unclosed {0}")]
     Unclosed(&'static str),

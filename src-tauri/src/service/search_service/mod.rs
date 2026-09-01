@@ -14,7 +14,7 @@ use crate::{
     },
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
-    source_engine::selector::parse_search,
+    source_engine::pipeline::parse_search,
 };
 use grouping::group_results;
 use serde::Serialize;
@@ -115,8 +115,7 @@ impl SearchService {
                 response_error(response, &source.name).await,
             ));
         }
-        let results = parse_search(&source, &response.text().await.map_err(AppError::network)?)
-            .map_err(AppError::parse)?;
+        let results = parse_search(&source, &response.text().await.map_err(AppError::network)?)?;
         Ok(SourceTestResult {
             source_id,
             source_name: source.name,
@@ -204,5 +203,4 @@ async fn search_one_source(
         ));
     }
     parse_search(&source, &response.text().await.map_err(AppError::network)?)
-        .map_err(AppError::parse)
 }

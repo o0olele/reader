@@ -44,12 +44,22 @@ export interface SearchRule {
   url: string
 }
 
+/** Legado rule objects kept verbatim; the rule engine prefers these over the
+ *  flat selector fields, which only remain as a fallback. */
+export interface RawSourceRules {
+  search?: string
+  book_info?: string
+  toc?: string
+  content?: string
+}
+
 export interface BookSource {
   id: number
   name: string
   base_url: string
   search_url: string
   search_rule: SearchRule
+  raw_rules: RawSourceRules
   enabled: boolean
   header?: string
   login_url?: string
@@ -64,6 +74,16 @@ export interface BookSource {
   next_toc_url_selector?: string
   next_content_url_selector?: string
 }
+
+/**
+ * What `save_book_source` accepts. Narrower than {@link BookSource}: a source
+ * written by hand has no id, no session, and no legado rules — saving one
+ * deliberately drops any rules a previous import had left behind.
+ */
+export type BookSourceInput = Omit<
+  BookSource,
+  'id' | 'raw_rules' | 'access_token' | 'session_cookie' | 'session_expires_at'
+>
 
 /** One book as returned by a single source. */
 export interface BookSearchResult {

@@ -204,6 +204,7 @@ mod tests {
             sign_script: None,
             proxy_url: None,
             enabled: true,
+            raw_rules: Default::default(),
         }
     }
 
@@ -242,7 +243,10 @@ mod tests {
             r#"<ul><li class="chapter"><a href="/c1">第一章</a></li></ul>"#,
         )
         .unwrap();
-        assert_eq!(chapters, vec![("第一章".into(), "https://example.com/c1".into())]);
+        assert_eq!(
+            chapters,
+            vec![("第一章".into(), "https://example.com/c1".into())]
+        );
     }
 
     #[test]

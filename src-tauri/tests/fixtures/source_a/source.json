@@ -1,1 +1,30 @@
-{"bookSourceName":"Fixture A","bookSourceUrl":"https://fiction.example","searchUrl":"https://fiction.example/search?q={{key}}","ruleSearch":{"bookList":"article.result","name":"h2 a","author":".author","bookUrl":"h2 a","coverUrl":"img"},"ruleBookInfo":{"name":"h1","author":".meta .author","intro":".summary","coverUrl":".cover"},"ruleToc":{"chapterList":"ol.chapters li","chapterName":"a","chapterUrl":"a","nextTocUrl":"a.next"},"ruleContent":"article.chapter"}
+{
+  "bookSourceName": "Fixture A",
+  "bookSourceUrl": "https://fiction.example",
+  "searchUrl": "https://fiction.example/search?q={{key}}",
+  "ruleSearch": {
+    "bookList": "article.result",
+    "name": "h2 a@text",
+    "author": ".author@text",
+    "bookUrl": "h2 a@href",
+    "coverUrl": "img@data-src"
+  },
+  "ruleBookInfo": {
+    "name": "h1@text",
+    "author": ".meta .author@text",
+    "intro": ".summary@text",
+    "coverUrl": ".cover@src",
+    "kind": ".meta .kind@text",
+    "lastChapter": ".latest a@text"
+  },
+  "ruleToc": {
+    "chapterList": "ol.chapters li",
+    "chapterName": "a@text",
+    "chapterUrl": "a@href",
+    "nextTocUrl": "a.next@href"
+  },
+  "ruleContent": {
+    "content": "article.chapter@tag.p@text",
+    "nextContentUrl": "a.more@href"
+  }
+}

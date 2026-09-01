@@ -1,6 +1,6 @@
 use crate::{
     app::AppState,
-    domain::source::{BookSource, CatalogRule, InfoRule, SearchRule},
+    domain::source::{BookSource, CatalogRule, InfoRule, RawSourceRules, SearchRule},
     error::AppError,
     service::source_service::{
         SourceImportReport, SourceLoginInput, SourceLoginResult, SourceService,
@@ -113,6 +113,10 @@ pub async fn save_book_source_cmd(
         sign_script: input.sign_script,
         proxy_url: input.proxy_url,
         enabled: input.enabled.unwrap_or(true),
+        // Saving by hand takes the source's rules over. Carrying legado rules
+        // across from an earlier import would silently outrank the selectors
+        // the user just typed, since the engine prefers them.
+        raw_rules: RawSourceRules::default(),
     };
     let id = SourceService::new(state.database()?)
         .upsert(&source)

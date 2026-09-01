@@ -9,6 +9,28 @@ pub struct SearchRule {
     pub url: String,
 }
 
+/// The legado rule objects exactly as imported, before the CSS projection.
+///
+/// Each field holds the raw JSON of one `rule*` object (or a bare string, which
+/// legado allows for `ruleContent`). The rule engine prefers these; the flat
+/// selector columns on [`BookSource`] remain as a fallback.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RawSourceRules {
+    pub search: Option<String>,
+    pub book_info: Option<String>,
+    pub toc: Option<String>,
+    pub content: Option<String>,
+}
+
+impl RawSourceRules {
+    pub fn is_empty(&self) -> bool {
+        self.search.is_none()
+            && self.book_info.is_none()
+            && self.toc.is_none()
+            && self.content.is_none()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BookSource {
     pub id: i64,
@@ -32,6 +54,8 @@ pub struct BookSource {
     pub sign_script: Option<String>,
     pub proxy_url: Option<String>,
     pub enabled: bool,
+    #[serde(default)]
+    pub raw_rules: RawSourceRules,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -71,6 +95,8 @@ pub struct SourceImport {
     pub next_toc_url_selector: Option<String>,
     pub next_content_url_selector: Option<String>,
     pub enabled: bool,
+    #[serde(default)]
+    pub raw_rules: RawSourceRules,
 }
 
 impl BookSource {
@@ -101,6 +127,7 @@ impl BookSource {
             sign_script: import.sign_script.clone(),
             proxy_url: import.proxy_url.clone(),
             enabled: import.enabled,
+            raw_rules: import.raw_rules.clone(),
         }
     }
 }
@@ -160,6 +187,7 @@ mod tests {
             next_toc_url_selector: None,
             next_content_url_selector: None,
             enabled: true,
+            raw_rules: RawSourceRules::default(),
         };
 
         let source = BookSource::from_import(&import);

@@ -1,13 +1,21 @@
-//! Legado rule parsing primitives.
+//! Legado rule parsing and execution.
 
 mod analyzer;
 mod directive;
+mod engine;
 mod evaluator;
+mod jsoup;
 mod model;
 mod scanner;
+mod step;
+mod xpath;
 
 pub use analyzer::{expand_template, split_rule};
-pub use evaluator::{execute_json, execute_regex, execute_rule, execute_xpath, RuleExecutionError};
+pub use engine::{evaluate, evaluate_first, execute_alternatives};
+pub use evaluator::{execute_json, execute_regex, execute_rule};
+pub use jsoup::{execute_jsoup, Extraction};
 pub use model::{
-    RuleAlternatives, RuleContext, RuleJoin, RuleMode, RuleParseError, RuleReplacement, SourceRule,
+    RuleAlternatives, RuleContext, RuleExecutionError, RuleJoin, RuleMode, RuleParseError,
+    RuleReplacement, SourceRule,
 };
+pub use xpath::execute_xpath;

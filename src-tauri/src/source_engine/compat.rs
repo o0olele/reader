@@ -152,6 +152,7 @@ mod tests {
             next_toc_url_selector: None,
             next_content_url_selector: None,
             enabled: true,
+            raw_rules: Default::default(),
         };
         source.info_rule.intro = Some("@Json:$.intro".into());
         assert!(source_has_unsupported_rules(&source));

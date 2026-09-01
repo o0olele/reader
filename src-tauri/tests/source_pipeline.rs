@@ -1,4 +1,6 @@
-use reader_desktop_lib::domain::source::{BookSource, CatalogRule, InfoRule, SearchRule};
+use reader_desktop_lib::domain::source::{
+    BookSource, CatalogRule, InfoRule, RawSourceRules, SearchRule,
+};
 use reader_desktop_lib::source_engine::selector::{
     parse_book_info, parse_catalog_page, parse_content_page, parse_search,
 };
@@ -44,6 +46,7 @@ fn source_a() -> BookSource {
         sign_script: None,
         proxy_url: None,
         enabled: true,
+        raw_rules: RawSourceRules::default(),
     }
 }
 
@@ -142,4 +145,59 @@ fn source_b_pipeline_handles_relative_and_absolute_markup() {
         parse_content_page(&source, include_str!("fixtures/source_b/chapter.html")).unwrap();
     assert_eq!(content, "The receiver clicked.\nSeven lights answered.");
     assert_eq!(next.as_deref(), Some("/novels/chapter-2"));
+}
+
+/// Adopting the rule engine must not change what a working source produces.
+///
+/// `source_a` is described twice over the same markup — once as flat CSS
+/// selectors, once as the legado rules in `source_a/source.json` — and both
+/// descriptions have to agree stage by stage.
+#[test]
+fn the_engine_and_the_css_projection_agree_on_the_same_source() {
+    use reader_desktop_lib::source_engine::pipeline;
+
+    let css = source_a();
+    let mut engine = source_a();
+    let rules: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/source_a/source.json")).unwrap();
+    let encode = |key: &str| serde_json::to_string(rules.get(key).expect(key)).ok();
+    engine.raw_rules = RawSourceRules {
+        search: encode("ruleSearch"),
+        book_info: encode("ruleBookInfo"),
+        toc: encode("ruleToc"),
+        content: encode("ruleContent"),
+    };
+
+    let search_html = include_str!("fixtures/source_a/search.html");
+    let from_css = parse_search(&css, search_html).unwrap();
+    let from_engine = pipeline::parse_search(&engine, search_html).unwrap();
+    assert_eq!(from_engine.len(), from_css.len());
+    for (engine_hit, css_hit) in from_engine.iter().zip(&from_css) {
+        assert_eq!(engine_hit.title, css_hit.title);
+        assert_eq!(engine_hit.author, css_hit.author);
+        assert_eq!(engine_hit.url, css_hit.url);
+        assert_eq!(engine_hit.cover, css_hit.cover);
+    }
+
+    let book_html = include_str!("fixtures/source_a/book.html");
+    let css_info = parse_book_info(&css, book_html).unwrap();
+    let engine_info = pipeline::parse_book_info(&engine, book_html).unwrap();
+    assert_eq!(engine_info.title, css_info.title);
+    assert_eq!(engine_info.author, css_info.author);
+    assert_eq!(engine_info.intro, css_info.intro);
+    assert_eq!(engine_info.cover, css_info.cover);
+    assert_eq!(engine_info.kind, css_info.kind);
+    assert_eq!(engine_info.latest_chapter, css_info.latest_chapter);
+
+    let toc_html = include_str!("fixtures/source_a/toc.html");
+    assert_eq!(
+        pipeline::parse_catalog_page(&engine, toc_html).unwrap(),
+        parse_catalog_page(&css, toc_html).unwrap()
+    );
+
+    let chapter_html = include_str!("fixtures/source_a/chapter.html");
+    assert_eq!(
+        pipeline::parse_content_page(&engine, chapter_html).unwrap(),
+        parse_content_page(&css, chapter_html).unwrap()
+    );
 }

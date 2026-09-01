@@ -5,10 +5,10 @@
 > `plan.md` 回答"做什么"，本文件回答"接下来按什么顺序做、做到什么算完"。
 > 两者冲突时以本文件为准，并回头修订 `plan.md`。
 >
-> **最近复核：2026-08-31。** §0 是 2026-08-30 的**起点快照，已成历史记录**，保留用于对照；
+> **最近复核：2026-09-01。** §0 是 2026-08-30 的**起点快照，已成历史记录**，保留用于对照；
 > **当前真实进度一律以 §10 为准。**§10 的每一条都要求「代码里能验证到什么」，不接受未经核对的打勾。
 
-**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 进行中（RuleAnalyzer + XPath/JSONPath/Regex evaluator 已完成）。**
+**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 进行中（规则引擎已接入真实管线，剩 JS Runtime 与公开语料验证）。**
 
 ---
 
@@ -97,7 +97,7 @@ Step 0  架构补债 + 修 bug        3~5 天   ✅ 已完成（2026-08-31）
    ↓
 Step 1  M2 收尾：在线阅读可用      1 周    ✅ 代码项完成，待真实书源手工验收
    ↓
-Step 2  规则引擎（含 JS Runtime）  2~3 周  ◀ 进行中：RuleAnalyzer 基线完成   ┐
+Step 2  规则引擎（含 JS Runtime）  2~3 周  ◀ 进行中：引擎已接入管线，剩 JS Runtime ┐
 Step 3  书源调试器 + 回归测试      1 周                  ┘ 并行
    ↓
 Step 4  下载 / 缓存               2 周
@@ -394,7 +394,7 @@ Default / XPath / JSONPath / JS / WebJS / Regex 模式识别、`##` 替换、`@p
 `tests/rule_analyzer.rs` 对 `tests/fixtures/rules/legado_rules.jsonl` 的 85 条代表性语法逐条做快照断言。
 当前夹具主要来自本机 legado 语法文档和默认源，**尚不能冒充 50 条公开真实书源样本**；4.2.1 的最终验收仍需用公开书源语料替换或补充。
 
-**4.2.2 XPath / JSONPath / Regex（3–4 天）— 🟡 evaluator 已完成，待真实语料验证**
+**4.2.2 XPath / JSONPath / Regex（3–4 天）— ✅ evaluator 已完成并接入管线，待公开语料验证覆盖率**
 
 | 能力 | Rust crate 建议 | 备注 |
 | --- | --- | --- |
@@ -403,12 +403,50 @@ Default / XPath / JSONPath / JS / WebJS / Regex 模式识别、`##` 替换、`@p
 | Regex | `regex`（已有依赖） | 注意 legado 用的是 Java 正则，`\p{...}`、反向引用有差异，需做兼容层与降级 |
 
 2026-09-01 进展：`source_engine::rule::execute_rule` 已提供统一模式调度；
-`execute_json` 支持 legado 常用的对象键、数组索引、`[*]` 通配符，`execute_xpath` 支持容错 HTML
-上的节点、`text()`、属性、属性等值/包含谓词与位置谓词，Regex 保留捕获组、替换、反向处理。
-三种模式均有单元测试，当前不支持的复杂 XPath（轴、函数组合）和 JSONPath 递归下降会返回明确错误，
-不会静默返回空结果。
+`execute_json` 支持 legado 常用的对象键、数组索引、`[*]` 通配符，`execute_xpath`（已拆到
+`rule/xpath.rs`）支持容错 HTML 上的节点、`text()`、属性、属性等值/包含谓词与位置谓词，
+Regex 保留捕获组、替换、反向处理。三种模式均有单元测试，当前不支持的复杂 XPath（轴、函数组合）
+和 JSONPath 递归下降会返回明确错误，不会静默返回空结果。
 
-**4.2.3 JS Runtime（1 周）**
+**4.2.2b JSoup(Default) 模式 + 编排层 + 接入真实管线（2026-09-01）— ✅**
+
+> 本小节是复核 4.2.1/4.2.2 时**补记的缺口**，原路线图没有把它单列出来，导致 4.2.2 完成后
+> 引擎实际上仍是悬空代码。教训与 §10.5 同源：「evaluator 写完」不等于「引擎能跑」。
+
+发现的问题（2026-09-01 复核）：
+
+| 事实 | 说明 |
+| --- | --- |
+| `execute_rule` 系列在生产路径**零调用点** | 只有 `compat.rs` 用 `split_rule` 做导入兼容判定，其余全在测试里 |
+| `014` 写入的 `rule_*` 四列**只写不读** | `SOURCE_SELECT` 与 `SourceRow` 都不含这四列 |
+| **legado 最主流的 Default 模式直接报 `UnsupportedMode`** | 4.2.2 只列了 XPath/JSONPath/Regex，漏掉了 `AnalyzeByJSoup` 对应的私有语法 |
+| `\|\|` / `&&` / `%%` / `-` / `@put` / `@get` 解析出来了但无人执行 | `RuleAlternatives` 只被测试做指纹快照 |
+
+本轮补上：
+
+- `rule/jsoup.rs` + `rule/step.rs` —— Default 模式求值器：私有语法（`class.` / `id.` / `tag.` /
+  `text.` / `children`，正负索引）与 CSS 混用、`@` 分步、终结符 `text` / `textNodes` / `ownText` /
+  `html` / 任意属性。区间（`.0:1:2`）与排除（`!`）返回 `UnsupportedJsoup`，**不静默返回空**
+- `rule/engine.rs` —— 编排层：`||` 逐个尝试取首个非空、`&&` 对同一输入求值后拼接、`%%` 交替合并、
+  `Chain` 链式传递、`{{}}` 展开与 `@put`/`@get` 上下文。`Js`/`WebJs` 返回明确错误（留给 4.2.3）
+- **值模型**：全程 `Vec<String>`。列表规则以 `Extraction::Nodes` 返回元素 outerHTML，逐项规则重新
+  parse 该片段。三种模式共用一套签名，代价是每项一次重解析
+- `source_engine/legado_rules.rs` —— `rule_*` 列的类型化（`serde(alias)` 吸收键名变体；
+  `ruleContent` 为裸字符串时视作 `{content: "..."}`）
+- `source_engine/pipeline.rs` —— **引擎优先、CSS 投影兜底**。有原始规则且解析出非空结果就走引擎；
+  规则缺失 / 无法执行 / 结果为空则回退 `selector.rs`。回退点集中在这一个文件，便于日后一次性删除
+- `raw_rules` 打通：`SourceImport` → `BookSource` → `upsert`（并入同一条 SQL，去掉 `save_raw_rules`
+  的额外往返）→ `SOURCE_SELECT` 读回。`source_service::raw_rule_objects` 的重复 JSON 遍历随之删除
+- 三个 service（search / reader / book）改用 `pipeline::*`，返回 `AppError`，
+  顺带收敛 §10.5 第 1 条的 `Result<_, String>` 债
+
+**语义决策：手动保存书源会清空 `raw_rules`。** UI 表单只能新建、保存后清空，按名字保存等于接管该书源；
+若残留的 legado 规则继续优先，用户手写的 CSS 会被静默覆盖。
+
+**顺带修掉一个真实 bug：** XPath 的 `contains()` 转译没吃掉外层方括号，
+`//div[contains(@class,'x')]` 会译成非法的 `div[[class*='x']]`。拆分 `xpath.rs` 时新增的单测抓到的。
+
+**4.2.3 JS Runtime（1 周）— ⬜ 下一步**
 
 按 `plan.md` §2 先定 trait：
 
@@ -520,21 +558,25 @@ src-tauri/tests/
 ├── fixtures/
 │   ├── source_a/{search.html, book.html, toc.html, chapter.html, source.json}
 │   ├── source_b/...
-│   └── rules/legado_rules.jsonl     ← 85 条代表性规则串 + 期望切分结果
-├── rule_analyzer.rs
-├── selector_css.rs
-├── selector_xpath.rs
-├── selector_json.rs
-├── js_runtime.rs
-└── source_pipeline.rs               ← 端到端：固定 HTML → 规则 → 固定输出
+│   ├── source_c/...                 ← legado 原生语法书源 ✅
+│   └── rules/legado_rules.jsonl     ← 85 条代表性规则串 + 期望切分结果 ✅
+├── rule_analyzer.rs                 ← ✅ 夹具逐条快照
+├── rule_engine.rs                   ← ✅ 引擎端到端（source_c）
+├── source_pipeline.rs               ← ✅ CSS 路径 + 双路径一致性
+├── step0_regressions.rs             ← ✅
+└── js_runtime.rs                    ← ⬜ 待 4.2.3
 ```
+
+（selector 各模式的单测就近放在 `source_engine/rule/{jsoup,xpath,evaluator,engine,step}.rs` 内联，
+不再单列 `selector_*.rs` 文件。）
 
 同时补 Step 0/1 欠的测试：`epub` 解析、`decode_text` 各编码、`split_chapters` 边界、B1–B5 各一条。
 
-**2026-08-31 现状：** `epub`（10 条）/ `txt`（11 条）/ B1–B4 均已补齐。
-真实 HTML fixture 已补齐：`tests/fixtures/source_a/` 与 `source_b/` 各含搜索、详情、目录、正文页面，
-并由 `tests/source_pipeline.rs` 端到端覆盖 CSS 选择器、相对 URL 和分页链接。仍缺的是基于公开语料的更大规模容错样本。
-这意味着 selector 层的测试全部依赖内联 HTML 字符串，无法覆盖真实站点的容错解析。
+**2026-09-01 现状：** `epub`（10 条）/ `txt`（11 条）/ B1–B4 均已补齐。
+`tests/fixtures/source_a/` `source_b/` `source_c/` 各含搜索、详情、目录、正文页面：
+前两者由 `tests/source_pipeline.rs` 覆盖 CSS 路径与双路径一致性，`source_c/` 是**用 legado 原生语法
+书写**的书源，由 `tests/rule_engine.rs` 端到端驱动引擎路径。
+仍缺的是基于**公开语料**的更大规模容错样本 —— 见 §10.6 剩余项第 3 条：人工造的夹具会悄悄迁就实现。
 
 ### 5.3 验收标准
 
@@ -630,7 +672,8 @@ src-tauri/tests/
 | Cloudflare / JS challenge | 部分站点完全不可用 | 已有识别提示（`infrastructure/http/request.rs`）；根治需 WebView 通道，列入 Step 7 评估 |
 | ~~架构重构引入回归~~ | ~~Step 0 拖长~~ | **已关闭** —— Step 0 与 08-31 的 `SourceService` 拆分均以小步提交 + 每步全绿完成，未发生回归 |
 | **业务在 service 层重新聚团** | 每个 Step 结束都会产生新的巨型文件 | **新增（2026-08-31）** —— Step 0 后 `SourceService` 涨到 617 行。约定：每个 Step 收尾时复查最大文件，非测试行 > 250 即拆 |
-| **真实 HTML 语料规模不足** | 当前 fixture 只覆盖两种人工整理的站点结构，真实站点容错仍未知 | **更新（2026-08-31）** —— `source_a/` `source_b/` 与 `source_pipeline.rs` 已落地；继续补公开书源语料 |
+| **真实 HTML 语料规模不足** | 当前 fixture 只覆盖三种人工整理的站点结构，真实站点容错仍未知 | **升级（2026-09-01）** —— 已补 `source_c/`（legado 原生语法）。但发现 `source_a/source.json` 原本是**照着导入器行为写的、并非 legado 真实写法**，说明自造夹具会迁就实现。公开语料从「补量」升级为**验收前置** |
+| **规则引擎覆盖率无法自测** | §4.4 的「≥300 源，可搜索 ≥ 60%」在本机无从度量 | **新增（2026-09-01）** —— 引擎已能跑，但不支持的语法只在遇到时报错。需要公开书源集跑一次统计，才能知道 Default/XPath/JSON 三种模式的真实缺口在哪 |
 
 ---
 
@@ -642,12 +685,12 @@ src-tauri/tests/
 
 ### 10.1 代码规模现状（2026-08-31 实测）
 
-| 层 | 规模 |
+| 层 | 规模（2026-09-01 实测） |
 | --- | --- |
-| Rust | 4 049 行，45 个文件；最大 `service/search_service/mod.rs` 208 行 |
-| 前端 | 1 494 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
-| DB | `migrations/001..014` 共 14 个文件 |
-| 测试 | **68 个库单测 + 5 个集成测试**（其中规则分析器集成测试逐条覆盖 85 条夹具） |
+| Rust | 6 492 行，57 个文件；最大 `service/reader_service.rs` 220 非测试行 |
+| 前端 | 1 545 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
+| DB | `migrations/001..014` 共 14 个文件（本轮无新增 migration） |
+| 测试 | **94 个库单测 + 12 个集成测试**（规则分析器 85 条夹具 + 引擎端到端 6 条 + 管线 3 条 + Step 0 回归 2 条） |
 
 对照 §0.1 的起点：`command.rs` 1 226 行 + `source.rs` 484 行 + `App.vue` 264 行这三座大山已全部拆散，
 单文件最大值从 1 226 降到 208。
@@ -706,7 +749,7 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 | # | 原声明 | 实测 | 处置 |
 | --- | --- | --- | --- |
-| 1 | 「`Result<_, String>` 均为 0」 | `source_engine/` 仍有 **7 个函数**返回 `Result<_, String>`（`parse_search` / `parse_catalog{,_page}` / `parse_content{,_page}` / `parse_book_info` / `parse_sources_json`） | 正式验收标准（§2.8）只要求 **command** 层，该条达标。但 §10 的表述过头，已改正。**Step 2 重写 selector 时一并收敛到 `AppError`。** |
+| 1 | 「`Result<_, String>` 均为 0」 | `source_engine/` 仍有 **7 个函数**返回 `Result<_, String>` | **2026-09-01 部分关闭：**新的 `pipeline.rs` 四个入口返回 `AppError`，三个 service 调用点的 `.map_err(AppError::parse)` 已删除。`selector.rs` 作为兜底后端仍返回 `String`，`parse_sources_json` 亦然 —— 待兜底路径删除时一并清理。 |
 | 2 | 「`command/` 6 个文件均 < 100 行」 | 7 个文件，最大 `command/source.rs` **153 行** | §2.8 的口径是 200 行，达标。表述已按实测改写。 |
 | 3 | 「B1–B5 各有一条回归测试」 | B1–B4 是真实行为测试；**B5 的两条集成测试是文本断言**（`include_str!` 后查字符串），不验证 migration 行为 | 保留（migration 空操作本身难以行为化断言），但已在 §10.2 标注，不再宣称为行为回归。 |
 | 4 | 「vue-router 提供三个可直接访问的路由」 | 三条路由 `/` `/search` `/settings` **全部指向同一个 `AppShell`**，页面切换实际靠组件内部状态 | 字面成立（hash 地址可进入），但不是页面级路由。已在 §0.5 注明，真正拆分留到 Step 5 阅读器独立成页时。 |
@@ -721,29 +764,34 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 通过即发 **v0.2.0**。
 
-**Step 2：已启动。** `source_engine/rule/` 的 `RuleAnalyzer` 基线已落地，并已接入
-`source_engine/compat.rs` 的导入兼容性判定：现在会解析所有搜索/详情/目录/正文规则字段，
-将 XPath、JSONPath、JS、串联/替代、反向、替换、`@put`/`@get`/模板以及语法错误统一标记为部分支持。
-`source_engine/import.rs` 的投影列仍保留 CSS 兼容行为，但原始 legado 规则对象已通过 `014` migration
-写入 `rule_search/rule_book_info/rule_toc/rule_content`，不再因投影而丢失；XPath、JSONPath 与 JS Runtime
-执行器仍未实现。`source_engine/rule/evaluator.rs` 已先落地 Regex 执行（捕获组、替换、反向），
-作为后续统一规则执行入口的第一种模式。
-下一步仍应先完成两项前置工作（见 §9 新增风险）：
+**Step 2：规则引擎已接入真实管线（2026-09-01）。**
 
-- 用公开真实书源语料补强当前 85 条语法夹具，并扩充现有 `source_a/` `source_b/` fixture
-- 做 `rquickjs` 的跨平台构建 spike（Windows 已通过，Linux 待复核）
-
-4.2.2 evaluator 已在 Windows 完成并通过 clippy；真实公开书源语料与 Linux 构建仍需外部环境，
-因此不能将 Step 2 标记为完成。
+> 上一版此处写「代码侧无待办」，**不属实**。复核发现 analyzer 与三个 evaluator 在生产路径上零调用，
+> `014` 写入的原始规则只写不读，最主流的 Default 模式还直接报错 —— 引擎当时是一段悬空代码。
+> 详见 §4.2.2b。这已按实修正，本节不再复述。
 
 本轮可验证证据：
 
-- `source_engine/rule/{analyzer,directive,scanner,model}.rs` 最大 225 行，无新的聚团文件
-- `cargo test`：68 个库单测 + 5 个集成测试通过；规则分析器夹具扩展为 85 条
-- `cargo clippy --all-targets -- -D warnings`：通过
-- `src-tauri/spikes/rquickjs/`：Windows 上 `cargo check` 与 `cargo run` 均通过，已验证
-  `rquickjs 0.9.0` 的 QuickJS 创建、表达式执行、异常返回和 interrupt handler API。
-  Linux 构建仍需在 Linux 环境执行同一命令后才能关闭跨平台风险。
+- `cargo test`：**94 个库单测 + 12 个集成测试**全部通过
+- `cargo clippy --all-targets -- -D warnings`：通过，零 `allow` 属性
+- `cargo fmt -- --check` / `npm run lint` / `format:check` / `build`：全绿
+- `tests/rule_engine.rs`（新增 6 条）：`fixtures/source_c/` 是一份**用 legado 原生语法书写**的书源
+  （私有 JSoup、`@XPath:`、`||`、`##`、`text.`）。其 CSS 投影列**故意设成匹配不到的选择器**，
+  因此断言通过就只可能是引擎路径产出的，兜底冒充不了
+- `tests/source_pipeline.rs` 新增双路径一致性断言：`source_a` 同一份 HTML 用「CSS 投影」与
+  「legado 原始规则」两种描述分别跑，四个阶段逐项相等 —— 这是「接入引擎不会让原本能用的书源回归」的核心保证
+- `source_service` 测试改为断言 `list()` 读回的 `BookSource.raw_rules` 内容，闭合「只写不读」
+- 单文件非测试行最大 220（`reader_service.rs`），新增文件均 < 250
+
+**Step 2 剩余项（均需外部环境或后续开发）：**
+
+1. **JS Runtime（4.2.3）+ `java.*` 兼容层（4.2.4）** —— 未开始。`Js`/`WebJs` 模式当前返回明确错误。
+   `rquickjs` spike 在 Windows 已通过，**Linux 构建仍未验证**
+2. **公开真实书源语料** —— 当前 85 条语法夹具与 3 份 HTML fixture 都是人工整理的，
+   §4.4 的「≥300 源导入，可搜索 ≥ 60%」无法在本机度量。需要外部语料
+3. **`fixtures/source_a/source.json` 此前不忠实** —— 它是照着导入器的 `attr()` 补全行为写的
+   （`bookUrl: "h2 a"` 靠导入器补 `::attr(href)`），并非 legado 真实写法。本轮已改为 `h2 a@href`。
+   这提示：**人工造的夹具会悄悄迁就实现**，公开语料的必要性不只是「量」，也是「不被自己的实现污染」
 
 ### 10.7 验收命令
 
@@ -753,4 +801,5 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-
 npm run lint && npm run format:check && npm run build
 ```
 
-当前实测：**68 库单测 + 5 集成测试全过**，clippy 零告警且无任何 allow 属性，前端三项全绿。
+当前实测（2026-09-01）：**94 库单测 + 12 集成测试全过**，clippy 零告警且无任何 allow 属性，
+`cargo fmt -- --check` 干净，前端三项全绿。

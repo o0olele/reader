@@ -1,6 +1,6 @@
 use super::SourceRepository;
 use crate::{
-    domain::source::{BookSource, CatalogRule, InfoRule, SearchRule},
+    domain::source::{BookSource, CatalogRule, InfoRule, RawSourceRules, SearchRule},
     error::AppError,
 };
 
@@ -14,8 +14,8 @@ impl SqliteSourceRepository {
     }
 
     pub async fn upsert(&self, source: &BookSource) -> Result<i64, AppError> {
-        let result = sqlx::query(
-            "INSERT INTO book_sources (name, base_url, search_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, enabled, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, header, login_url, login_method, login_body, token_path, sign_script, proxy_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET base_url=excluded.base_url, search_url=excluded.search_url, search_item_selector=excluded.search_item_selector, title_selector=excluded.title_selector, author_selector=excluded.author_selector, cover_selector=excluded.cover_selector, url_selector=excluded.url_selector, enabled=excluded.enabled, info_title_selector=excluded.info_title_selector, info_author_selector=excluded.info_author_selector, info_intro_selector=excluded.info_intro_selector, info_cover_selector=excluded.info_cover_selector, catalog_item_selector=excluded.catalog_item_selector, catalog_title_selector=excluded.catalog_title_selector, catalog_url_selector=excluded.catalog_url_selector, content_selector=excluded.content_selector, next_toc_url_selector=excluded.next_toc_url_selector, next_content_url_selector=excluded.next_content_url_selector, header=excluded.header, login_url=excluded.login_url, login_method=excluded.login_method, login_body=excluded.login_body, token_path=excluded.token_path, sign_script=excluded.sign_script, proxy_url=excluded.proxy_url, updated_at=CURRENT_TIMESTAMP",
+        sqlx::query(
+            "INSERT INTO book_sources (name, base_url, search_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, enabled, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, header, login_url, login_method, login_body, token_path, sign_script, proxy_url, rule_search, rule_book_info, rule_toc, rule_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET base_url=excluded.base_url, search_url=excluded.search_url, search_item_selector=excluded.search_item_selector, title_selector=excluded.title_selector, author_selector=excluded.author_selector, cover_selector=excluded.cover_selector, url_selector=excluded.url_selector, enabled=excluded.enabled, info_title_selector=excluded.info_title_selector, info_author_selector=excluded.info_author_selector, info_intro_selector=excluded.info_intro_selector, info_cover_selector=excluded.info_cover_selector, catalog_item_selector=excluded.catalog_item_selector, catalog_title_selector=excluded.catalog_title_selector, catalog_url_selector=excluded.catalog_url_selector, content_selector=excluded.content_selector, next_toc_url_selector=excluded.next_toc_url_selector, next_content_url_selector=excluded.next_content_url_selector, header=excluded.header, login_url=excluded.login_url, login_method=excluded.login_method, login_body=excluded.login_body, token_path=excluded.token_path, sign_script=excluded.sign_script, proxy_url=excluded.proxy_url, rule_search=excluded.rule_search, rule_book_info=excluded.rule_book_info, rule_toc=excluded.rule_toc, rule_content=excluded.rule_content, updated_at=CURRENT_TIMESTAMP",
         )
             .bind(&source.name).bind(&source.base_url).bind(&source.search_url)
             .bind(&source.search_rule.item).bind(&source.search_rule.title).bind(&source.search_rule.author).bind(&source.search_rule.cover).bind(&source.search_rule.url)
@@ -23,8 +23,8 @@ impl SqliteSourceRepository {
             .bind(&source.catalog_rule.item).bind(&source.catalog_rule.title).bind(&source.catalog_rule.url).bind(&source.content_selector)
             .bind(&source.next_toc_url_selector).bind(&source.next_content_url_selector)
             .bind(&source.header).bind(&source.login_url).bind(&source.login_method).bind(&source.login_body).bind(&source.token_path).bind(&source.sign_script).bind(&source.proxy_url)
+            .bind(&source.raw_rules.search).bind(&source.raw_rules.book_info).bind(&source.raw_rules.toc).bind(&source.raw_rules.content)
             .execute(&self.pool).await.map_err(|error| AppError::Database(error.to_string()))?;
-        let _ = result;
         sqlx::query_scalar("SELECT id FROM book_sources WHERE name = ?")
             .bind(&source.name)
             .fetch_one(&self.pool)
@@ -50,28 +50,6 @@ impl SqliteSourceRepository {
 
     pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
         self.update_session(source_id, None, None).await
-    }
-
-    pub async fn save_raw_rules(
-        &self,
-        source_id: i64,
-        search: Option<&str>,
-        book_info: Option<&str>,
-        toc: Option<&str>,
-        content: Option<&str>,
-    ) -> Result<(), AppError> {
-        sqlx::query(
-            "UPDATE book_sources SET rule_search = ?, rule_book_info = ?, rule_toc = ?, rule_content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        )
-        .bind(search)
-        .bind(book_info)
-        .bind(toc)
-        .bind(content)
-        .bind(source_id)
-        .execute(&self.pool)
-        .await
-        .map(|_| ())
-        .map_err(AppError::database)
     }
 }
 
@@ -107,6 +85,10 @@ struct SourceRow {
     session_expires_at: Option<String>,
     sign_script: Option<String>,
     proxy_url: Option<String>,
+    rule_search: Option<String>,
+    rule_book_info: Option<String>,
+    rule_toc: Option<String>,
+    rule_content: Option<String>,
 }
 
 fn map_source(row: SourceRow) -> BookSource {
@@ -152,10 +134,16 @@ fn map_source(row: SourceRow) -> BookSource {
         sign_script: row.sign_script,
         proxy_url: row.proxy_url,
         enabled: row.enabled != 0,
+        raw_rules: RawSourceRules {
+            search: row.rule_search,
+            book_info: row.rule_book_info,
+            toc: row.rule_toc,
+            content: row.rule_content,
+        },
     }
 }
 
-const SOURCE_SELECT: &str = "SELECT id, name, base_url, search_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, enabled, header, login_url, login_method, login_body, token_path, access_token, session_cookie, session_expires_at, sign_script, proxy_url FROM book_sources";
+const SOURCE_SELECT: &str = "SELECT id, name, base_url, search_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, enabled, header, login_url, login_method, login_body, token_path, access_token, session_cookie, session_expires_at, sign_script, proxy_url, rule_search, rule_book_info, rule_toc, rule_content FROM book_sources";
 
 impl SourceRepository for SqliteSourceRepository {
     async fn list(&self) -> Result<Vec<BookSource>, AppError> {
@@ -222,6 +210,7 @@ mod tests {
             sign_script: None,
             proxy_url: Some("socks5://127.0.0.1:1080".into()),
             enabled: true,
+            raw_rules: Default::default(),
         };
         let id = repository.upsert(&source).await.unwrap();
         assert_eq!(
