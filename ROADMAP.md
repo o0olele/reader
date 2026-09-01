@@ -8,7 +8,7 @@
 > **最近复核：2026-09-01。** §0 是 2026-08-30 的**起点快照，已成历史记录**，保留用于对照；
 > **当前真实进度一律以 §10 为准。**§10 的每一条都要求「代码里能验证到什么」，不接受未经核对的打勾。
 
-**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 进行中（规则引擎已接入真实管线，剩 JS Runtime 与公开语料验证）。**
+**一句话现状：Step 0 ✅ · Step 1 代码项 ✅（待真实书源手工验收）· Step 2 进行中（规则引擎与基础 JS Runtime 已接入，剩 WebJS/网络兼容层与公开语料验证）。**
 
 ---
 
@@ -428,7 +428,7 @@ Regex 保留捕获组、替换、反向处理。三种模式均有单元测试�
   `text.` / `children`，正负索引）与 CSS 混用、`@` 分步、终结符 `text` / `textNodes` / `ownText` /
   `html` / 任意属性。区间（`.0:1:2`）与排除（`!`）返回 `UnsupportedJsoup`，**不静默返回空**
 - `rule/engine.rs` —— 编排层：`||` 逐个尝试取首个非空、`&&` 对同一输入求值后拼接、`%%` 交替合并、
-  `Chain` 链式传递、`{{}}` 展开与 `@put`/`@get` 上下文。`Js`/`WebJs` 返回明确错误（留给 4.2.3）
+  `Chain` 链式传递、`{{}}` 展开与 `@put`/`@get` 上下文。`Js` 已接入 QuickJS，`WebJs` 仍返回明确错误
 - **值模型**：全程 `Vec<String>`。列表规则以 `Extraction::Nodes` 返回元素 outerHTML，逐项规则重新
   parse 该片段。三种模式共用一套签名，代价是每项一次重解析
 - `source_engine/legado_rules.rs` —— `rule_*` 列的类型化（`serde(alias)` 吸收键名变体；
@@ -446,7 +446,7 @@ Regex 保留捕获组、替换、反向处理。三种模式均有单元测试�
 **顺带修掉一个真实 bug：** XPath 的 `contains()` 转译没吃掉外层方括号，
 `//div[contains(@class,'x')]` 会译成非法的 `div[[class*='x']]`。拆分 `xpath.rs` 时新增的单测抓到的。
 
-**4.2.3 JS Runtime（1 周）— ⬜ 下一步**
+**4.2.3 JS Runtime（1 周）— 🟡 基础实现已落地（2026-09-01）**
 
 按 `plan.md` §2 先定 trait：
 
@@ -467,7 +467,7 @@ pub trait JsRuntime: Send + Sync {
 
 沙箱要求（`plan.md` §16）：禁文件系统、禁进程、禁环境变量；网络只走注入的 `java.*` API；**必须有执行超时（默认 5s）与内存上限**，防死循环。
 
-**4.2.4 `java.*` 兼容层（与 4.2.3 同期）**
+**4.2.4 `java.*` 兼容层（与 4.2.3 同期）— 🟡 纯函数子集已落地**
 
 legado 的 `JsExtensions.kt` 暴露 **100 个方法**。不要全做。第一批只做高频 15 个：
 
@@ -477,6 +477,9 @@ base64Encode  base64Decode  hexEncodeToString  hexDecodeToString
 md5Encode（在 EncoderUtils）  strToBytes  bytesToStr
 encodeURI  timeFormat  log
 ```
+
+当前已注入 `get`/`put`（上下文变量）、`base64Encode`/`base64Decode`、`encodeURI`、`log`；
+网络型 API（`ajax`/`get`/`post`/`head`/`connect`）及编码/时间辅助函数仍待接入统一 HTTP 客户端。
 
 第二批（Step 3 之后按实际书源失败率决定）：
 ```
@@ -564,7 +567,7 @@ src-tauri/tests/
 ├── rule_engine.rs                   ← ✅ 引擎端到端（source_c）
 ├── source_pipeline.rs               ← ✅ CSS 路径 + 双路径一致性
 ├── step0_regressions.rs             ← ✅
-└── js_runtime.rs                    ← ⬜ 待 4.2.3
+└── js_runtime.rs                    ← ✅ QuickJS 基础运行时；网络 `java.*` 与 WebJS 待补
 ```
 
 （selector 各模式的单测就近放在 `source_engine/rule/{jsoup,xpath,evaluator,engine,step}.rs` 内联，
@@ -785,8 +788,9 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 **Step 2 剩余项（均需外部环境或后续开发）：**
 
-1. **JS Runtime（4.2.3）+ `java.*` 兼容层（4.2.4）** —— 未开始。`Js`/`WebJs` 模式当前返回明确错误。
-   `rquickjs` spike 在 Windows 已通过，**Linux 构建仍未验证**
+1. **JS Runtime（4.2.3）+ `java.*` 兼容层（4.2.4）** —— 基础 QuickJS Runtime 已接入 `Js` 规则：
+   `result`/`url`/变量上下文、`java.get`/`put`、Base64、URI 编码、日志、内存上限与异步超时均已覆盖，
+   并有运行时及链式规则回归测试。仍待 `WebJs`、完整网络型 `java.*` API、Linux 构建验证；
 2. **公开真实书源语料** —— 当前 85 条语法夹具与 3 份 HTML fixture 都是人工整理的，
    §4.4 的「≥300 源导入，可搜索 ≥ 60%」无法在本机度量。需要外部语料
 3. **`fixtures/source_a/source.json` 此前不忠实** —— 它是照着导入器的 `attr()` 补全行为写的

@@ -1,6 +1,7 @@
 use super::jsoup::{execute_jsoup, Extraction};
-use super::model::{RuleExecutionError, RuleMode, SourceRule};
+use super::model::{RuleContext, RuleExecutionError, RuleMode, SourceRule};
 use super::xpath::execute_xpath;
+use super::{JsContext, JsValue, QuickJsRuntime};
 use serde_json::Value;
 
 pub(super) fn mode_name(mode: RuleMode) -> &'static str {
@@ -28,8 +29,38 @@ pub fn execute_rule(
         RuleMode::Regex => execute_regex(rule, input),
         RuleMode::Json => execute_json(rule, input),
         RuleMode::XPath => execute_xpath(rule, input, want),
+        RuleMode::Js => execute_js(rule, input, &mut RuleContext::default()),
         mode => Err(RuleExecutionError::UnsupportedMode(mode_name(mode))),
     }
+}
+
+pub fn execute_js(
+    rule: &SourceRule,
+    input: &str,
+    context: &mut RuleContext,
+) -> Result<Vec<String>, RuleExecutionError> {
+    if rule.mode != RuleMode::Js {
+        return Err(RuleExecutionError::UnsupportedMode(mode_name(rule.mode)));
+    }
+    let runtime = QuickJsRuntime::default();
+    let js_context = JsContext {
+        result: input.to_owned(),
+        variables: context.snapshot(),
+        ..Default::default()
+    };
+    let (value, variables) = runtime
+        .execute_blocking_with_context(&rule.rule, js_context)
+        .map_err(|error| RuleExecutionError::UnsupportedJsoup(error.to_string()))?;
+    context.extend(variables);
+    let mut values = match value {
+        JsValue::String(value) => vec![value],
+        JsValue::Number(value) => vec![value.to_string()],
+        JsValue::Boolean(value) => vec![value.to_string()],
+        JsValue::Null => Vec::new(),
+        JsValue::Json(value) => vec![value.to_string()],
+    };
+    apply_postprocess(rule, &mut values);
+    Ok(values)
 }
 
 /// Execute a JSONPath rule. This intentionally implements the portable subset

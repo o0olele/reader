@@ -10,7 +10,7 @@
 //!
 //! `##` replacement and `-` reversal are applied per rule by the evaluators.
 
-use super::evaluator::{execute_rule, mode_name};
+use super::evaluator::{execute_js, execute_rule, mode_name};
 use super::jsoup::Extraction;
 use super::model::{
     RuleAlternatives, RuleContext, RuleExecutionError, RuleJoin, RuleMode, SourceRule,
@@ -104,7 +104,7 @@ fn execute_one(
     want: Extraction,
     context: &mut RuleContext,
 ) -> Result<Vec<String>, RuleExecutionError> {
-    if matches!(rule.mode, RuleMode::Js | RuleMode::WebJs) {
+    if rule.mode == RuleMode::WebJs {
         return Err(RuleExecutionError::UnsupportedMode(mode_name(rule.mode)));
     }
     for (key, value) in &rule.put {
@@ -119,17 +119,18 @@ fn execute_one(
             .collect());
     }
     let expanded = expand_template(&rule.rule, context);
-    if expanded == rule.rule {
-        return execute_rule(rule, input, want);
-    }
-    execute_rule(
-        &SourceRule {
+    let effective = if expanded == rule.rule {
+        rule.clone()
+    } else {
+        SourceRule {
             rule: expanded,
             ..rule.clone()
-        },
-        input,
-        want,
-    )
+        }
+    };
+    if effective.mode == RuleMode::Js {
+        return execute_js(&effective, input, context);
+    }
+    execute_rule(&effective, input, want)
 }
 
 fn interleave(left: Vec<String>, right: Vec<String>) -> Vec<String> {
@@ -182,8 +183,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(run("@XPath://a/@href", &nodes[0]), vec!["/one", "/two"]);
-        // A JS tail aborts the chain rather than dropping silently to the
-        // partial CSS result, which would look like a successful parse.
+        // A JS tail is evaluated by the sandboxed runtime.
         assert!(matches!(
             evaluate(
                 "tag.a.0@text@js:result",
@@ -191,7 +191,7 @@ mod tests {
                 Extraction::Values,
                 &mut RuleContext::default()
             ),
-            Err(RuleExecutionError::UnsupportedMode("Js"))
+            Ok(values) if values == vec!["第一章".to_owned()]
         ));
     }
 
@@ -229,15 +229,16 @@ mod tests {
 
     #[test]
     fn reports_js_modes_instead_of_returning_empty() {
-        assert!(matches!(
+        assert_eq!(
             evaluate(
-                "<js>result</js>",
+                "<js>result.trim()</js>",
                 LIST,
                 Extraction::Values,
                 &mut RuleContext::default()
-            ),
-            Err(RuleExecutionError::UnsupportedMode("Js"))
-        ));
+            )
+            .unwrap(),
+            vec![LIST]
+        );
     }
 
     #[test]

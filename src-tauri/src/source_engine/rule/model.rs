@@ -58,6 +58,14 @@ impl RuleContext {
     pub fn get(&self, key: &str) -> Option<&str> {
         self.values.get(key).map(String::as_str)
     }
+
+    pub(crate) fn snapshot(&self) -> HashMap<String, String> {
+        self.values.clone()
+    }
+
+    pub(crate) fn extend(&mut self, values: HashMap<String, String>) {
+        self.values.extend(values);
+    }
 }
 
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
