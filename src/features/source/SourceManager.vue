@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /* global HTMLInputElement */
 import { inject, ref } from 'vue'
-import { sourcesKey } from '../../app/shellKeys'
+import { sourceDebugKey, sourcesKey } from '../../app/shellKeys'
 
 defineProps<{
   /** Reused as the probe keyword when testing a source. */
@@ -9,6 +9,7 @@ defineProps<{
 }>()
 
 const sources = inject(sourcesKey)!
+const sourceDebug = inject(sourceDebugKey)!
 const sourceFile = ref<HTMLInputElement>()
 
 function sessionState(source: { access_token?: string; session_cookie?: string; session_expires_at?: string }) {
@@ -93,6 +94,7 @@ const FIELDS = [
         >
           {{ sources.testing === source.id ? '测试中...' : '测试' }}
         </button>
+        <button type="button" class="secondary" @click="sourceDebug.openFor(source.id)">调试</button>
         <button type="button" class="secondary" @click="sources.browserAuth(source)">浏览器认证</button>
         <button type="button" class="secondary" @click="sources.saveBrowserSession(source)">读取浏览器会话</button>
       </div>

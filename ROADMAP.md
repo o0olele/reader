@@ -810,12 +810,17 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 本轮已完成协议认证基础链路：QuickJS 的 java.* 网络 API 共享 Cookie 会话，并携带未过期的
 token/cookie/header/sign；书源管理界面已接入会话刷新，过期状态也会在 JS 和普通请求路径中跳过凭据。
+搜索服务现在识别 legado `<js>path,{method/body/charset};script</js>` 请求 URL，使用统一认证 HTTP
+客户端发送 POST/GET，并按 `charset` 解码响应（覆盖 69书吧常见的 GBK 搜索协议）。
+书源探针不再把 Cloudflare challenge 的 403 误标为会话过期；该响应会保留当前会话并明确提示
+需要浏览器验证。
 `java.request` 现在支持请求选项（method/body/headers/timeout），并把最后一次响应的状态码与响应头
 暴露给脚本，避免书源只能依赖正文猜测认证状态。
 
 1. **JS Runtime（4.2.3）+ `java.*` 兼容层（4.2.4）** —— 基础 QuickJS Runtime 已接入 `Js` 规则：
    `result`/`url`/变量上下文、`java.get`/`put`、Base64、URI 编码、日志、内存上限与异步超时均已覆盖，
-   网络型 API 的请求选项和响应元数据也已覆盖，并有本地 HTTP 回归测试。仍待 `WebJs`、Linux 构建验证；
+   网络型 API 的请求选项和响应元数据也已覆盖，并有本地 HTTP 回归测试；搜索 URL JS 请求协议已接入。
+   仍待 `WebJs`、Linux 构建验证；
 2. **协议认证补齐（进行中）** —— 401/403 过期标记、JS 会话状态、探针观测、请求选项和响应头 API
    已完成；仍需调试器中的请求/认证状态展示。完成后再扩大真实书源验收。
 3. **WebView 认证 spike** —— 已接入 Tauri 独立 WebView 认证窗口：用户完成 Cloudflare/Turnstile

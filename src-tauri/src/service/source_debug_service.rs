@@ -90,7 +90,7 @@ impl SourceDebugService {
             Ok(value) => (value, None),
             Err(error) => (serde_json::Value::Null, Some(error.to_string())),
         };
-        Ok(SourceDebugResult { source_id, source_name: source.name, stage, request: Some(request_info), status: Some(status), response_headers, duration_ms: started.elapsed().as_millis() as u64, raw_html, steps, final_json, session_state: source.session_state().into(), error })
+        Ok(SourceDebugResult { source_id, source_name: source.name.clone(), stage, request: Some(request_info), status: Some(status), response_headers, duration_ms: started.elapsed().as_millis() as u64, raw_html, steps, final_json, session_state: source.session_state().into(), error })
     }
 
     pub async fn update_rules(&self, source_id: i64, rules: RawSourceRules) -> Result<(), AppError> {
@@ -101,8 +101,8 @@ impl SourceDebugService {
 fn request_for_stage(source: &BookSource, stage: &SourceDebugStage, input: &str) -> Result<(String, reqwest::Method, Option<String>), AppError> {
     let input = input.trim();
     match stage {
-        SourceDebugStage::Search => Ok((resolve_url(&source.base_url, &source.search_url.replace("{{key}}", input).replace("{key}", input), "搜索 URL")?, reqwest::Method::GET, None)),
-        _ => Ok((resolve_url(&source.base_url, input, &format!("{} URL", stage.label()))?, reqwest::Method::GET, None)),
+        SourceDebugStage::Search => Ok((resolve_url(&source.base_url, &source.search_url.replace("{{key}}", input).replace("{key}", input), "搜索 URL")?.to_string(), reqwest::Method::GET, None)),
+        _ => Ok((resolve_url(&source.base_url, input, &format!("{} URL", stage.label()))?.to_string(), reqwest::Method::GET, None)),
     }
 }
 

@@ -27,13 +27,14 @@
 | **抓取编排** | `model/webBook/` 1,560 行 / 5 文件 | `pipeline.rs` 185 行 + 3 个 service | ~40% |
 | **排版引擎** | `read/page/{provider,entities}` 5,227 行 / 16 文件 | `ReaderPane.vue` 59 行 | ~1% |
 | JS 扩展面 | `JsExtensions.kt` 100 个方法 | `java.*` 19 个 | 19% |
-| 书源调试器 | `model/Debug.kt` 422 行 | 无 | 0% |
+| 书源调试器 | `model/Debug.kt` 422 行 | 骨架 350 行（未提交，见 §5） | ~30% |
 | 阅读器 UI | `ui/book/read/` 139 文件 | 1 个组件 + 1 个 composable | — |
 
 > 行数比值会误导：legado 800 个 `ui/` 文件里大量是 Android 特有的 Activity / Fragment / 自定义 View，
 > 不可直接换算成桌面端工作量。真正决定「是不是 Legado 桌面版」的只有三块：
 > **规则引擎、抓取编排（AnalyzeUrl + webBook）、排版引擎**。
-> 第一块行数已超过参考实现却覆盖率未知（见 §1.1），第二块缺一半，第三块基本为零。
+> 第一块行数已超过参考实现，**但实测只能完整执行 31.3% 的真实书源**（§0.3）；第二块缺一半；第三块基本为零。
+> **行数不是进度。** 这张表最有价值的一行是「规则引擎 111%」与「覆盖率 31.3%」的并置。
 
 ### 0.2 能力矩阵
 
@@ -45,15 +46,15 @@
 | --- | --- | :---: | --- |
 | 规则串词法切分 `\|\| && %% - ##` | `RuleAnalyzer.kt` 377 | ✅ | `analyzer.rs` 225 + `scanner.rs` 155，85 条夹具快照 |
 | 模板 `{{}}` / `@get:` / `@put:` | `AnalyzeRule.kt` 971 | ✅ | — |
-| Default(JSoup) 私有语法 | `AnalyzeByJSoup.kt` 524 | 🟡 | `jsoup.rs` 283。缺区间 `.0:1:2`、排除 `!0`、`@@`、allInOne |
-| XPath | `AnalyzeByXPath.kt` 155 | 🟡 | `xpath.rs` 165 是**手写 XPath→CSS 译码器**，无轴、无函数、无复合谓词 |
-| JSONPath | `AnalyzeByJSonPath.kt` 172 | 🟡 | 无递归下降 `..`、无过滤 `?(@.x)` |
+| Default(JSoup) 私有语法 | `AnalyzeByJSoup.kt` 524 | 🟡 | `jsoup.rs` 283。缺排除 `!0`（**31% 源**）、区间 `.0:1:2`（15%）、`@@`（11%）、allInOne |
+| XPath | `AnalyzeByXPath.kt` 155 | 🟡 | `xpath.rs` 165 手写译码器，无轴/函数/复合谓词。**实测仅 6% 源使用** |
+| JSONPath | `AnalyzeByJSonPath.kt` 172 | 🟡 | 缺递归下降 `..`（8%）、过滤 `?(@.x)`（4%） |
 | Regex | `AnalyzeByRegex.kt` 57 | ✅ | Java 正则差异需差异清单 |
-| JS 规则 | Rhino（`modules/rhino`） | 🟡 | QuickJS，`js_runtime.rs` 847 行；超时/内存上限已有 |
-| **WebJs** | ✅ | ⬜ | 明确报错，未实现 |
-| **URL 构造 `AnalyzeUrl`** | **1,007 行，六阶段共用** | 🟡 | **仅 search 阶段的子集，见 §1.2 —— 最大结构性缺口** |
-| `jsLib` 书源级 JS 库 | `SharedJsScope.kt` | ⬜ | 代码库 0 处引用 |
-| `concurrentRate` 限速 | ✅ | ⬜ | 只有全局 `Semaphore(8)` |
+| JS 规则 | Rhino（`modules/rhino`） | 🟡 | QuickJS，`js_runtime.rs` 847 行；超时/内存上限已有。**Rhino 的 JVM 包访问无法支持（1% 源）** |
+| WebJs | ✅ | ⛔ | **实测 970 源零出现，降级为不做** |
+| **URL 构造 `AnalyzeUrl`** | **1,007 行，六阶段共用** | 🟡 | **仅 search 阶段的子集（29% 源受影响，边际收益最高）—— 最大结构性缺口，见 §1.2** |
+| `jsLib` 书源级 JS 库 | `SharedJsScope.kt` | ⬜ | 代码库 0 处引用；实测仅 6 源（1%）使用 |
+| `concurrentRate` 限速 | ✅ | ⬜ | 只有全局 `Semaphore(8)`；实测 57 源（6%）配置 |
 
 **B 层 · 抓取编排（`webBook` 对位）**
 
@@ -65,7 +66,7 @@
 | 章节去重 / 卷识别 `isVolume` | ✅ | ⬜ |
 | `preciseSearch` / `checkKeyWord` | ✅ | ⬜ |
 | 内容后处理 `ContentProcessor` | `help/book/ContentProcessor.kt` | ⬜ 一条都没有 |
-| **发现页 Explore** | `exploreUrl` + `ruleExplore` | ⬜ 代码库 0 处引用 |
+| **发现页 Explore** | `exploreUrl` + `ruleExplore` | ⬜ 代码库 0 处引用；**实测 67% / 46% 填充率**，已提前到 §4.6 |
 | 封面兜底规则 `coverRule` | `defaultData/coverRule.json` | ⬜ |
 
 **C 层 · 书源模型（`BookSource.kt` 27 字段 + 6 个 Rule 类）**
@@ -105,17 +106,17 @@
 | 备份 / 恢复 | `help/storage/` 8 文件 | ⬜ |
 | WebDAV 同步 | ✅ | ⬜ |
 | RSS | `ui/rss/` + `model/rss/` | ⬜ |
-| 书源调试器 | `Debug.kt` 422 | ⬜ |
+| 书源调试器 | `Debug.kt` 422 | 🟡 骨架已有，见 §5 |
 | AI / 词典 / 翻译 / 局域网 Web / 段评 | 8 个 AI 实体等 | ⛔ |
 
 ---
 
-## 0.3 实测覆盖率基线（970 源语料，2026-09-02）
+### 0.3 实测覆盖率基线（970 源语料，2026-09-02）
 
 语料：`f3f55c6e-723b-4055-b254-124c9d88c5cb.json`，**970 个真实书源，22,220 条规则串**。
 远超 v1 §4.4 要求的 300 源门槛。
 
-### 0.3.1 头条数字
+#### 0.3.1 头条数字
 
 ```
 仅使用当前引擎已支持语法的书源：304 / 970 = 31.3%
@@ -124,7 +125,7 @@
 
 **这是本项目第一个真实的覆盖率数字。** 此前所有「引擎已完成」的表述都缺这个分母。
 
-### 0.3.2 阻塞项排名与边际收益
+#### 0.3.2 阻塞项排名与边际收益
 
 「累计」列 = 按本列顺序依次修复后，可完整执行的书源占比。
 
@@ -143,7 +144,7 @@
 > **只修前四项（三个 JSoup 细节 + AnalyzeUrl），覆盖率从 31.3% 直接到 81.8%。**
 > 这四项都不需要引入新依赖，也不需要换解析引擎。
 
-### 0.3.3 语法 token 全频次（按覆盖源数）
+#### 0.3.3 语法 token 全频次（按覆盖源数）
 
 已支持的部分同样值得记录 —— 它们证明 analyzer 的投入是有回报的：
 
@@ -179,7 +180,7 @@
    **性价比不成立**。改为按需扩展现有译码器。
 2. **`WebJs` 在 970 源中零出现** —— 初稿 P1.5 单列一节，现降级为「不做」。
 
-### 0.3.4 `java.*` 方法实测频次（决定补齐顺序）
+#### 0.3.4 `java.*` 方法实测频次（决定补齐顺序）
 
 | 方法 | 源数 | 占比 | 现状 |
 | --- | ---: | ---: | :---: |
@@ -202,7 +203,7 @@
 **结论：`java.*` 只需再补 5 个方法（`getString` `md5Encode` `getElements` `getElement` `toNumChapter`）
 即可覆盖 22% 使用 JS 的书源里的绝大多数。** 100 个方法全做是彻底的浪费。
 
-### 0.3.5 无法支持的一类（新发现）
+#### 0.3.5 无法支持的一类（新发现）
 
 **9 个源（1%）通过 Rhino 直接访问 JVM 类** —— `java.lang.*`、`java.util.*`、`java.security.*`、
 `java.io.*`、`java.text.*`。legado 用的是 Rhino，脚本可以直接 `new java.util.HashMap()`；
@@ -211,7 +212,7 @@
 处置：**明确列为不支持**，导入时标注、调试器中给出明确原因，不静默失败。代价 0.9% 覆盖率，可接受。
 这也是选 QuickJS 而非移植 `modules/rhino` 必须付的账 —— 之前没人算过这笔账。
 
-### 0.3.6 规则字段填充率（决定 §4.6 补齐顺序）
+#### 0.3.6 规则字段填充率（决定 §4.6 补齐顺序）
 
 | 字段 | 填充率 | 现状 |
 | --- | ---: | :---: |
@@ -384,6 +385,8 @@ P7  性能 / 稳定性 / 发布                  2 周
 ### 3.5 验收
 
 - [ ] 一条命令产出覆盖率报告，落 `docs/coverage/YYYY-MM-DD.md`，每完成一项 P1 任务后重跑并 diff
+
+> P0 进度（本轮）：`READER_STRICT_ENGINE` 已接入规则管线；默认模式保留 CSS 兼容兜底，置为 `1`/`true` 时规则执行错误会以 `AppError::Parse` 返回，不再静默回退。
 - [ ] 报告能直接回答：「当前 N 个源里，M 个所有规则均可执行；剩余 N−M 个的阻塞 token TOP10 是 …」
 - [ ] `txtTocRule.json` 27 条规则移植进 `infrastructure/ebook/txt.rs`，替换手写启发式，附对照测试
 - [ ] `defaultData/bookSources.json` 进 `tests/fixtures/`，作为字段级导入回归
@@ -716,7 +719,7 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | # | 任务 | 产出 | 节 |
 | ---: | --- | --- | --- |
 | 0 | **把语料挪进 `src-tauri/tests/corpus/` 并加 `.gitignore`** | 避免 5MB JSON 误入 git 历史 | §3.1 |
-| 1 | **加 `READER_STRICT_ENGINE` 开关**，让 `pipeline.rs` 停止吞掉引擎错误 | 覆盖率可测的前提 | §3.4 |
+| 1 | **加 `READER_STRICT_ENGINE` 开关**，让 `pipeline.rs` 停止吞掉引擎错误 | 覆盖率可测的前提 | §3.4 | ✅
 | 2 | **`rule-audit` bin**：把 Node 原型移植成 Rust，用真实 `split_rule`/evaluator 判定 | 31.3% 这个数字有了权威口径 | §3.2 |
 | 3 | **提取 `source_engine/url/`**，`build_search_request` 搬过去并推广到六阶段 | 31.3% → 62.9% | §4.1 |
 | 4 | **JSoup 三项：`!n` / `.a:b` / `@@`** | 62.9% → **81.8%** | §4.2 |

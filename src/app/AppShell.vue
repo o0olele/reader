@@ -64,6 +64,7 @@ const chooseFile = () => fileInput.value?.click()
           </a>
           <a href="#" @click.prevent="bookshelf.addGroup()">+ 新建分组</a>
           <a :class="{ active: view === 'search' }" href="#" @click.prevent="show('search')">在线搜索</a>
+          <a :class="{ active: view === 'sources' }" href="#" @click.prevent="show('sources')">书源调试</a>
           <a :class="{ active: view === 'settings' }" href="#" @click.prevent="show('settings')">设置</a>
         </nav>
         <div class="sidebar-footer"><span class="dot" />{{ status }}</div>
@@ -125,6 +126,13 @@ const chooseFile = () => fileInput.value?.click()
           </div>
         </div>
 
+        <div v-else-if="view === 'sources'" class="content-heading">
+          <div>
+            <p class="eyebrow">在线书源</p>
+            <h1>书源调试</h1>
+          </div>
+        </div>
+
         <div v-else-if="view === 'search'" class="content-heading online-heading">
           <div>
             <p class="eyebrow">在线书源</p>
@@ -170,6 +178,7 @@ const chooseFile = () => fileInput.value?.click()
           @reader-content="reader.readerContent = $event"
         />
         <SettingsPage v-else-if="view === 'settings'" />
+        <SourceDebugPage v-else-if="view === 'sources'" />
         <SearchPage v-else-if="view === 'search'" />
         <BookshelfPage
           v-else

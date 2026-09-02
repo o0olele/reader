@@ -128,44 +128,48 @@ export interface SourceTestResult {
   duration_ms: number
 }
 
-/** Stages a source can be debugged through, one legado rule group each. */
+/** Stages a source can be debugged through, one rule group each. */
 export type SourceDebugStage = 'search' | 'book_info' | 'toc' | 'content'
 
-/** One rule step inside a stage: input fragment → matched node count → output value. */
+/** One parsed rule step inside a debug stage. */
 export interface SourceDebugStep {
-  rule: string
-  input?: string
-  matched: number
-  output?: string
+  field: string
+  input_preview: string
+  node_count: number
+  output_preview: string
   error?: string
 }
 
 /** The actual HTTP exchange a debug stage performed. */
 export interface SourceDebugRequest {
-  url: string
   method: string
-  headers: Record<string, string>
-  status: number
-  duration_ms: number
+  url: string
+  headers: [string, string][]
+  body?: string
+  auth_attached: boolean
 }
 
 /** Result of one `debug_source_stage` call. */
 export interface SourceDebugResult {
   source_id: number
+  source_name: string
   stage: SourceDebugStage
-  raw_html?: string
-  steps: SourceDebugStep[]
-  parsed?: unknown
   request?: SourceDebugRequest
-  error?: string
+  status?: number
+  response_headers: [string, string][]
   duration_ms: number
+  raw_html: string
+  steps: SourceDebugStep[]
+  final_json: unknown
+  session_state: string
+  error?: string
 }
 
 /** Payload streamed on the `source-test-progress` event while a stage runs. */
 export interface SourceDebugProgress {
   source_id: number
   stage: SourceDebugStage
-  step: SourceDebugStep
+  state: 'started' | 'completed'
 }
 
 export interface SourceImportReport {
