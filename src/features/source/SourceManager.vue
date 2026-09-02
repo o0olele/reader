@@ -11,6 +11,16 @@ defineProps<{
 const sources = inject(sourcesKey)!
 const sourceFile = ref<HTMLInputElement>()
 
+function sessionState(source: { access_token?: string; session_cookie?: string; session_expires_at?: string }) {
+  if (!source.access_token && !source.session_cookie) return '未认证'
+  if (source.session_expires_at) {
+    const raw = source.session_expires_at
+    const expiry = /^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw)
+    if (Number.isFinite(expiry) && expiry <= Date.now()) return '已过期'
+  }
+  return '已认证'
+}
+
 const FIELDS = [
   { key: 'name', label: '名称', placeholder: '名称' },
   { key: 'base_url', label: '基础 URL', placeholder: '基础 URL，如 https://example.com' },
@@ -101,12 +111,23 @@ const FIELDS = [
       <button type="submit" class="secondary" :disabled="sources.loggingIn">
         {{ sources.loggingIn ? '登录中...' : '登录并保存会话' }}
       </button>
+      <button type="button" class="secondary" :disabled="sources.loggingIn" @click="sources.refreshSession()">
+        刷新会话
+      </button>
     </form>
   </details>
 
   <div v-if="sources.sources.some((source) => source.session_cookie || source.access_token)" class="source-sessions">
     <span v-for="source in sources.sources.filter((item) => item.session_cookie || item.access_token)" :key="source.id">
-      {{ source.name }}：已认证
+      {{ source.name }}：{{ sessionState(source) }}
+      <button
+        v-if="sessionState(source) === '已过期'"
+        type="button"
+        class="secondary"
+        @click="sources.loginForm.sourceId = source.id"
+      >
+        选择刷新
+      </button>
       <button type="button" class="secondary" @click="sources.clearSession(source)">清除</button>
     </span>
   </div>

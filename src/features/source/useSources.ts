@@ -6,6 +6,7 @@ import {
   importBookSourcesUrl,
   listBookSources,
   loginBookSource,
+  refreshBookSourceSession,
   saveBookSource,
   testBookSource,
   type BookSource,
@@ -172,6 +173,21 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     }
   }
 
+  async function refreshSession() {
+    const { sourceId, username, password } = loginForm.value
+    if (!sourceId || !username || !password) return
+    loggingIn.value = true
+    try {
+      const result = await refreshBookSourceSession(sourceId, username, password)
+      notify(result.authenticated ? '会话已刷新' : '刷新响应中没有 Token 或 Cookie')
+      await refresh()
+    } catch (cause) {
+      report(cause)
+    } finally {
+      loggingIn.value = false
+    }
+  }
+
   return reactive({
     sources,
     form,
@@ -188,6 +204,7 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     importFromUrl,
     test,
     login,
+    refreshSession,
     clearSession,
   })
 }

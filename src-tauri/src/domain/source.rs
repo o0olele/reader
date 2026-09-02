@@ -105,10 +105,7 @@ impl BookSource {
         let Some(raw) = self.session_expires_at.as_deref() else {
             return false;
         };
-        let expiry = raw.parse::<u64>().ok().or_else(|| {
-            let value = raw.strip_suffix('Z')?.parse::<u64>().ok();
-            value
-        });
+        let expiry = parse_expiry(raw);
         expiry.is_some_and(|value| {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -134,6 +131,7 @@ impl BookSource {
             headers: self.header.clone(),
             access_token: self.access_token.clone(),
             session_cookie: self.session_cookie.clone(),
+            session_expired: self.session_expired(),
             sign_script: self.sign_script.clone(),
         }
     }
@@ -168,6 +166,41 @@ impl BookSource {
             raw_rules: import.raw_rules.clone(),
         }
     }
+}
+
+fn parse_expiry(raw: &str) -> Option<u64> {
+    if let Ok(value) = raw.trim().parse::<u64>() {
+        return Some(value);
+    }
+    let value = raw.trim().strip_suffix('Z').unwrap_or(raw.trim());
+    let (date, time) = value.split_once('T')?;
+    let mut date_parts = date.split('-');
+    let year = date_parts.next()?.parse::<i64>().ok()?;
+    let month = date_parts.next()?.parse::<i64>().ok()?;
+    let day = date_parts.next()?.parse::<i64>().ok()?;
+    let mut time_parts = time.split(':');
+    let hour = time_parts.next()?.parse::<i64>().ok()?;
+    let minute = time_parts.next()?.parse::<i64>().ok()?;
+    let second = time_parts.next()?.split('.').next()?.parse::<i64>().ok()?;
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || !(0..=23).contains(&hour)
+        || !(0..=59).contains(&minute)
+        || !(0..=59).contains(&second)
+    {
+        return None;
+    }
+    Some((days_from_civil(year, month, day) * 86_400 + hour * 3_600 + minute * 60 + second) as u64)
+}
+
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = year - i64::from(month <= 2);
+    let era = (if year >= 0 { year } else { year - 399 }) / 400;
+    let yoe = year - era * 400;
+    let month = month + if month > 2 { -3 } else { 9 };
+    let doy = (153 * month + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -274,6 +307,8 @@ mod tests {
         assert_eq!(source.session_state(), "anonymous");
         source.access_token = Some("token".into());
         source.session_expires_at = Some("0".into());
+        assert_eq!(source.session_state(), "expired");
+        source.session_expires_at = Some("1970-01-01T00:00:00Z".into());
         assert_eq!(source.session_state(), "expired");
     }
 }

@@ -25,6 +25,7 @@ quick-xml = "0.38"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "socks", "blocking"] }
 sha2 = "0.10"
+md-5 = "0.10"
 scraper = "0.22"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures = "0.3"

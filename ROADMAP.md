@@ -800,6 +800,9 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 **Step 2 剩余项（均需外部环境或后续开发）：**
 
+本轮已完成协议认证基础链路：QuickJS 的 java.* 网络 API 共享 Cookie 会话，并携带未过期的
+token/cookie/header/sign；书源管理界面已接入会话刷新，过期状态也会在 JS 和普通请求路径中跳过凭据。
+
 1. **JS Runtime（4.2.3）+ `java.*` 兼容层（4.2.4）** —— 基础 QuickJS Runtime 已接入 `Js` 规则：
    `result`/`url`/变量上下文、`java.get`/`put`、Base64、URI 编码、日志、内存上限与异步超时均已覆盖，
    并有运行时及链式规则回归测试。仍待 `WebJs`、完整网络型 `java.*` API、Linux 构建验证；

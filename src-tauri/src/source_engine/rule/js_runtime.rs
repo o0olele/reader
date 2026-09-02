@@ -8,6 +8,7 @@ use crate::error::AppError;
 use crate::infrastructure::http::request::evaluate_sign_script;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use md5::{Digest, Md5};
 use rquickjs::{Context, Ctx, Function, Object, Runtime};
 use serde_json::Value as JsonValue;
 use std::{
@@ -26,7 +27,13 @@ pub struct JsHttpContext {
     pub headers: Option<String>,
     pub access_token: Option<String>,
     pub session_cookie: Option<String>,
+    pub session_expired: bool,
     pub sign_script: Option<String>,
+}
+
+struct JsHttpSession {
+    client: reqwest::blocking::Client,
+    context: JsHttpContext,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -138,14 +145,15 @@ fn install_globals<'js>(
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
     let get_values = Arc::clone(variables);
-    let get_http = http.clone();
+    let http_session = http.map(build_js_http_session).transpose()?.map(Arc::new);
+    let get_session = http_session.clone();
     java.set(
         "get",
         Function::new(ctx.clone(), move |key: String| {
-            if let Some(http) = get_http.as_ref().filter(|_| {
+            if let Some(session) = get_session.as_ref().filter(|_| {
                 key.starts_with("http://") || key.starts_with("https://") || key.starts_with('/')
             }) {
-                return blocking_http_request(http, "GET", &key, None).map_err(|error| {
+                return blocking_http_request(session, "GET", &key, None).map_err(|error| {
                     rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
                 });
             }
@@ -185,9 +193,77 @@ fn install_globals<'js>(
     )
     .map_err(js_error)?;
     java.set(
+        "hexEncodeToString",
+        Function::new(ctx.clone(), |value: String| {
+            value
+                .as_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "hexDecodeToString",
+        Function::new(ctx.clone(), |value: String| {
+            let bytes = value
+                .as_bytes()
+                .chunks(2)
+                .filter_map(|chunk| {
+                    (chunk.len() == 2)
+                        .then(|| std::str::from_utf8(chunk).ok())
+                        .flatten()
+                        .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+                })
+                .collect::<Vec<_>>();
+            String::from_utf8(bytes).unwrap_or_default()
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "md5Encode",
+        Function::new(ctx.clone(), |value: String| {
+            let mut digest = Md5::new();
+            digest.update(value.as_bytes());
+            format!("{:x}", digest.finalize())
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "strToBytes",
+        Function::new(ctx.clone(), |value: String| {
+            value
+                .as_bytes()
+                .iter()
+                .map(|byte| byte.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "bytesToStr",
+        Function::new(ctx.clone(), |value: String| {
+            let bytes = value
+                .split([',', ' ', '\n'])
+                .filter(|part| !part.is_empty())
+                .filter_map(|part| part.parse::<u8>().ok())
+                .collect::<Vec<_>>();
+            String::from_utf8(bytes).unwrap_or_default()
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
         "encodeURI",
         Function::new(ctx.clone(), |value: String| {
             urlencoding::encode(&value).into_owned()
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "timeFormat",
+        Function::new(ctx.clone(), |epoch: i64, pattern: String| {
+            format_epoch(epoch, &pattern)
         }),
     )
     .map_err(js_error)?;
@@ -198,8 +274,8 @@ fn install_globals<'js>(
         }),
     )
     .map_err(js_error)?;
-    if let Some(http) = http {
-        install_http_functions(ctx.clone(), &java, http)?;
+    if let Some(session) = http_session {
+        install_http_functions(ctx.clone(), &java, session)?;
     }
     globals.set("java", java).map_err(js_error)
 }
@@ -207,9 +283,9 @@ fn install_globals<'js>(
 fn install_http_functions<'js>(
     ctx: Ctx<'js>,
     java: &Object<'js>,
-    http: JsHttpContext,
+    session: Arc<JsHttpSession>,
 ) -> Result<(), AppError> {
-    let post_http = http.clone();
+    let post_http = Arc::clone(&session);
     java.set(
         "post",
         Function::new(ctx.clone(), move |url: String, body: String| {
@@ -219,7 +295,7 @@ fn install_http_functions<'js>(
         }),
     )
     .map_err(js_error)?;
-    let head_http = http.clone();
+    let head_http = Arc::clone(&session);
     java.set(
         "head",
         Function::new(ctx.clone(), move |url: String| {
@@ -229,7 +305,7 @@ fn install_http_functions<'js>(
         }),
     )
     .map_err(js_error)?;
-    let connect_http = http.clone();
+    let connect_http = Arc::clone(&session);
     java.set(
         "connect",
         Function::new(ctx.clone(), move |url: String| {
@@ -239,7 +315,7 @@ fn install_http_functions<'js>(
         }),
     )
     .map_err(js_error)?;
-    let ajax_http = http;
+    let ajax_http = session;
     java.set(
         "ajax",
         Function::new(ctx, move |url: String, method: String, body: String| {
@@ -258,27 +334,27 @@ fn install_http_functions<'js>(
 }
 
 fn blocking_http_request(
-    context: &JsHttpContext,
+    session: &JsHttpSession,
     method: &str,
     raw_url: &str,
     body: Option<String>,
 ) -> Result<String, AppError> {
+    let context = &session.context;
     let url = reqwest::Url::parse(raw_url)
         .or_else(|_| reqwest::Url::parse(&context.base_url).and_then(|base| base.join(raw_url)))
         .map_err(AppError::network)?;
-    let client = reqwest::blocking::Client::builder()
-        .user_agent("Reader Desktop/0.1")
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(AppError::network)?;
     let method = reqwest::Method::from_bytes(method.as_bytes())
         .map_err(|error| AppError::InvalidArgument(format!("HTTP method 无效: {error}")))?;
-    let mut request = client.request(method, url.clone());
-    if let Some(token) = context.access_token.as_deref().filter(|v| !v.is_empty()) {
-        request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
-    }
-    if let Some(cookie) = context.session_cookie.as_deref().filter(|v| !v.is_empty()) {
-        request = request.header(reqwest::header::COOKIE, cookie);
+    let mut request = session.client.request(method, url.clone());
+    if !context.session_expired {
+        if let Some(token) = context.access_token.as_deref().filter(|v| !v.is_empty()) {
+            request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        if let Some(cookie) = context.session_cookie.as_deref().filter(|v| !v.is_empty()) {
+            request = request.header(reqwest::header::COOKIE, cookie);
+        }
+    } else {
+        tracing::debug!(target: "network", "JS source session expired; omitting credentials");
     }
     if let Some(script) = context.sign_script.as_deref() {
         if let Some(signature) = evaluate_sign_script(script, url.as_str()) {
@@ -308,6 +384,51 @@ fn blocking_http_request(
         return Err(AppError::Network(format!("HTTP {status}: {text}")));
     }
     Ok(text)
+}
+
+fn build_js_http_session(context: JsHttpContext) -> Result<JsHttpSession, AppError> {
+    Ok(JsHttpSession {
+        client: reqwest::blocking::Client::builder()
+            .user_agent("Reader Desktop/0.1")
+            .cookie_store(true)
+            .timeout(Duration::from_secs(15))
+            .build()
+            .map_err(AppError::network)?,
+        context,
+    })
+}
+
+fn format_epoch(epoch: i64, pattern: &str) -> String {
+    // Keep this dependency-free and deterministic. These are the tokens used
+    // by the common legado timeFormat calls; unknown tokens are preserved.
+    let seconds = epoch / 1000;
+    let days = seconds.div_euclid(86_400);
+    let day_seconds = seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    let hour = day_seconds / 3_600;
+    let minute = (day_seconds % 3_600) / 60;
+    let second = day_seconds % 60;
+    pattern
+        .replace("yyyy", &format!("{year:04}"))
+        .replace("MM", &format!("{month:02}"))
+        .replace("dd", &format!("{day:02}"))
+        .replace("HH", &format!("{hour:02}"))
+        .replace("mm", &format!("{minute:02}"))
+        .replace("ss", &format!("{second:02}"))
+}
+
+// Howard Hinnant's Gregorian civil-date conversion, valid for Unix epochs.
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let z = days + 719_468;
+    let era = (if z >= 0 { z } else { z - 146_096 }) / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = mp + if mp < 10 { 3 } else { -9 };
+    (y + i64::from(m <= 2), m, d)
 }
 
 fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError> {
@@ -387,5 +508,23 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, AppError::InvalidArgument(_)));
+    }
+
+    #[tokio::test]
+    async fn exposes_encoding_and_time_helpers() {
+        let runtime = QuickJsRuntime::default();
+        let value = runtime
+            .execute(
+                "java.hexEncodeToString('Hi') + '|' + java.hexDecodeToString('4869') + '|' + java.md5Encode('hello') + '|' + java.strToBytes('Hi') + '|' + java.bytesToStr('72,105') + '|' + java.timeFormat(0, 'yyyy-MM-dd HH:mm:ss')",
+                JsContext::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            value,
+            JsValue::String(
+                "4869|Hi|5d41402abc4b2a76b9719d911017c592|72,105|Hi|1970-01-01 00:00:00".into()
+            )
+        );
     }
 }
