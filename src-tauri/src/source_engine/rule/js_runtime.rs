@@ -144,6 +144,31 @@ fn install_globals<'js>(
         .map_err(js_error)?;
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
+    let session_state = http
+        .as_ref()
+        .map(|value| {
+            if value.session_expired {
+                "expired"
+            } else if value.access_token.is_some() || value.session_cookie.is_some() {
+                "authenticated"
+            } else {
+                "anonymous"
+            }
+        })
+        .unwrap_or("anonymous")
+        .to_owned();
+    let authenticated = session_state == "authenticated";
+    java.set(
+        "isAuthenticated",
+        Function::new(ctx.clone(), move || authenticated),
+    )
+    .map_err(js_error)?;
+    let state_for_js = session_state.clone();
+    java.set(
+        "sessionState",
+        Function::new(ctx.clone(), move || state_for_js.clone()),
+    )
+    .map_err(js_error)?;
     let get_values = Arc::clone(variables);
     let http_session = http.map(build_js_http_session).transpose()?.map(Arc::new);
     let get_session = http_session.clone();
@@ -288,8 +313,8 @@ fn install_http_functions<'js>(
     let post_http = Arc::clone(&session);
     java.set(
         "post",
-        Function::new(ctx.clone(), move |url: String, body: String| {
-            blocking_http_request(&post_http, "POST", &url, Some(body)).map_err(|error| {
+        Function::new(ctx.clone(), move |url: String, body: Option<String>| {
+            blocking_http_request(&post_http, "POST", &url, body).map_err(|error| {
                 rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
             })
         }),
@@ -318,17 +343,20 @@ fn install_http_functions<'js>(
     let ajax_http = session;
     java.set(
         "ajax",
-        Function::new(ctx, move |url: String, method: String, body: String| {
-            blocking_http_request(
-                &ajax_http,
-                &method,
-                &url,
-                (!body.is_empty()).then_some(body),
-            )
-            .map_err(|error| {
-                rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
-            })
-        }),
+        Function::new(
+            ctx,
+            move |url: String, method: Option<String>, body: Option<String>| {
+                blocking_http_request(
+                    &ajax_http,
+                    method.as_deref().unwrap_or("GET"),
+                    &url,
+                    body.filter(|value| !value.is_empty()),
+                )
+                .map_err(|error| {
+                    rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
+                })
+            },
+        ),
     )
     .map_err(js_error)
 }
@@ -526,5 +554,44 @@ mod tests {
                 "4869|Hi|5d41402abc4b2a76b9719d911017c592|72,105|Hi|1970-01-01 00:00:00".into()
             )
         );
+    }
+
+    #[tokio::test]
+    async fn exposes_authentication_state_to_source_scripts() {
+        let runtime = QuickJsRuntime::default();
+        let value = runtime
+            .execute(
+                "java.sessionState() + ':' + java.isAuthenticated()",
+                JsContext {
+                    http: Some(JsHttpContext {
+                        access_token: Some("token".into()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(value, JsValue::String("authenticated:true".into()));
+    }
+
+    #[tokio::test]
+    async fn exposes_expired_state_without_authenticating_scripts() {
+        let runtime = QuickJsRuntime::default();
+        let value = runtime
+            .execute(
+                "java.sessionState() + ':' + java.isAuthenticated()",
+                JsContext {
+                    http: Some(JsHttpContext {
+                        access_token: Some("token".into()),
+                        session_expired: true,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(value, JsValue::String("expired:false".into()));
     }
 }

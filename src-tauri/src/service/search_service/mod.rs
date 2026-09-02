@@ -79,10 +79,15 @@ impl SearchService {
                 Ok(found) => results.extend(found),
                 Err(error) => {
                     tracing::warn!(target: "source", source = %name, error = %error, "source search failed");
+                    let auth_required = error.requires_authentication();
+                    if auth_required {
+                        self.sources.mark_session_expired(id).await?;
+                    }
                     failures.push(SourceFailure {
                         source_id: id,
                         source_name: name,
                         reason: error.to_string(),
+                        auth_required,
                     });
                 }
             }
@@ -110,17 +115,30 @@ impl SearchService {
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
         let response = send_source_request(&client, url.as_str(), &source).await?;
         let status = response.status().as_u16();
-        if !response.status().is_success() {
-            return Err(AppError::Network(
-                response_error(response, &source.name).await,
-            ));
+        let auth_required = matches!(status, 401 | 403);
+        if auth_required {
+            self.sources.mark_session_expired(source_id).await?;
         }
-        let results = parse_search(&source, &response.text().await.map_err(AppError::network)?)?;
+        let results = if response.status().is_success() {
+            parse_search(&source, &response.text().await.map_err(AppError::network)?)?
+        } else {
+            tracing::warn!(target: "network", source = %source.name, status, auth_required, "source probe returned an error");
+            Vec::new()
+        };
+        let source_name = source.name.clone();
+        let session_state = if auth_required {
+            "expired".to_owned()
+        } else {
+            source.session_state().to_owned()
+        };
         Ok(SourceTestResult {
             source_id,
-            source_name: source.name,
+            source_name,
             status,
             result_count: results.len(),
+            auth_required,
+            session_state,
+            request_url: url.to_string(),
         })
     }
 }
@@ -131,13 +149,18 @@ pub struct SourceTestResult {
     pub source_name: String,
     pub status: u16,
     pub result_count: usize,
+    pub auth_required: bool,
+    pub session_state: String,
+    pub request_url: String,
 }
 #[derive(Debug, Serialize)]
 pub struct SourceFailure {
     pub source_id: i64,
     pub source_name: String,
     pub reason: String,
+    pub auth_required: bool,
 }
+
 #[derive(Debug, Serialize)]
 pub struct SearchResponse {
     pub groups: Vec<SearchResultGroup>,

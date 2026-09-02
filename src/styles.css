@@ -381,6 +381,24 @@ h2 {
   color: var(--color-muted);
   line-height: 1.7;
 }
+.source-probe-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: baseline;
+  padding: 10px 14px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.source-probe-status code {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  color: var(--color-muted);
+  font-size: 11px;
+}
 .source-list {
   display: grid;
   gap: 6px;

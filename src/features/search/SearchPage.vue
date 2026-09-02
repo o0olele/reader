@@ -23,7 +23,7 @@ const isAdding = (group: SearchResultGroup) => group.sources.some((source) => so
       <ul>
         <li v-for="failure in search.failures" :key="failure.source_id">
           <strong>{{ failure.source_name }}</strong
-          >：{{ failure.reason }}
+          >：{{ failure.reason }}<span v-if="failure.auth_required">（需要重新认证）</span>
         </li>
       </ul>
     </details>

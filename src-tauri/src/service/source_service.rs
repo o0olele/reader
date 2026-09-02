@@ -115,11 +115,17 @@ impl SourceService {
         if !response.status().is_success() {
             return Err(format!("登录返回 HTTP {}", response.status()).into());
         }
+        let mut cookie_expiry = None;
         let cookies = response
             .headers()
             .get_all(reqwest::header::SET_COOKIE)
             .iter()
             .filter_map(|v| v.to_str().ok())
+            .inspect(|value| {
+                if let Some(max_age) = cookie_max_age(value) {
+                    cookie_expiry = Some(now_epoch().saturating_add(max_age));
+                }
+            })
             .filter_map(|v| v.split(';').next())
             .collect::<Vec<_>>()
             .join("; ");
@@ -129,7 +135,8 @@ impl SourceService {
                 .ok()
                 .and_then(|value| json_path(&value, path))
         });
-        let session_expires_at = session_expiry(response_text.as_str(), token.as_deref());
+        let session_expires_at = session_expiry(response_text.as_str(), token.as_deref())
+            .or_else(|| cookie_expiry.map(|value| value.to_string()));
         self.sources
             .update_session(
                 input.source_id,
@@ -231,6 +238,16 @@ fn now_epoch() -> u64 {
         .map(|value| value.as_secs())
         .unwrap_or_default()
 }
+
+fn cookie_max_age(cookie: &str) -> Option<u64> {
+    cookie.split(';').find_map(|attribute| {
+        let (name, value) = attribute.trim().split_once('=')?;
+        name.eq_ignore_ascii_case("max-age")
+            .then(|| value.trim().parse::<i64>().ok())
+            .flatten()
+            .map(|seconds| seconds.max(0) as u64)
+    })
+}
 fn apply_headers(
     mut request: reqwest::RequestBuilder,
     raw: Option<&str>,
@@ -307,5 +324,12 @@ mod tests {
     fn extracts_expiry_from_jwt_payload() {
         let token = "eyJhbGciOiJub25lIn0.eyJleHAiOjQyMDB9.signature";
         assert_eq!(session_expiry("{}", Some(token)).as_deref(), Some("4200"));
+    }
+
+    #[test]
+    fn extracts_cookie_max_age_for_session_expiry() {
+        assert_eq!(cookie_max_age("sid=1; Max-Age=3600; HttpOnly"), Some(3600));
+        assert_eq!(cookie_max_age("sid=1; max-age=0"), Some(0));
+        assert_eq!(cookie_max_age("sid=1; Path=/"), None);
     }
 }

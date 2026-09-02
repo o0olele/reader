@@ -53,6 +53,17 @@ impl SqliteSourceRepository {
     pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
         self.update_session(source_id, None, None, None).await
     }
+
+    /// Keeps the credentials for diagnostics/re-authentication, but marks the
+    /// session as unusable after a server rejects it.
+    pub async fn mark_session_expired(&self, source_id: i64) -> Result<(), AppError> {
+        sqlx::query("UPDATE book_sources SET session_expires_at = '0', updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(source_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(AppError::database)
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -225,5 +236,61 @@ mod tests {
                 .as_deref(),
             Some("socks5://127.0.0.1:1080")
         );
+    }
+
+    #[tokio::test]
+    async fn marking_a_session_expired_preserves_credentials() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let repository = SqliteSourceRepository::new(pool);
+        let source = BookSource {
+            id: 0,
+            name: "expired-test".into(),
+            base_url: "https://example.com".into(),
+            search_url: "https://example.com/?q={{key}}".into(),
+            search_rule: SearchRule {
+                item: "a".into(),
+                title: "a".into(),
+                author: None,
+                cover: None,
+                url: "a".into(),
+            },
+            info_rule: InfoRule::default(),
+            catalog_rule: CatalogRule {
+                item: "a".into(),
+                title: "a".into(),
+                url: "a::attr(href)".into(),
+                next_url: None,
+            },
+            content_selector: "body".into(),
+            next_toc_url_selector: None,
+            next_content_url_selector: None,
+            header: None,
+            login_url: None,
+            login_method: "POST".into(),
+            login_body: None,
+            token_path: None,
+            access_token: Some("token".into()),
+            session_cookie: Some("sid=1".into()),
+            session_expires_at: None,
+            sign_script: None,
+            proxy_url: None,
+            enabled: true,
+            raw_rules: Default::default(),
+        };
+        let id = repository.upsert(&source).await.unwrap();
+        repository
+            .update_session(id, Some("token"), Some("sid=1"), None)
+            .await
+            .unwrap();
+        repository.mark_session_expired(id).await.unwrap();
+        let current = repository.get(id).await.unwrap().unwrap();
+        assert_eq!(current.access_token.as_deref(), Some("token"));
+        assert_eq!(current.session_cookie.as_deref(), Some("sid=1"));
+        assert_eq!(current.session_state(), "expired");
     }
 }

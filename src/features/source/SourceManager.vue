@@ -97,6 +97,15 @@ const FIELDS = [
     </div>
   </details>
 
+  <div v-if="sources.lastProbe" class="source-probe-status" role="status">
+    <strong>{{ sources.lastProbe.source_name }}</strong>
+    <span>HTTP {{ sources.lastProbe.status }}</span>
+    <span>会话：{{ sources.lastProbe.session_state }}</span>
+    <span v-if="sources.lastProbe.auth_required">需要重新认证</span>
+    <span v-else>解析 {{ sources.lastProbe.result_count }} 条</span>
+    <code>{{ sources.lastProbe.request_url }}</code>
+  </div>
+
   <details v-if="sources.sources.some((source) => source.login_url)" class="source-editor">
     <summary>登录书源</summary>
     <form class="source-import" @submit.prevent="sources.login()">

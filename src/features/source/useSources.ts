@@ -54,6 +54,14 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
   const testing = ref<number>()
   const loginForm = ref({ sourceId: 0, username: '', password: '' })
   const loggingIn = ref(false)
+  const lastProbe = ref<{
+    source_name: string
+    status: number
+    result_count: number
+    auth_required: boolean
+    session_state: string
+    request_url: string
+  }>()
 
   async function refresh() {
     try {
@@ -140,7 +148,14 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     testing.value = source.id
     try {
       const result = await testBookSource(source.id, query || '测试')
-      notify(`${result.source_name} 连接成功，解析到 ${result.result_count} 条结果`)
+      lastProbe.value = result
+      const status = `HTTP ${result.status}`
+      notify(
+        result.auth_required
+          ? `${result.source_name} 返回 ${status}，会话已标记为过期，请刷新登录`
+          : `${result.source_name} 返回 ${status}，解析到 ${result.result_count} 条结果`,
+      )
+      await refresh()
     } catch (cause) {
       report(cause)
     } finally {
@@ -197,6 +212,7 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     testing,
     loginForm,
     loggingIn,
+    lastProbe,
     refresh,
     updateForm,
     save,

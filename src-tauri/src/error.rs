@@ -46,4 +46,11 @@ impl AppError {
     pub fn io(error: impl Display) -> Self {
         Self::Io(error.to_string())
     }
+
+    /// Whether the remote endpoint rejected the request because credentials
+    /// are missing or no longer valid. Keeping this classification on the
+    /// error avoids every caller parsing localized error text.
+    pub fn requires_authentication(&self) -> bool {
+        matches!(self, Self::Network(message) if message.contains("HTTP 401") || message.contains("HTTP 403"))
+    }
 }

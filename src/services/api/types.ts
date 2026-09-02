@@ -107,6 +107,7 @@ export interface SourceFailure {
   source_id: number
   source_name: string
   reason: string
+  auth_required: boolean
 }
 
 export interface SearchResponse {
@@ -120,6 +121,9 @@ export interface SourceTestResult {
   source_name: string
   status: number
   result_count: number
+  auth_required: boolean
+  session_state: string
+  request_url: string
 }
 
 export interface SourceImportReport {
