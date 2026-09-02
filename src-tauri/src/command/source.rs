@@ -7,7 +7,26 @@ use crate::{
     },
 };
 use serde::Deserialize;
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+
+#[tauri::command(rename = "debug_source_stage")]
+pub async fn debug_source_stage_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source_id: i64,
+    stage: crate::service::source_debug_service::SourceDebugStage,
+    input: String,
+) -> Result<crate::service::source_debug_service::SourceDebugResult, AppError> {
+    let _ = app.emit("source-test-progress", serde_json::json!({"source_id": source_id, "stage": stage, "state": "started"}));
+    let result = crate::service::source_debug_service::SourceDebugService::new(state.database()?).run(source_id, stage, &input).await?;
+    let _ = app.emit("source-test-progress", serde_json::json!({"source_id": source_id, "stage": result.stage, "state": "completed"}));
+    Ok(result)
+}
+
+#[tauri::command(rename = "update_book_source_rules")]
+pub async fn update_book_source_rules_cmd(state: State<'_, AppState>, source_id: i64, raw_rules: RawSourceRules) -> Result<(), AppError> {
+    crate::service::source_debug_service::SourceDebugService::new(state.database()?).update_rules(source_id, raw_rules).await
+}
 
 #[tauri::command(rename = "list_book_sources")]
 pub async fn list_book_sources_cmd(
@@ -225,11 +244,27 @@ pub async fn save_book_source_browser_session_cmd(
     let window = app
         .get_webview_window(&label)
         .ok_or_else(|| AppError::Source("请先打开浏览器认证窗口".into()))?;
-    let cookies = window
-        .cookies_for_url(url)
+    let base_url = reqwest::Url::parse(&source.base_url)
+        .map_err(|_| AppError::InvalidArgument("书源基础 URL 无效".into()))?;
+    // Cloudflare often sets its clearance cookie on the origin root while the
+    // login page is nested under a path. Read both URL scopes and keep the
+    // latest value for each cookie name.
+    let mut cookies = std::collections::BTreeMap::new();
+    for cookie in window
+        .cookies_for_url(base_url)
         .map_err(|error| AppError::Source(format!("读取浏览器 Cookie 失败: {error}")))?
         .into_iter()
-        .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
+        .chain(
+            window
+                .cookies_for_url(url)
+                .map_err(|error| AppError::Source(format!("读取浏览器 Cookie 失败: {error}")))?,
+        )
+    {
+        cookies.insert(cookie.name().to_owned(), cookie.value().to_owned());
+    }
+    let cookies = cookies
+        .into_iter()
+        .map(|(name, value)| format!("{name}={value}"))
         .collect::<Vec<_>>()
         .join("; ");
     SourceService::new(state.database()?)

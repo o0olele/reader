@@ -61,8 +61,10 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     status: number
     result_count: number
     auth_required: boolean
+    cloudflare_challenge: boolean
     session_state: string
     request_url: string
+    duration_ms: number
   }>()
 
   async function refresh() {
@@ -153,9 +155,11 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
       lastProbe.value = result
       const status = `HTTP ${result.status}`
       notify(
-        result.auth_required
-          ? `${result.source_name} 返回 ${status}，会话已标记为过期，请刷新登录`
-          : `${result.source_name} 返回 ${status}，解析到 ${result.result_count} 条结果`,
+        result.cloudflare_challenge
+          ? `${result.source_name} 仍被 Cloudflare 拦截，请在浏览器认证窗口完成验证后读取会话`
+          : result.auth_required
+            ? `${result.source_name} 返回 ${status}，会话已标记为过期，请刷新登录`
+            : `${result.source_name} 返回 ${status}，解析到 ${result.result_count} 条结果`,
       )
       await refresh()
     } catch (cause) {

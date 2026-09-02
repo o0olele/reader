@@ -5,14 +5,29 @@ import BookshelfPage from '../features/bookshelf/BookshelfPage.vue'
 import ReaderPane from '../features/reader/ReaderPane.vue'
 import SearchPage from '../features/search/SearchPage.vue'
 import SettingsPage from '../features/settings/SettingsPage.vue'
+import SourceDebugPage from '../features/source/SourceDebugPage.vue'
 import { useAppShell } from './useAppShell'
-import { searchKey, settingsKey, sourcesKey } from './shellKeys'
+import { searchKey, settingsKey, sourceDebugKey, sourcesKey } from './shellKeys'
 
-const { appVersion, view, status, message, bookshelf, reader, search, settings, sources, show, selectGroup, openBook } =
-  useAppShell()
+const {
+  appVersion,
+  view,
+  status,
+  message,
+  bookshelf,
+  reader,
+  search,
+  settings,
+  sources,
+  sourceDebug,
+  show,
+  selectGroup,
+  openBook,
+} = useAppShell()
 
 provide(searchKey, search)
 provide(settingsKey, settings)
+provide(sourceDebugKey, sourceDebug)
 provide(sourcesKey, sources)
 
 const fileInput = ref<HTMLInputElement>()

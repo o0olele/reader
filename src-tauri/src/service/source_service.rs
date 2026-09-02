@@ -198,7 +198,10 @@ impl SourceService {
                 source_id,
                 source.access_token.as_deref(),
                 Some(cookies),
-                source.session_expires_at.as_deref(),
+                // A 401/403 marks the previous protocol session expired. A
+                // successful browser challenge supersedes that marker; keep
+                // it would make request builders silently omit these cookies.
+                None,
             )
             .await?;
         Ok(SourceLoginResult {
@@ -206,7 +209,7 @@ impl SourceService {
             authenticated: true,
             has_token: source.access_token.is_some(),
             has_cookie: true,
-            session_expires_at: source.session_expires_at,
+            session_expires_at: None,
         })
     }
 }
@@ -350,6 +353,32 @@ mod tests {
         assert_eq!(search["bookUrl"], "a");
         assert_eq!(raw.content.as_deref(), Some("\".content\""));
         assert!(raw.book_info.is_none());
+    }
+
+    #[tokio::test]
+    async fn browser_cookies_replace_expired_session_marker() {
+        let service = SourceService::new(pool().await);
+        service
+            .import_json(
+                r#"[{"bookSourceName":"Browser source","bookSourceUrl":"https://example.com","searchUrl":"https://example.com?q={{key}}","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"}}]"#,
+            )
+            .await
+            .unwrap();
+        let source = service.list().await.unwrap().remove(0);
+        service
+            .sources
+            .mark_session_expired(source.id)
+            .await
+            .unwrap();
+        let result = service
+            .save_browser_cookies(source.id, "cf_clearance=ok")
+            .await
+            .unwrap();
+        assert!(result.authenticated);
+        assert_eq!(result.session_expires_at, None);
+        let saved = service.get(source.id).await.unwrap();
+        assert_eq!(saved.session_state(), "authenticated");
+        assert_eq!(saved.session_cookie.as_deref(), Some("cf_clearance=ok"));
     }
 
     #[test]

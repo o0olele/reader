@@ -6,6 +6,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'bookshelf', component: AppShell },
     { path: '/search', name: 'search', component: AppShell },
+    { path: '/sources', name: 'sources', component: AppShell },
     { path: '/settings', name: 'settings', component: AppShell },
   ],
 })

@@ -9,3 +9,8 @@ src-tauri/gen/
 .cargo-target/
 .codegraph/
 src-tauri/spikes/**/target/
+
+# 书源语料与临时脚本（ROADMAP-v2 §3.1）
+src-tauri/tests/corpus/*
+!src-tauri/tests/corpus/README.md
+.scratch/

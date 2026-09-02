@@ -3,10 +3,21 @@ use sha2::{Digest, Sha256};
 
 /// Builds a GET carrying the browser-ish headers, stored session credentials,
 /// per-source custom headers and signature that book sources expect.
+#[cfg(test)]
 fn source_request(
     client: &reqwest::Client,
     url: &str,
     source: &BookSource,
+) -> Result<reqwest::RequestBuilder, AppError> {
+    source_request_with_method(client, url, source, reqwest::Method::GET, None)
+}
+
+pub fn source_request_with_method(
+    client: &reqwest::Client,
+    url: &str,
+    source: &BookSource,
+    method: reqwest::Method,
+    body: Option<String>,
 ) -> Result<reqwest::RequestBuilder, AppError> {
     let referer = reqwest::Url::parse(url).ok().map(|parsed| {
         let mut origin = parsed;
@@ -15,7 +26,7 @@ fn source_request(
         origin.set_fragment(None);
         origin.to_string()
     });
-    let mut request = client.get(url)
+    let mut request = client.request(method, url)
         .header(reqwest::header::USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36")
         .header(reqwest::header::ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
         .header(reqwest::header::ACCEPT_LANGUAGE, "zh-CN,zh;q=0.9,en;q=0.8")
@@ -67,6 +78,9 @@ fn source_request(
             request = request.header("X-Signature", signature);
         }
     }
+    if let Some(body) = body {
+        request = request.body(body);
+    }
     Ok(request)
 }
 
@@ -97,11 +111,21 @@ pub async fn send_source_request(
     url: &str,
     source: &BookSource,
 ) -> Result<reqwest::Response, AppError> {
+    send_source_request_with_method(client, url, source, reqwest::Method::GET, None).await
+}
+
+pub async fn send_source_request_with_method(
+    client: &reqwest::Client,
+    url: &str,
+    source: &BookSource,
+    method: reqwest::Method,
+    body: Option<String>,
+) -> Result<reqwest::Response, AppError> {
     let mut last_error = String::new();
     for attempt in 0..3 {
         let started = std::time::Instant::now();
         tracing::debug!(target: "network", url = %url, attempt, "sending source request");
-        let request = source_request(client, url, source)
+        let request = source_request_with_method(client, url, source, method.clone(), body.clone())
             .and_then(|builder| builder.build().map_err(AppError::network))
             .map_err(|e| AppError::Network(format!("请求构造失败，请检查认证 Header: {e}")))?;
         match client.execute(request).await {

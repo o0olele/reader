@@ -53,6 +53,8 @@ pub fn run() {
             command_api::bookshelf::list_groups_cmd,
             command_api::bookshelf::create_group_cmd,
             command_api::bookshelf::move_book_to_group_cmd,
+            command_api::source::debug_source_stage_cmd,
+            command_api::source::update_book_source_rules_cmd,
             command_api::source::list_book_sources_cmd,
             command_api::source::save_book_source_cmd,
             command_api::source::import_book_sources_json_cmd,

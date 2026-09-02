@@ -6,10 +6,11 @@ import { useBookshelf } from '../features/bookshelf/useBookshelf'
 import { useReader } from '../features/reader/useReader'
 import { useSearch } from '../features/search/useSearch'
 import { useSettings } from '../features/settings/useSettings'
+import { useSourceDebug } from '../features/source/useSourceDebug'
 import { useSources } from '../features/source/useSources'
 import { on as onAppEvent } from '../services/events'
 
-export type ShellView = 'bookshelf' | 'search' | 'settings'
+export type ShellView = 'bookshelf' | 'search' | 'sources' | 'settings'
 
 /**
  * Composes the feature composables and owns only what is genuinely shared:
@@ -19,7 +20,7 @@ export function useAppShell() {
   const route = useRoute()
   const router = useRouter()
   const view = computed<ShellView>(() => {
-    if (route.name === 'search' || route.name === 'settings') return route.name
+    if (route.name === 'search' || route.name === 'sources' || route.name === 'settings') return route.name
     return 'bookshelf'
   })
   const status = ref('检查中...')
@@ -32,6 +33,7 @@ export function useAppShell() {
   const reader = useReader(report)
   const settings = useSettings(report, notify)
   const sources = useSources(report, notify)
+  const sourceDebug = useSourceDebug(report, notify, sources)
   const search = useSearch(report, (book) => bookshelf.upsert(book))
 
   function show(next: ShellView) {
@@ -84,6 +86,7 @@ export function useAppShell() {
     search,
     settings,
     sources,
+    sourceDebug,
     show,
     selectGroup,
     openBook,

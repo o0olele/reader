@@ -122,8 +122,50 @@ export interface SourceTestResult {
   status: number
   result_count: number
   auth_required: boolean
+  cloudflare_challenge: boolean
   session_state: string
   request_url: string
+  duration_ms: number
+}
+
+/** Stages a source can be debugged through, one legado rule group each. */
+export type SourceDebugStage = 'search' | 'book_info' | 'toc' | 'content'
+
+/** One rule step inside a stage: input fragment → matched node count → output value. */
+export interface SourceDebugStep {
+  rule: string
+  input?: string
+  matched: number
+  output?: string
+  error?: string
+}
+
+/** The actual HTTP exchange a debug stage performed. */
+export interface SourceDebugRequest {
+  url: string
+  method: string
+  headers: Record<string, string>
+  status: number
+  duration_ms: number
+}
+
+/** Result of one `debug_source_stage` call. */
+export interface SourceDebugResult {
+  source_id: number
+  stage: SourceDebugStage
+  raw_html?: string
+  steps: SourceDebugStep[]
+  parsed?: unknown
+  request?: SourceDebugRequest
+  error?: string
+  duration_ms: number
+}
+
+/** Payload streamed on the `source-test-progress` event while a stage runs. */
+export interface SourceDebugProgress {
+  source_id: number
+  stage: SourceDebugStage
+  step: SourceDebugStep
 }
 
 export interface SourceImportReport {

@@ -1,6 +1,7 @@
 import type { InjectionKey } from 'vue'
 import type { useSearch } from '../features/search/useSearch'
 import type { useSettings } from '../features/settings/useSettings'
+import type { useSourceDebug } from '../features/source/useSourceDebug'
 import type { useSources } from '../features/source/useSources'
 
 /**
@@ -9,4 +10,5 @@ import type { useSources } from '../features/source/useSources'
  */
 export const searchKey: InjectionKey<ReturnType<typeof useSearch>> = Symbol('search')
 export const settingsKey: InjectionKey<ReturnType<typeof useSettings>> = Symbol('settings')
+export const sourceDebugKey: InjectionKey<ReturnType<typeof useSourceDebug>> = Symbol('sourceDebug')
 export const sourcesKey: InjectionKey<ReturnType<typeof useSources>> = Symbol('sources')
