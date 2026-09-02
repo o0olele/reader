@@ -7,8 +7,10 @@ const debug = inject(sourceDebugKey)!
 const stageHint = computed(
   () => debug.stages.find((item) => item.value === debug.stage)?.hint ?? '输入 URL 或关键词',
 )
-const parsedText = computed(() =>
-  debug.result?.parsed === undefined ? '' : JSON.stringify(debug.result.parsed, null, 2),
+const finalText = computed(() =>
+  debug.result?.final_json === null || debug.result?.final_json === undefined
+    ? ''
+    : JSON.stringify(debug.result.final_json, null, 2),
 )
 </script>
 
@@ -48,32 +50,34 @@ const parsedText = computed(() =>
           {{ item.label }}
           <textarea v-model="debug.rules[item.value]" rows="5" spellcheck="false" :aria-label="`${item.label}规则`" />
         </label>
-        <p class="debug-hint">“单步执行”使用编辑器中的当前规则；“保存规则”写回书源。</p>
+        <p class="debug-hint">先“保存规则”写回书源，再“单步执行”按新规则执行并查看结果。</p>
       </section>
 
       <section class="debug-output">
         <h2>执行结果</h2>
-        <div v-if="debug.running" class="search-empty">正在执行「{{ debug.stageLabel }}」阶段...</div>
+        <div v-if="debug.running && !debug.result" class="search-empty">
+          正在执行「{{ debug.stageLabel }}」阶段（{{ debug.progressState === 'started' ? '已收到进度' : '等待进度' }}）...
+        </div>
         <div v-else-if="!debug.result" class="search-empty">选择书源和输入后点击「单步执行」</div>
         <template v-else>
           <div v-if="debug.result.error" class="error-banner">{{ debug.result.error }}</div>
-          <details v-if="debug.steps.length" :open="!debug.result.raw_html && !parsedText">
-            <summary>每步中间结果（{{ debug.steps.length }}）</summary>
+          <details v-if="debug.result.steps.length" :open="!finalText && !debug.result.raw_html">
+            <summary>每步中间结果（{{ debug.result.steps.length }}）</summary>
             <table class="debug-steps">
               <thead>
                 <tr>
                   <th>规则</th>
                   <th>输入片段</th>
-                  <th>匹配</th>
-                  <th>输出</th>
+                  <th>匹配节点</th>
+                  <th>输出值</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(step, index) in debug.steps" :key="`${step.rule}-${index}`">
-                  <td><code>{{ step.rule }}</code></td>
-                  <td><code>{{ step.input ?? '' }}</code></td>
-                  <td>{{ step.matched }}</td>
-                  <td><code>{{ step.error ?? step.output ?? '' }}</code></td>
+                <tr v-for="(step, index) in debug.result.steps" :key="`${step.field}-${index}`">
+                  <td><code>{{ step.field }}</code></td>
+                  <td><code>{{ step.input_preview }}</code></td>
+                  <td>{{ step.node_count }}</td>
+                  <td><code>{{ step.error ?? step.output_preview }}</code></td>
                 </tr>
               </tbody>
             </table>
@@ -82,16 +86,26 @@ const parsedText = computed(() =>
             <summary>原始 HTML</summary>
             <pre class="debug-pre">{{ debug.result.raw_html }}</pre>
           </details>
-          <details v-if="parsedText" :open="true">
+          <details v-if="finalText" :open="true">
             <summary>最终解析结果（JSON）</summary>
-            <pre class="debug-pre">{{ parsedText }}</pre>
+            <pre class="debug-pre">{{ finalText }}</pre>
           </details>
           <div v-if="debug.result.request" class="source-probe-status" role="status">
             <strong>{{ debug.result.request.method }} {{ debug.result.request.url }}</strong>
-            <span>HTTP {{ debug.result.request.status }}</span>
-            <span>耗时：{{ debug.result.request.duration_ms }} ms</span>
-            <span v-for="(value, key) in debug.result.request.headers" :key="key">{{ key }}: {{ value }}</span>
+            <span v-if="debug.result.status !== undefined">HTTP {{ debug.result.status }}</span>
+            <span>耗时：{{ debug.result.duration_ms }} ms</span>
+            <span>会话：{{ debug.result.session_state }}</span>
+            <span v-if="debug.result.request.auth_attached">已附加认证</span>
           </div>
+          <details v-if="debug.result.request" :open="false">
+            <summary>请求 Header / Body</summary>
+            <pre class="debug-pre">{{ debug.result.request.headers.map(([key, value]) => `${key}: ${value}`).join('\n') }}</pre>
+            <pre v-if="debug.result.request.body" class="debug-pre">{{ debug.result.request.body }}</pre>
+          </details>
+          <details v-if="debug.result.response_headers.length">
+            <summary>响应 Header</summary>
+            <pre class="debug-pre">{{ debug.result.response_headers.map(([key, value]) => `${key}: ${value}`).join('\n') }}</pre>
+          </details>
           <div v-if="!debug.result.request && !debug.result.error" class="search-empty">该阶段没有发起网络请求</div>
         </template>
       </section>

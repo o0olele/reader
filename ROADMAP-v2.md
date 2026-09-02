@@ -720,7 +720,7 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | ---: | --- | --- | --- |
 | 0 | **把语料挪进 `src-tauri/tests/corpus/` 并加 `.gitignore`** | 避免 5MB JSON 误入 git 历史 | §3.1 |
 | 1 | **加 `READER_STRICT_ENGINE` 开关**，让 `pipeline.rs` 停止吞掉引擎错误 | 覆盖率可测的前提 | §3.4 | ✅
-| 2 | **`rule-audit` bin**：把 Node 原型移植成 Rust，用真实 `split_rule`/evaluator 判定 | 31.3% 这个数字有了权威口径 | §3.2 |
+| 2 | **`rule-audit` bin**：把 Node 原型移植成 Rust，用真实 `split_rule`/evaluator 判定 | 31.3% 这个数字有了权威口径 | §3.2 | ✅
 | 3 | **提取 `source_engine/url/`**，`build_search_request` 搬过去并推广到六阶段 | 31.3% → 62.9% | §4.1 |
 | 4 | **JSoup 三项：`!n` / `.a:b` / `@@`** | 62.9% → **81.8%** | §4.2 |
 | 5 | **移植 `txtTocRule.json` 27 条规则**替换手写启发式（可与 3/4 并行） | TXT 目录识别对齐 legado | §3.5 |

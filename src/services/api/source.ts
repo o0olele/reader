@@ -63,17 +63,16 @@ export function saveBookSourceBrowserSession(sourceId: number): Promise<SourceLo
   return invoke<SourceLoginResult>('save_book_source_browser_session', { sourceId })
 }
 
-/** Run one stage of the rule engine with editor-supplied input and rules. */
+/** Run one stage of the rule engine against the source's saved rules. */
 export function debugSourceStage(
   sourceId: number,
   stage: SourceDebugStage,
   input: string,
-  rawRules: RawSourceRules,
 ): Promise<SourceDebugResult> {
-  return invoke<SourceDebugResult>('debug_source_stage', { sourceId, stage, input, rawRules })
+  return invoke<SourceDebugResult>('debug_source_stage', { sourceId, stage, input })
 }
 
 /** Persist editor-rewritten rules back onto a saved book source. */
-export function updateBookSourceRules(sourceId: number, rawRules: RawSourceRules): Promise<BookSource> {
-  return invoke<BookSource>('update_book_source_rules', { sourceId, rawRules })
+export function updateBookSourceRules(sourceId: number, rawRules: RawSourceRules): Promise<void> {
+  return invoke<void>('update_book_source_rules', { sourceId, rawRules })
 }

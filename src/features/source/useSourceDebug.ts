@@ -7,7 +7,6 @@ import {
   type SourceDebugProgress,
   type SourceDebugResult,
   type SourceDebugStage,
-  type SourceDebugStep,
 } from '../../services/api'
 import { on as onAppEvent } from '../../services/events'
 import type { useSources } from './useSources'
@@ -21,8 +20,9 @@ export const DEBUG_STAGES: { value: SourceDebugStage; label: string; hint: strin
 ]
 
 /**
- * Drives the source debugger: stage selection, in-place rule editing,
- * one-stage execution with streamed progress, and persisting edited rules.
+ * Drives the source debugger: stage selection, rule editing, one-stage
+ * execution with streamed progress, and persisting edited rules back to the
+ * source so the next run uses them.
  */
 export function useSourceDebug(
   report: (cause: unknown) => void,
@@ -37,11 +37,10 @@ export function useSourceDebug(
   const running = ref(false)
   const savingRules = ref(false)
   const result = ref<SourceDebugResult>()
-  const progress = ref<SourceDebugStep[]>([])
+  const progressState = ref<SourceDebugProgress['state']>()
 
   const sourceOptions = computed(() => sources.sources)
   const currentSource = computed(() => sourceOptions.value.find((item) => item.id === sourceId.value))
-  const steps = computed(() => result.value?.steps ?? progress.value)
   const stageLabel = computed(() => DEBUG_STAGES.find((item) => item.value === stage.value)?.label ?? '')
 
   let stopProgress: (() => void) | undefined
@@ -49,7 +48,7 @@ export function useSourceDebug(
     stopProgress = onAppEvent('source-test-progress', (payload) => {
       const event = payload as SourceDebugProgress | undefined
       if (!event || event.source_id !== sourceId.value) return
-      progress.value = [...progress.value, event.step]
+      progressState.value = event.state
     })
   })
   onBeforeUnmount(() => stopProgress?.())
@@ -67,7 +66,7 @@ export function useSourceDebug(
     }
     input.value = ''
     result.value = undefined
-    progress.value = []
+    progressState.value = undefined
     void router.push({ name: 'sources' })
   }
 
@@ -77,12 +76,12 @@ export function useSourceDebug(
       return
     }
     running.value = true
-    progress.value = []
+    progressState.value = 'started'
     result.value = undefined
     try {
-      const current = await debugSourceStage(sourceId.value, stage.value, input.value.trim(), rules.value)
+      const current = await debugSourceStage(sourceId.value, stage.value, input.value.trim())
       result.value = current
-      const name = currentSource.value?.name ?? '书源'
+      const name = currentSource.value?.name ?? current.source_name
       notify(
         current.error
           ? `${name} 的${stageLabel.value}阶段调试失败：${current.error}`
@@ -92,6 +91,7 @@ export function useSourceDebug(
       report(cause)
     } finally {
       running.value = false
+      progressState.value = undefined
     }
   }
 
@@ -104,7 +104,7 @@ export function useSourceDebug(
     try {
       await updateBookSourceRules(sourceId.value, rules.value)
       await sources.refresh()
-      notify(`${currentSource.value?.name ?? '书源'} 的规则已保存`)
+      notify(`${currentSource.value?.name ?? '书源'} 的规则已保存，单步执行将使用新规则`)
     } catch (cause) {
       report(cause)
     } finally {
@@ -123,7 +123,7 @@ export function useSourceDebug(
     running,
     savingRules,
     result,
-    steps,
+    progressState,
     stageLabel,
     openFor,
     run,
