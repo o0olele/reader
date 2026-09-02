@@ -34,6 +34,13 @@ pub struct JsHttpContext {
 struct JsHttpSession {
     client: reqwest::blocking::Client,
     context: JsHttpContext,
+    response: Arc<Mutex<Option<JsHttpResponse>>>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct JsHttpResponse {
+    status: u16,
+    headers: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -178,7 +185,15 @@ fn install_globals<'js>(
             if let Some(session) = get_session.as_ref().filter(|_| {
                 key.starts_with("http://") || key.starts_with("https://") || key.starts_with('/')
             }) {
-                return blocking_http_request(session, "GET", &key, None).map_err(|error| {
+                return blocking_http_request_with_options(
+                    session,
+                    &key,
+                    JsHttpRequestOptions {
+                        method: "GET".into(),
+                        ..Default::default()
+                    },
+                )
+                .map_err(|error| {
                     rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
                 });
             }
@@ -310,11 +325,88 @@ fn install_http_functions<'js>(
     java: &Object<'js>,
     session: Arc<JsHttpSession>,
 ) -> Result<(), AppError> {
+    let request_http = Arc::clone(&session);
+    java.set(
+        "request",
+        Function::new(
+            ctx.clone(),
+            move |url: String, options: Option<Object<'js>>| {
+                let options = options
+                    .map(parse_request_options)
+                    .transpose()
+                    .map_err(|error| {
+                        rquickjs::Error::new_from_js_message("RequestOptions", "Object", error)
+                    })?
+                    .unwrap_or_default();
+                blocking_http_request_with_options(&request_http, &url, options).map_err(|error| {
+                    rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
+                })
+            },
+        ),
+    )
+    .map_err(js_error)?;
+    let status_http = Arc::clone(&session);
+    java.set(
+        "responseStatus",
+        Function::new(ctx.clone(), move || {
+            status_http
+                .response
+                .lock()
+                .ok()
+                .and_then(|response| response.as_ref().map(|response| response.status))
+                .unwrap_or_default()
+        }),
+    )
+    .map_err(js_error)?;
+    let headers_http = Arc::clone(&session);
+    java.set(
+        "responseHeaders",
+        Function::new(ctx.clone(), move || {
+            headers_http
+                .response
+                .lock()
+                .ok()
+                .and_then(|response| {
+                    response.as_ref().map(|response| {
+                        serde_json::to_string(&response.headers).unwrap_or_else(|_| "{}".into())
+                    })
+                })
+                .unwrap_or_else(|| "{}".into())
+        }),
+    )
+    .map_err(js_error)?;
+    let header_http = Arc::clone(&session);
+    java.set(
+        "responseHeader",
+        Function::new(ctx.clone(), move |name: String| {
+            let name = name.to_ascii_lowercase();
+            header_http
+                .response
+                .lock()
+                .ok()
+                .and_then(|response| {
+                    response
+                        .as_ref()
+                        .and_then(|response| response.headers.get(&name).cloned())
+                })
+                .unwrap_or_default()
+        }),
+    )
+    .map_err(js_error)?;
     let post_http = Arc::clone(&session);
     java.set(
         "post",
         Function::new(ctx.clone(), move |url: String, body: Option<String>| {
-            blocking_http_request(&post_http, "POST", &url, body).map_err(|error| {
+            blocking_http_request_with_options(
+                &post_http,
+                &url,
+                JsHttpRequestOptions {
+                    method: "POST".into(),
+                    body,
+                    ..Default::default()
+                },
+            )
+            .map_err(|error| {
                 rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
             })
         }),
@@ -324,7 +416,15 @@ fn install_http_functions<'js>(
     java.set(
         "head",
         Function::new(ctx.clone(), move |url: String| {
-            blocking_http_request(&head_http, "HEAD", &url, None).map_err(|error| {
+            blocking_http_request_with_options(
+                &head_http,
+                &url,
+                JsHttpRequestOptions {
+                    method: "HEAD".into(),
+                    ..Default::default()
+                },
+            )
+            .map_err(|error| {
                 rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
             })
         }),
@@ -334,7 +434,15 @@ fn install_http_functions<'js>(
     java.set(
         "connect",
         Function::new(ctx.clone(), move |url: String| {
-            blocking_http_request(&connect_http, "GET", &url, None).map_err(|error| {
+            blocking_http_request_with_options(
+                &connect_http,
+                &url,
+                JsHttpRequestOptions {
+                    method: "GET".into(),
+                    ..Default::default()
+                },
+            )
+            .map_err(|error| {
                 rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
             })
         }),
@@ -367,13 +475,70 @@ fn blocking_http_request(
     raw_url: &str,
     body: Option<String>,
 ) -> Result<String, AppError> {
+    blocking_http_request_with_options(
+        session,
+        raw_url,
+        JsHttpRequestOptions {
+            method: method.to_owned(),
+            body,
+            ..Default::default()
+        },
+    )
+}
+
+#[derive(Clone, Debug, Default)]
+struct JsHttpRequestOptions {
+    method: String,
+    body: Option<String>,
+    headers: HashMap<String, String>,
+    timeout_ms: Option<u64>,
+}
+
+fn parse_request_options<'js>(options: Object<'js>) -> Result<JsHttpRequestOptions, String> {
+    let method = options
+        .get::<_, Option<String>>("method")
+        .map_err(|error| error.to_string())?
+        .unwrap_or_else(|| "GET".into());
+    let body = options
+        .get::<_, Option<String>>("body")
+        .map_err(|error| error.to_string())?;
+    let timeout_ms = options
+        .get::<_, Option<u64>>("timeout")
+        .map_err(|error| error.to_string())?;
+    let headers = options
+        .get::<_, Option<Object>>("headers")
+        .map_err(|error| error.to_string())?
+        .map(|headers| {
+            headers
+                .props::<String, String>()
+                .collect::<Result<HashMap<_, _>, _>>()
+                .map_err(|error| error.to_string())
+        })
+        .transpose()?
+        .unwrap_or_default();
+    Ok(JsHttpRequestOptions {
+        method,
+        body,
+        headers,
+        timeout_ms,
+    })
+}
+
+fn blocking_http_request_with_options(
+    session: &JsHttpSession,
+    raw_url: &str,
+    options: JsHttpRequestOptions,
+) -> Result<String, AppError> {
     let context = &session.context;
     let url = reqwest::Url::parse(raw_url)
         .or_else(|_| reqwest::Url::parse(&context.base_url).and_then(|base| base.join(raw_url)))
         .map_err(AppError::network)?;
-    let method = reqwest::Method::from_bytes(method.as_bytes())
+    let method = reqwest::Method::from_bytes(options.method.as_bytes())
         .map_err(|error| AppError::InvalidArgument(format!("HTTP method 无效: {error}")))?;
     let mut request = session.client.request(method, url.clone());
+    if let Some(timeout_ms) = options.timeout_ms.filter(|value| *value > 0) {
+        request = request.timeout(Duration::from_millis(timeout_ms.min(120_000)));
+    }
     if !context.session_expired {
         if let Some(token) = context.access_token.as_deref().filter(|v| !v.is_empty()) {
             request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
@@ -402,11 +567,30 @@ fn blocking_http_request(
             }
         }
     }
-    if let Some(body) = body {
+    for (name, value) in options.headers {
+        request = request.header(name, value);
+    }
+    if let Some(body) = options.body {
         request = request.body(body);
     }
     let response = request.send().map_err(AppError::network)?;
     let status = response.status();
+    let headers = response
+        .headers()
+        .iter()
+        .filter_map(|(name, value)| {
+            Some((
+                name.as_str().to_ascii_lowercase(),
+                value.to_str().ok()?.to_owned(),
+            ))
+        })
+        .collect::<HashMap<_, _>>();
+    if let Ok(mut previous) = session.response.lock() {
+        *previous = Some(JsHttpResponse {
+            status: status.as_u16(),
+            headers,
+        });
+    }
     let text = response.text().map_err(AppError::network)?;
     if !status.is_success() {
         return Err(AppError::Network(format!("HTTP {status}: {text}")));
@@ -423,6 +607,7 @@ fn build_js_http_session(context: JsHttpContext) -> Result<JsHttpSession, AppErr
             .build()
             .map_err(AppError::network)?,
         context,
+        response: Arc::new(Mutex::new(None)),
     })
 }
 
@@ -494,6 +679,8 @@ fn js_error(error: impl std::fmt::Display) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
 
     #[tokio::test]
     async fn executes_expression_and_java_helpers() {
@@ -593,5 +780,68 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(value, JsValue::String("expired:false".into()));
+    }
+
+    #[tokio::test]
+    async fn request_options_and_response_metadata_are_available_to_scripts() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_millis(500)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            loop {
+                match stream.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(size) => {
+                        bytes.extend_from_slice(&buffer[..size]);
+                        let request = String::from_utf8_lossy(&bytes);
+                        let expected = request
+                            .split("\r\n\r\n")
+                            .next()
+                            .and_then(|headers| {
+                                headers.lines().find_map(|line| {
+                                    line.strip_prefix("Content-Length:")?
+                                        .trim()
+                                        .parse::<usize>()
+                                        .ok()
+                                })
+                            })
+                            .unwrap_or_default();
+                        if let Some(body) = request.split_once("\r\n\r\n").map(|(_, body)| body) {
+                            if body.len() >= expected {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            let request = String::from_utf8_lossy(&bytes);
+            assert!(request.to_ascii_lowercase().contains("x-test: yes"));
+            assert!(request.contains("hello"));
+            stream
+                .write_all(
+                    b"HTTP/1.1 201 Created\r\nX-Trace: runtime\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nok",
+                )
+                .unwrap();
+        });
+        let script = format!(
+            "java.request('http://{address}', {{method:'POST', body:'hello', headers:{{'X-Test':'yes'}}, timeout:2000}}) + '|' + java.responseStatus() + '|' + java.responseHeader('x-trace') + '|' + JSON.parse(java.responseHeaders())['content-type']"
+        );
+        let value = QuickJsRuntime::default()
+            .execute(
+                &script,
+                JsContext {
+                    http: Some(JsHttpContext::default()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        server.join().unwrap();
+        assert_eq!(value, JsValue::String("ok|201|runtime|text/plain".into()));
     }
 }

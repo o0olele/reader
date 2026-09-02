@@ -93,6 +93,8 @@ const FIELDS = [
         >
           {{ sources.testing === source.id ? '测试中...' : '测试' }}
         </button>
+        <button type="button" class="secondary" @click="sources.browserAuth(source)">浏览器认证</button>
+        <button type="button" class="secondary" @click="sources.saveBrowserSession(source)">读取浏览器会话</button>
       </div>
     </div>
   </details>

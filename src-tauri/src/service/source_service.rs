@@ -177,6 +177,38 @@ impl SourceService {
     pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
         self.sources.clear_session(source_id).await
     }
+
+    /// Persists cookies collected from the source's embedded browser window.
+    /// Existing token credentials are retained because browser challenges often
+    /// supplement, rather than replace, an API token.
+    pub async fn save_browser_cookies(
+        &self,
+        source_id: i64,
+        cookies: &str,
+    ) -> Result<SourceLoginResult, AppError> {
+        let source = self.get(source_id).await?;
+        let cookies = cookies.trim();
+        if cookies.is_empty() {
+            return Err(AppError::InvalidArgument(
+                "浏览器中没有可保存的 Cookie".into(),
+            ));
+        }
+        self.sources
+            .update_session(
+                source_id,
+                source.access_token.as_deref(),
+                Some(cookies),
+                source.session_expires_at.as_deref(),
+            )
+            .await?;
+        Ok(SourceLoginResult {
+            source_id,
+            authenticated: true,
+            has_token: source.access_token.is_some(),
+            has_cookie: true,
+            session_expires_at: source.session_expires_at,
+        })
+    }
 }
 
 #[derive(Debug, Default, Serialize)]

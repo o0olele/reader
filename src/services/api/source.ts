@@ -40,3 +40,11 @@ export function refreshBookSourceSession(sourceId: number, username: string, pas
     input: { source_id: sourceId, username, password },
   })
 }
+
+export function openBookSourceBrowser(sourceId: number): Promise<void> {
+  return invoke<void>('open_book_source_browser', { sourceId })
+}
+
+export function saveBookSourceBrowserSession(sourceId: number): Promise<SourceLoginResult> {
+  return invoke<SourceLoginResult>('save_book_source_browser_session', { sourceId })
+}

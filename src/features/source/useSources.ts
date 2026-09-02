@@ -6,6 +6,8 @@ import {
   importBookSourcesUrl,
   listBookSources,
   loginBookSource,
+  openBookSourceBrowser,
+  saveBookSourceBrowserSession,
   refreshBookSourceSession,
   saveBookSource,
   testBookSource,
@@ -203,6 +205,25 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     }
   }
 
+  async function browserAuth(source: BookSource) {
+    try {
+      await openBookSourceBrowser(source.id)
+      notify(`已打开 ${source.name} 的浏览器认证窗口，请完成页面验证后点击“读取浏览器会话”`)
+    } catch (cause) {
+      report(cause)
+    }
+  }
+
+  async function saveBrowserSession(source: BookSource) {
+    try {
+      const result = await saveBookSourceBrowserSession(source.id)
+      notify(result.authenticated ? `${source.name} 的浏览器会话已保存` : '浏览器中没有可保存的会话')
+      await refresh()
+    } catch (cause) {
+      report(cause)
+    }
+  }
+
   return reactive({
     sources,
     form,
@@ -221,6 +242,8 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     test,
     login,
     refreshSession,
+    browserAuth,
+    saveBrowserSession,
     clearSession,
   })
 }

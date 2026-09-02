@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use serde::Deserialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 #[tauri::command(rename = "list_book_sources")]
 pub async fn list_book_sources_cmd(
@@ -173,5 +173,66 @@ pub async fn refresh_book_source_session_cmd(
 ) -> Result<SourceLoginResult, AppError> {
     SourceService::new(state.database()?)
         .refresh_session(input)
+        .await
+}
+
+#[tauri::command(rename = "open_book_source_browser")]
+pub async fn open_book_source_browser_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source_id: i64,
+) -> Result<(), AppError> {
+    let source = SourceService::new(state.database()?).get(source_id).await?;
+    let raw_url = source
+        .login_url
+        .as_deref()
+        .unwrap_or(&source.base_url)
+        .trim();
+    let url = reqwest::Url::parse(raw_url)
+        .or_else(|_| reqwest::Url::parse(&source.base_url).and_then(|base| base.join(raw_url)))
+        .map_err(|_| AppError::InvalidArgument("浏览器认证 URL 无效".into()))?;
+    let label = format!("source-auth-{source_id}");
+    if let Some(window) = app.get_webview_window(&label) {
+        window
+            .show()
+            .map_err(|error| AppError::Source(error.to_string()))?;
+        window
+            .set_focus()
+            .map_err(|error| AppError::Source(error.to_string()))?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(url))
+        .title(format!("浏览器认证 - {}", source.name))
+        .inner_size(1000.0, 760.0)
+        .min_inner_size(640.0, 480.0)
+        .build()
+        .map_err(|error| AppError::Source(format!("打开浏览器认证窗口失败: {error}")))?;
+    Ok(())
+}
+
+#[tauri::command(rename = "save_book_source_browser_session")]
+pub async fn save_book_source_browser_session_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source_id: i64,
+) -> Result<SourceLoginResult, AppError> {
+    let source = SourceService::new(state.database()?).get(source_id).await?;
+    let raw_url = source.login_url.as_deref().unwrap_or(&source.base_url);
+    let url = reqwest::Url::parse(raw_url)
+        .or_else(|_| reqwest::Url::parse(&source.base_url).and_then(|base| base.join(raw_url)))
+        .map_err(|_| AppError::InvalidArgument("浏览器认证 URL 无效".into()))?;
+    let label = format!("source-auth-{source_id}");
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| AppError::Source("请先打开浏览器认证窗口".into()))?;
+    let cookies = window
+        .cookies_for_url(url)
+        .map_err(|error| AppError::Source(format!("读取浏览器 Cookie 失败: {error}")))?
+        .into_iter()
+        .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
+        .collect::<Vec<_>>()
+        .join("; ");
+    SourceService::new(state.database()?)
+        .save_browser_cookies(source_id, &cookies)
         .await
 }

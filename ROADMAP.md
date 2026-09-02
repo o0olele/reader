@@ -485,8 +485,10 @@ md5Encode（在 EncoderUtils）  strToBytes  bytesToStr
 encodeURI  timeFormat  log
 ```
 
-当前已注入 `get`/`put`（上下文变量）、`base64Encode`/`base64Decode`、`encodeURI`、`log`；
-网络型 API（`ajax`/`get`/`post`/`head`/`connect`）及编码/时间辅助函数仍待接入统一 HTTP 客户端。
+当前已注入 `get`/`put`（上下文变量）、`base64Encode`/`base64Decode`、`encodeURI`、`log`，
+并已接入统一 HTTP 客户端。网络型 API（`ajax`/`get`/`post`/`head`/`connect`）携带
+书源 header/token/cookie/sign；新增 `java.request(url, options)` 支持 method/body/headers/timeout，
+并通过 `responseStatus`、`responseHeader`、`responseHeaders` 暴露响应元数据。旧 API 保持兼容。
 
 第二批（Step 3 之后按实际书源失败率决定）：
 ```
@@ -694,14 +696,14 @@ src-tauri/tests/
 > 本次复核逐条回到代码验证，并把**验证不通过的三条如实降级**（见 §10.5）。
 > 规则：这里的每一条都必须能用一条命令或一个文件路径证明。
 
-### 10.1 代码规模现状（2026-08-31 实测）
+### 10.1 代码规模现状（2026-09-02 实测）
 
-| 层 | 规模（2026-09-01 实测） |
+| 层 | 规模（2026-09-02 实测） |
 | --- | --- |
 | Rust | 6 492 行，57 个文件；最大 `service/reader_service.rs` 220 非测试行 |
 | 前端 | 1 545 行，31 个文件；最大 `features/source/useSources.ts` 193 行 |
 | DB | `migrations/001..014` 共 14 个文件（本轮无新增 migration） |
-| 测试 | **94 个库单测 + 12 个集成测试**（规则分析器 85 条夹具 + 引擎端到端 6 条 + 管线 3 条 + Step 0 回归 2 条） |
+| 测试 | **106 个库单测 + 12 个集成测试**（含 `java.request` 选项/响应元数据回归） |
 
 对照 §0.1 的起点：`command.rs` 1 226 行 + `source.rs` 484 行 + `App.vue` 264 行这三座大山已全部拆散，
 单文件最大值从 1 226 降到 208。
@@ -808,14 +810,17 @@ Step 0 拆干净了 `command.rs`，但业务随后在 `SourceService` 里重新�
 
 本轮已完成协议认证基础链路：QuickJS 的 java.* 网络 API 共享 Cookie 会话，并携带未过期的
 token/cookie/header/sign；书源管理界面已接入会话刷新，过期状态也会在 JS 和普通请求路径中跳过凭据。
+`java.request` 现在支持请求选项（method/body/headers/timeout），并把最后一次响应的状态码与响应头
+暴露给脚本，避免书源只能依赖正文猜测认证状态。
 
 1. **JS Runtime（4.2.3）+ `java.*` 兼容层（4.2.4）** —— 基础 QuickJS Runtime 已接入 `Js` 规则：
    `result`/`url`/变量上下文、`java.get`/`put`、Base64、URI 编码、日志、内存上限与异步超时均已覆盖，
-   并有运行时及链式规则回归测试。仍待 `WebJs`、完整网络型 `java.*` API、Linux 构建验证；
-2. **协议认证补齐（进行中）** —— 401/403 过期标记、JS 会话状态和探针观测已完成；仍需完整
-   `java.*` 请求选项/响应头 API，以及调试器中的请求/认证状态展示。完成后再扩大真实书源验收。
-3. **WebView 认证 spike** —— 在 Step 2/3 期间验证 Cloudflare/Turnstile 页面认证后 Cookie 回写；
-   只做用户可控的浏览器认证，不实现无头绕过。
+   网络型 API 的请求选项和响应元数据也已覆盖，并有本地 HTTP 回归测试。仍待 `WebJs`、Linux 构建验证；
+2. **协议认证补齐（进行中）** —— 401/403 过期标记、JS 会话状态、探针观测、请求选项和响应头 API
+   已完成；仍需调试器中的请求/认证状态展示。完成后再扩大真实书源验收。
+3. **WebView 认证 spike** —— 已接入 Tauri 独立 WebView 认证窗口：用户完成 Cloudflare/Turnstile
+   或网页登录后，可从 WebView Cookie Store 读取（含 HttpOnly）并回写书源会话。仍需在真实挑战站点
+   手工验收；只做用户可控的浏览器认证，不实现无头绕过。
 4. **公开真实书源语料** —— 当前 85 条语法夹具与 3 份 HTML fixture 都是人工整理的，
    §4.4 的「≥300 源导入，可搜索 ≥ 60%」无法在本机度量。需要外部语料
 3. **`fixtures/source_a/source.json` 此前不忠实** —— 它是照着导入器的 `attr()` 补全行为写的
