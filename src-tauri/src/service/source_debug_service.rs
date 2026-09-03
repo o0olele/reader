@@ -3,14 +3,13 @@
 use crate::{
     domain::source::{BookSource, RawSourceRules},
     error::AppError,
-    infrastructure::http::{
-        client::build_source_client, request::source_request_with_method, url::resolve_url,
-    },
+    infrastructure::http::client::build_source_client,
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
     source_engine::pipeline::{
         parse_book_info, parse_catalog_page, parse_content_page, parse_search,
     },
+    source_engine::url::{build as build_url_request, decode_text, prepare, send, RequestSpec},
 };
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -93,11 +92,9 @@ impl SourceDebugService {
             .get(source_id)
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
-        let (url, method, body) = request_for_stage(&source, &stage, input)?;
+        let request_spec = request_for_stage(&source, &stage, input)?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let builder =
-            source_request_with_method(&client, &url, &source, method.clone(), body.clone())?;
-        let request = builder.build().map_err(AppError::network)?;
+        let request = prepare(&client, &source, &request_spec)?;
         let request_info = SourceDebugRequest {
             method: request.method().to_string(),
             url: request.url().to_string(),
@@ -121,7 +118,7 @@ impl SourceDebugService {
                 || request.headers().contains_key(reqwest::header::COOKIE),
         };
         let started = Instant::now();
-        let response = client.execute(request).await.map_err(AppError::network)?;
+        let response = send(&client, &source, &request_spec).await?;
         let status = response.status().as_u16();
         let response_headers = response
             .headers()
@@ -133,7 +130,7 @@ impl SourceDebugService {
                 )
             })
             .collect();
-        let raw = response.text().await.map_err(AppError::network)?;
+        let raw = decode_text(response, &request_spec, &source).await?;
         let raw_html = raw.chars().take(256 * 1024).collect::<String>();
         let mut steps = Vec::new();
         let parsed = parse_stage(&source, &stage, &raw_html, &mut steps);
@@ -170,27 +167,13 @@ fn request_for_stage(
     source: &BookSource,
     stage: &SourceDebugStage,
     input: &str,
-) -> Result<(String, reqwest::Method, Option<String>), AppError> {
+) -> Result<RequestSpec, AppError> {
     let input = input.trim();
     match stage {
-        SourceDebugStage::Search => Ok((
-            resolve_url(
-                &source.base_url,
-                &source
-                    .search_url
-                    .replace("{{key}}", input)
-                    .replace("{key}", input),
-                "搜索 URL",
-            )?
-            .to_string(),
-            reqwest::Method::GET,
-            None,
-        )),
-        _ => Ok((
-            resolve_url(&source.base_url, input, &format!("{} URL", stage.label()))?.to_string(),
-            reqwest::Method::GET,
-            None,
-        )),
+        SourceDebugStage::Search => {
+            build_url_request(source, &source.search_url, Some(input), "搜索 URL")
+        }
+        _ => build_url_request(source, input, None, &format!("{} URL", stage.label())),
     }
 }
 

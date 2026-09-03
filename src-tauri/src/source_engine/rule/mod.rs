@@ -7,6 +7,7 @@ mod evaluator;
 mod js_runtime;
 mod jsoup;
 mod model;
+mod position;
 mod scanner;
 mod step;
 mod xpath;

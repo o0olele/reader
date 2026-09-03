@@ -80,6 +80,8 @@ pub struct BookSourceInput {
     pub sign_script: Option<String>,
     #[serde(default)]
     pub proxy_url: Option<String>,
+    #[serde(default)]
+    pub concurrent_rate: Option<String>,
 }
 
 fn default_login_method() -> String {
@@ -145,6 +147,7 @@ pub async fn save_book_source_cmd(
         session_expires_at: None,
         sign_script: input.sign_script,
         proxy_url: input.proxy_url,
+        concurrent_rate: input.concurrent_rate,
         enabled: input.enabled.unwrap_or(true),
         // Saving by hand takes the source's rules over. Carrying legado rules
         // across from an earlier import would silently outrank the selectors

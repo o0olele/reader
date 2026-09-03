@@ -46,7 +46,7 @@
 | --- | --- | :---: | --- |
 | 规则串词法切分 `\|\| && %% - ##` | `RuleAnalyzer.kt` 377 | ✅ | `analyzer.rs` 225 + `scanner.rs` 155，85 条夹具快照 |
 | 模板 `{{}}` / `@get:` / `@put:` | `AnalyzeRule.kt` 971 | ✅ | — |
-| Default(JSoup) 私有语法 | `AnalyzeByJSoup.kt` 524 | 🟡 | `jsoup.rs` 283。缺排除 `!0`（**31% 源**）、区间 `.0:1:2`（15%）、`@@`（11%）、allInOne |
+| Default(JSoup) 私有语法 | `AnalyzeByJSoup.kt` 524 | ✅ | 排除、索引列表/区间、`@@`、allInOne 及文本边界已对齐；位置筛选拆至 `position.rs` |
 | XPath | `AnalyzeByXPath.kt` 155 | 🟡 | `xpath.rs` 165 手写译码器，无轴/函数/复合谓词。**实测仅 6% 源使用** |
 | JSONPath | `AnalyzeByJSonPath.kt` 172 | 🟡 | 缺递归下降 `..`（8%）、过滤 `?(@.x)`（4%） |
 | Regex | `AnalyzeByRegex.kt` 57 | ✅ | Java 正则差异需差异清单 |
@@ -113,7 +113,7 @@
 
 ### 0.3 实测覆盖率基线（970 源语料，2026-09-02）
 
-语料：`f3f55c6e-723b-4055-b254-124c9d88c5cb.json`，**970 个真实书源，22,220 条规则串**。
+语料：`src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json`，**970 个真实书源，22,220 条规则串**。
 远超 v1 §4.4 要求的 300 源门槛。
 
 #### 0.3.1 头条数字
@@ -131,10 +131,10 @@
 
 | 阻塞语法 | 影响源数 | 占比 | 修复后累计 | 边际收益 | 现状 |
 | --- | ---: | ---: | ---: | ---: | --- |
-| **JSoup 排除 `!n`** | 299 | 31% | 44.9% | +13.6 | `UnsupportedJsoup` |
+| **JSoup 排除 `!n`** | 299 | 31% | 44.9% | +13.6 | ✅ |
 | **URL 选项对象 `,{...}`** | 277 | 29% | 62.9% | **+17.9** | 仅 search 阶段部分支持 |
-| **JSoup 区间 `.a:b`** | 146 | 15% | 73.4% | +10.5 | `UnsupportedJsoup` |
-| **JSoup `@@`** | 102 | 11% | 81.8% | +8.4 | 未识别 |
+| **JSoup 区间 `.a:b`** | 146 | 15% | 73.4% | +10.5 | ✅ |
+| **JSoup `@@`** | 102 | 11% | 81.8% | +8.4 | ✅ |
 | JSONPath 递归下降 `..` | 78 | 8% | 89.3% | +7.5 | 未实现 |
 | XPath（全部形态） | 58 | 6% | 94.6% | +5.4 | 手写译码器，部分可用 |
 | JSONPath 过滤 `?()` | 43 | 4% | 99.1% | +4.4 | 未实现 |
@@ -153,7 +153,7 @@
 | `{{ 模板 }}` | 961 | 99% | ✅ |
 | `##` 替换 | 826 | 85% | ✅ |
 | `&&` 串联 | 435 | 45% | ✅ |
-| `!n` 排除 | 299 | 31% | ⬜ |
+| `!n` 排除 | 299 | 31% | ✅ |
 | `@js:` | 286 | 29% | ✅ |
 | URL 选项 `,{...}` | 277 | 29% | 🟡 |
 | `\|\|` 备选 | 265 | 27% | ✅ |
@@ -161,8 +161,8 @@
 | `java.*` 调用 | 210 | 22% | 🟡 19/100 方法 |
 | 负索引 `.-1` | 184 | 19% | ✅ 已实测确认 |
 | JSONPath `$.` | 155 | 16% | 🟡 |
-| 区间 `.a:b` | 146 | 15% | ⬜ |
-| `@@` | 102 | 11% | ⬜ |
+| 区间 `.a:b` | 146 | 15% | ✅ |
+| `@@` | 102 | 11% | ✅ |
 | `@put:` | 89 | 9% | ✅ |
 | `@get:` | 79 | 8% | ✅ |
 | JSONPath `..` | 78 | 8% | ⬜ |
@@ -343,7 +343,7 @@ P7  性能 / 稳定性 / 发布                  2 周
 
 | 来源 | 状态 | 说明 |
 | --- | --- | --- |
-| **`f3f55c6e-723b-4055-b254-124c9d88c5cb.json`** | ✅ **已到位（2026-09-02）** | **970 源 / 22,220 条规则串**，超出 300 源门槛 3 倍。§0.3 的全部数据出自它 |
+| **`src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json`** | ✅ **已到位（2026-09-02）** | **970 源 / 22,220 条规则串**，超出 300 源门槛 3 倍。§0.3 的全部数据出自它 |
 | `legado-with-MD3/assets/defaultData/*.json` | ✅ 本地即有 | 见 §1.1 表：1 个全字段源 + 27 条 TXT 目录正则 + coverRule 压测样本 |
 | 调试器导出的失败源 | 由 P2 产出 | 每个真实失败自动沉淀为夹具 |
 
@@ -384,9 +384,11 @@ P7  性能 / 稳定性 / 发布                  2 周
 
 ### 3.5 验收
 
-- [ ] 一条命令产出覆盖率报告，落 `docs/coverage/YYYY-MM-DD.md`，每完成一项 P1 任务后重跑并 diff
+- [x] 一条命令产出覆盖率报告，落 `docs/coverage/rule-audit.md`，每完成一项 P1 任务后重跑并 diff
 
 > P0 进度（本轮）：`READER_STRICT_ENGINE` 已接入规则管线；默认模式保留 CSS 兼容兜底，置为 `1`/`true` 时规则执行错误会以 `AppError::Parse` 返回，不再静默回退。
+> 2026-09-03 用 Rust evaluator 重跑后的严格口径为 **191 / 970 = 19.7%**；31.3% 保留为早期 token 正则近似基线，两者不再混用。
+> 2026-09-03 完成 §4.2 后严格口径升至 **330 / 970 = 34.0%**，相对上一严格基线增加 **139 源 / 14.3pp**。
 - [ ] 报告能直接回答：「当前 N 个源里，M 个所有规则均可执行；剩余 N−M 个的阻塞 token TOP10 是 …」
 - [ ] `txtTocRule.json` 27 条规则移植进 `infrastructure/ebook/txt.rs`，替换手写启发式，附对照测试
 - [ ] `defaultData/bookSources.json` 进 `tests/fixtures/`，作为字段级导入回归
@@ -425,6 +427,8 @@ P7  性能 / 稳定性 / 发布                  2 周
 **本步不新增用户可见功能，但它是后面每一条规则能否发对请求的前提。**
 验证基准：`coverRule.json` 那条 data-URL 规则能被正确构造并执行。
 
+> 2026-09-03 进度：共享构造器已拆入 `source_engine/url/{parser,options,encoding,transport,rate_limit}.rs`，并接入当前已存在的 search / bookInfo / toc / content / cover 五条链路；`headers` / `retry` / `origin` / `type` / `js` / `bodyJs`、data URL、字符集和 `concurrentRate` 已覆盖。Explore 链路尚未存在，待 §4.6 接入后本项转为全量完成。
+
 ### 4.2 Default(JSoup) 模式补齐（三项合计覆盖 43% 书源）
 
 `jsoup.rs` 283 行 vs `AnalyzeByJSoup.kt` 524 行。**这一节是整个 P1 里性价比最高的部分** ——
@@ -435,10 +439,12 @@ P7  性能 / 稳定性 / 发布                  2 周
 | **排除 `!n`** | 299 (31%) | `!0` / `!1:2` / `!-1`。当前返回 `UnsupportedJsoup` |
 | **区间 `.a:b`** | 146 (15%) | `.0:1:2` / `[0:3]` / 负步长 |
 | **`@@`** | 102 (11%) | 强制 JSoup 模式前缀 |
-| allInOne（`+` 开头） | 未单独统计 | 顺带对齐 |
+| allInOne（`:` 开头） | 未单独统计 | 顺带对齐；以目标项目 `splitSourceRule(..., allInOne = true)` 的实际实现为准 |
 | `children` / `textNodes` / `ownText` 边界 | — | 与 legado 逐字对齐 |
 
 负索引 `.-1`（184 源 / 19%）**已实测确认支持**（`jsoup.rs:136` + `step.rs:58`，各有单测）。
+
+> 2026-09-03 进度：本节完成。统一位置筛选器现支持旧式索引列表 `.0:1:2`、排除 `!0` / `!1:2` / `!-1`、方括号单索引与包含端点区间、缺省端点、负索引、反向范围和负步长；筛选按每个父节点独立应用。`@@` 与 allInOne `:` 前缀已补回归测试，并对齐 `text` 私有匹配、`textNodes`、`ownText`、`all` 的边界行为。真实语料中原有的 range/exclusion `UnsupportedJsoup` 错误已清零。
 
 ### 4.3 JSONPath / XPath（按实测降级）
 
@@ -631,8 +637,8 @@ READER_STRICT_ENGINE=1 cargo run --bin source-audit -- \
   --corpus src-tauri/tests/corpus/sources.json --keyword 剑来 --concurrency 8 --out audit.csv
 
 # §0.3 数据的产出方式（Node 原型，待移植为上面两个 bin）
-node .scratch/corpus-audit.cjs f3f55c6e-723b-4055-b254-124c9d88c5cb.json   # token / java.* / 字段频次
-node .scratch/coverage.cjs     f3f55c6e-723b-4055-b254-124c9d88c5cb.json   # 覆盖率基线 + 边际收益
+node .scratch/corpus-audit.cjs src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json   # token / java.* / 字段频次
+node .scratch/coverage.cjs     src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json   # 覆盖率基线 + 边际收益
 ```
 
 **本文件所有对照数据的取数方式**（2026-09-02 实测）：
@@ -716,13 +722,13 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 
 **外部阻塞项已清零。** 按依赖顺序：
 
-| # | 任务 | 产出 | 节 |
-| ---: | --- | --- | --- |
-| 0 | **把语料挪进 `src-tauri/tests/corpus/` 并加 `.gitignore`** | 避免 5MB JSON 误入 git 历史 | §3.1 |
+| # | 任务 | 产出 | 节 | 状态 |
+| ---: | --- | --- | --- | :---: |
+| 0 | **把语料挪进 `src-tauri/tests/corpus/` 并加 `.gitignore`** | 避免 5MB JSON 误入 git 历史 | §3.1 | ✅ |
 | 1 | **加 `READER_STRICT_ENGINE` 开关**，让 `pipeline.rs` 停止吞掉引擎错误 | 覆盖率可测的前提 | §3.4 | ✅
 | 2 | **`rule-audit` bin**：把 Node 原型移植成 Rust，用真实 `split_rule`/evaluator 判定 | 31.3% 这个数字有了权威口径 | §3.2 | ✅
-| 3 | **提取 `source_engine/url/`**，`build_search_request` 搬过去并推广到六阶段 | 31.3% → 62.9% | §4.1 |
-| 4 | **JSoup 三项：`!n` / `.a:b` / `@@`** | 62.9% → **81.8%** | §4.2 |
+| 3 | **提取 `source_engine/url/`**，`build_search_request` 搬过去并推广到六阶段 | 31.3% → 62.9% | §4.1 | 🟡（现有五阶段已接入，Explore 待 §4.6） |
+| 4 | **JSoup 三项：`!n` / `.a:b` / `@@`** | 62.9% → **81.8%** | §4.2 | ✅ |
 | 5 | **移植 `txtTocRule.json` 27 条规则**替换手写启发式（可与 3/4 并行） | TXT 目录识别对齐 legado | §3.5 |
 | 6 | JSONPath `..` + `?()`，XPath 按 58 条实例逐条扩展 | 81.8% → 99.1% | §4.3 |
 | 7 | 发现页 + 字段补齐 | `exploreUrl` 67% 的源解锁第二入口 | §4.6 |

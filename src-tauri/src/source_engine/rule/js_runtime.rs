@@ -13,7 +13,7 @@ use rquickjs::{Context, Ctx, Function, Object, Runtime};
 use serde_json::Value as JsonValue;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -47,6 +47,8 @@ struct JsHttpResponse {
 pub struct JsContext {
     pub result: String,
     pub url: Option<String>,
+    pub key: Option<String>,
+    pub base_url: Option<String>,
     pub variables: HashMap<String, String>,
     pub http: Option<JsHttpContext>,
 }
@@ -104,7 +106,17 @@ impl QuickJsRuntime {
             .map_err(|error| AppError::Source(format!("JS context: {error}")))?;
         let values = Arc::new(Mutex::new(context.variables));
         let output = quick_context
-            .with(|ctx| install_globals(ctx, &values, context.result, context.url, context.http))
+            .with(|ctx| {
+                install_globals(
+                    ctx,
+                    &values,
+                    context.result,
+                    context.url,
+                    context.key,
+                    context.base_url,
+                    context.http,
+                )
+            })
             .and_then(|()| quick_context.with(|ctx| evaluate_script(ctx, script)))?;
         let variables = values
             .lock()
@@ -142,12 +154,20 @@ fn install_globals<'js>(
     variables: &Arc<Mutex<HashMap<String, String>>>,
     result: String,
     url: Option<String>,
+    key: Option<String>,
+    base_url: Option<String>,
     http: Option<JsHttpContext>,
 ) -> Result<(), AppError> {
     let globals = ctx.globals();
     globals.set("result", result).map_err(js_error)?;
     globals
         .set("url", url.unwrap_or_default())
+        .map_err(js_error)?;
+    globals
+        .set("key", key.unwrap_or_default())
+        .map_err(js_error)?;
+    globals
+        .set("baseUrl", base_url.unwrap_or_default())
         .map_err(js_error)?;
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
@@ -599,13 +619,21 @@ fn blocking_http_request_with_options(
 }
 
 fn build_js_http_session(context: JsHttpContext) -> Result<JsHttpSession, AppError> {
+    static CLIENT: OnceLock<Result<reqwest::blocking::Client, String>> = OnceLock::new();
+    let client = CLIENT
+        .get_or_init(|| {
+            reqwest::blocking::Client::builder()
+                .user_agent("Reader Desktop/0.1")
+                .cookie_store(true)
+                .timeout(Duration::from_secs(15))
+                .build()
+                .map_err(|error| error.to_string())
+        })
+        .as_ref()
+        .map_err(|error| AppError::Network(error.clone()))?
+        .clone();
     Ok(JsHttpSession {
-        client: reqwest::blocking::Client::builder()
-            .user_agent("Reader Desktop/0.1")
-            .cookie_store(true)
-            .timeout(Duration::from_secs(15))
-            .build()
-            .map_err(AppError::network)?,
+        client,
         context,
         response: Arc::new(Mutex::new(None)),
     })

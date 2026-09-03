@@ -7,6 +7,7 @@ use crate::{
         legado_rules::{LegadoRules, LegadoTocRule},
         rule::{evaluate, evaluate_first, Extraction, RuleContext},
         selector,
+        url::absolutize,
     },
 };
 
@@ -72,18 +73,6 @@ fn joined(
     Ok((!text.trim().is_empty()).then_some(text))
 }
 
-fn absolute(base: &str, value: &str) -> String {
-    reqwest::Url::parse(value)
-        .map(|url| url.to_string())
-        .unwrap_or_else(|_| {
-            reqwest::Url::parse(base)
-                .ok()
-                .and_then(|url| url.join(value).ok())
-                .map(|url| url.to_string())
-                .unwrap_or_else(|| value.to_owned())
-        })
-}
-
 pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
     if let Some(rules) = LegadoRules::decode(&source.raw_rules).search {
         if let Some(list) = rules.book_list.as_deref() {
@@ -102,8 +91,8 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
                     title,
                     author: first(source, rules.author.as_ref(), item)?,
                     cover: first(source, rules.cover_url.as_ref(), item)?
-                        .map(|value| absolute(&source.base_url, &value)),
-                    url: absolute(&source.base_url, &url),
+                        .map(|value| absolutize(&source.base_url, &value)),
+                    url: absolutize(&source.base_url, &url),
                 });
             }
             if !results.is_empty() {
@@ -121,7 +110,7 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppE
             author: first(source, rules.author.as_ref(), html)?,
             intro: joined(source, rules.intro.as_ref(), html)?,
             cover: first(source, rules.cover_url.as_ref(), html)?
-                .map(|value| absolute(&source.base_url, &value)),
+                .map(|value| absolutize(&source.base_url, &value)),
             kind: first(source, rules.kind.as_ref(), html)?,
             latest_chapter: first(source, rules.last_chapter.as_ref(), html)?,
         };
@@ -161,7 +150,7 @@ fn engine_catalog(
         let Some(url) = first(source, rules.chapter_url.as_ref(), item)? else {
             continue;
         };
-        chapters.push((name, absolute(&source.base_url, &url)));
+        chapters.push((name, absolutize(&source.base_url, &url)));
     }
     Ok((!chapters.is_empty()).then_some(chapters))
 }
@@ -174,20 +163,6 @@ pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage
         }
     }
     selector::parse_catalog_page(source, html).map_err(AppError::parse)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::strict_engine_value;
-
-    #[test]
-    fn strict_engine_only_accepts_enabled_values() {
-        assert!(!strict_engine_value(None));
-        assert!(!strict_engine_value(Some("0")));
-        assert!(!strict_engine_value(Some("yes")));
-        assert!(strict_engine_value(Some("1")));
-        assert!(strict_engine_value(Some("TRUE")));
-    }
 }
 
 pub fn parse_content_page(
@@ -207,4 +182,18 @@ pub fn parse_content_page(
         }
     }
     selector::parse_content_page(source, html).map_err(AppError::parse)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strict_engine_value;
+
+    #[test]
+    fn strict_engine_only_accepts_enabled_values() {
+        assert!(!strict_engine_value(None));
+        assert!(!strict_engine_value(Some("0")));
+        assert!(!strict_engine_value(Some("yes")));
+        assert!(strict_engine_value(Some("1")));
+        assert!(strict_engine_value(Some("TRUE")));
+    }
 }

@@ -3,14 +3,12 @@ use crate::{
     domain::Book,
     error::AppError,
     infrastructure::ebook::{epub, title_from_filename, txt, ParsedBook},
-    infrastructure::http::{
-        client::build_source_client,
-        request::{response_error, send_source_request},
-    },
+    infrastructure::http::{client::build_source_client, request::response_error},
     repository::{book::SqliteBookRepository, BookRepository},
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
     source_engine::pipeline::parse_book_info,
+    source_engine::url::{build as build_url_request, decode_text, fetch_bytes, send},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 
@@ -69,36 +67,27 @@ impl BookService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let response = send_source_request(&client, url, &source).await?;
+        let request = build_url_request(&source, url, None, "详情 URL")?;
+        let response = send(&client, &source, &request).await?;
         if !response.status().is_success() {
             return Err(AppError::Network(
                 response_error(response, &source.name).await,
             ));
         }
-        let html = response.text().await.map_err(AppError::network)?;
+        let html = decode_text(response, &request, &source).await?;
         let info = parse_book_info(&source, &html)?;
         let cover_url = info.cover.clone();
         self.books.update_info(book_id, &info).await?;
         if let Some(cover) = cover_url.as_deref() {
-            if let Ok(response) = send_source_request(&client, cover, &source).await {
-                if response.status().is_success() {
-                    let mime = response
-                        .headers()
-                        .get(reqwest::header::CONTENT_TYPE)
-                        .and_then(|v| v.to_str().ok())
-                        .unwrap_or("image/jpeg")
-                        .split(';')
-                        .next()
-                        .unwrap_or("image/jpeg")
-                        .to_owned();
-                    if let Ok(bytes) = response.bytes().await {
-                        self.books
-                            .save_cover_data(
-                                book_id,
-                                &format!("data:{mime};base64,{}", STANDARD.encode(bytes)),
-                            )
-                            .await?;
-                    }
+            if let Ok(request) = build_url_request(&source, cover, None, "封面 URL") {
+                if let Ok(fetched) = fetch_bytes(&client, &source, &request).await {
+                    let mime = fetched.content_type.as_deref().unwrap_or("image/jpeg");
+                    self.books
+                        .save_cover_data(
+                            book_id,
+                            &format!("data:{mime};base64,{}", STANDARD.encode(fetched.bytes)),
+                        )
+                        .await?;
                 }
             }
         }

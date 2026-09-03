@@ -222,4 +222,18 @@ mod tests {
             RuleParseError::Unclosed("<js> block")
         );
     }
+
+    #[test]
+    fn forced_jsoup_prefix_selects_default_mode() {
+        let parsed = split_rule("@@div.card.0@text").unwrap();
+        assert_eq!(parsed[0][0].mode, RuleMode::Default);
+        assert_eq!(parsed[0][0].rule, "div.card.0@text");
+    }
+
+    #[test]
+    fn recognizes_legado_all_in_one_regex_marker() {
+        let parsed = split_rule(":chapter-(\\d+)").unwrap();
+        assert_eq!(parsed[0][0].mode, RuleMode::Regex);
+        assert_eq!(parsed[0][0].rule, "chapter-(\\d+)");
+    }
 }

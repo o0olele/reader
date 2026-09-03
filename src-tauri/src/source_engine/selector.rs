@@ -1,6 +1,7 @@
 //! CSS selector execution for the currently supported source-rule subset.
 
 use crate::domain::source::{BookInfo, BookSearchResult, BookSource};
+use crate::source_engine::url::absolutize;
 use scraper::{ElementRef, Html, Selector};
 
 fn text(element: ElementRef<'_>) -> Option<String> {
@@ -31,18 +32,6 @@ fn extract(element: ElementRef<'_>, rule: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn absolute_url(base: &str, value: &str) -> String {
-    reqwest::Url::parse(value)
-        .map(|url| url.to_string())
-        .unwrap_or_else(|_| {
-            reqwest::Url::parse(base)
-                .ok()
-                .and_then(|url| url.join(value).ok())
-                .map(|url| url.to_string())
-                .unwrap_or_else(|| value.to_owned())
-        })
-}
-
 fn first_by_rule(document: &Html, rule: &str) -> Option<String> {
     let selector = rule.split("::attr(").next()?.trim();
     let selector = Selector::parse(selector).ok()?;
@@ -64,7 +53,7 @@ pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, Str
         .filter_map(|item| {
             Some((
                 extract(item, &source.catalog_rule.title)?,
-                absolute_url(&source.base_url, &extract(item, &source.catalog_rule.url)?),
+                absolutize(&source.base_url, &extract(item, &source.catalog_rule.url)?),
             ))
         })
         .collect())
@@ -126,7 +115,7 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, Stri
         intro: read(source.info_rule.intro.as_ref()),
         cover: source.info_rule.cover.as_ref().and_then(|rule| {
             let value = read(Some(rule))?;
-            Some(absolute_url(&source.base_url, &value))
+            Some(absolutize(&source.base_url, &value))
         }),
         kind: read(source.info_rule.kind.as_ref()),
         latest_chapter: read(source.info_rule.latest_chapter.as_ref()),
@@ -141,7 +130,7 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
         .select(&items)
         .filter_map(|item| {
             let title = extract(item, &source.search_rule.title)?;
-            let url = absolute_url(&source.base_url, &extract(item, &source.search_rule.url)?);
+            let url = absolutize(&source.base_url, &extract(item, &source.search_rule.url)?);
             let author = source
                 .search_rule
                 .author
@@ -152,7 +141,7 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
                 .cover
                 .as_deref()
                 .and_then(|rule| extract(item, rule))
-                .map(|value| absolute_url(&source.base_url, &value));
+                .map(|value| absolutize(&source.base_url, &value));
             Some(BookSearchResult {
                 source_id: source.id,
                 source_name: source.name.clone(),
@@ -203,6 +192,7 @@ mod tests {
             session_expires_at: None,
             sign_script: None,
             proxy_url: None,
+            concurrent_rate: None,
             enabled: true,
             raw_rules: Default::default(),
         }

@@ -3,11 +3,7 @@
 use crate::{
     domain::{Chapter, ReadingProgress},
     error::AppError,
-    infrastructure::http::{
-        client::build_source_client,
-        request::{response_error, send_source_request},
-        url::resolve_url,
-    },
+    infrastructure::http::{client::build_source_client, request::response_error},
     repository::{
         book::SqliteBookRepository, chapter::SqliteChapterRepository,
         progress::SqliteProgressRepository, source::SqliteSourceRepository, BookRepository,
@@ -15,6 +11,7 @@ use crate::{
     },
     service::settings_service::SettingsService,
     source_engine::pipeline::{parse_catalog_page, parse_content_page},
+    source_engine::url::{build_with_base, decode_text, send},
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -121,26 +118,30 @@ impl ReaderService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let mut current_url = chapter_url.to_owned();
+        let mut current_rule = chapter_url.to_owned();
+        let mut current_base = source.base_url.clone();
         let mut visited = HashSet::new();
         let mut pages = Vec::new();
         for _ in 0..20 {
-            if !visited.insert(current_url.clone()) {
+            let request = build_with_base(&source, &current_base, &current_rule, None, "正文 URL")?;
+            let request_key = format!("{} {} {:?}", request.method, request.url, request.body);
+            if !visited.insert(request_key) {
                 break;
             }
-            let response = send_source_request(&client, &current_url, &source).await?;
+            let response = send(&client, &source, &request).await?;
             if !response.status().is_success() {
                 return Err(AppError::Network(
                     response_error(response, &source.name).await,
                 ));
             }
-            let html = response.text().await.map_err(AppError::network)?;
+            let html = decode_text(response, &request, &source).await?;
             let (page, next) = parse_content_page(&source, &html)?;
             pages.push(page);
             let Some(next) = next else {
                 break;
             };
-            current_url = resolve_url(&source.base_url, &next, "分页 URL")?.to_string();
+            current_base = request.url.to_string();
+            current_rule = next;
         }
         let content = pages.join("\n");
         if let Some(id) = chapter_id {
@@ -167,26 +168,30 @@ impl ReaderService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let mut current_url = resolve_url(&source.base_url, &book_url, "目录 URL")?.to_string();
+        let mut current_rule = book_url;
+        let mut current_base = source.base_url.clone();
         let mut visited = HashSet::new();
         let mut catalog = Vec::new();
         for _ in 0..50 {
-            if !visited.insert(current_url.clone()) {
+            let request = build_with_base(&source, &current_base, &current_rule, None, "目录 URL")?;
+            let request_key = format!("{} {} {:?}", request.method, request.url, request.body);
+            if !visited.insert(request_key) {
                 break;
             }
-            let response = send_source_request(&client, &current_url, &source).await?;
+            let response = send(&client, &source, &request).await?;
             if !response.status().is_success() {
                 return Err(AppError::Network(
                     response_error(response, &source.name).await,
                 ));
             }
-            let html = response.text().await.map_err(AppError::network)?;
+            let html = decode_text(response, &request, &source).await?;
             let (page, next) = parse_catalog_page(&source, &html)?;
             catalog.extend(page);
             let Some(next) = next else {
                 break;
             };
-            current_url = resolve_url(&source.base_url, &next, "分页 URL")?.to_string();
+            current_base = request.url.to_string();
+            current_rule = next;
         }
         tracing::info!(target: "reader", book_id, chapter_count = catalog.len(), "catalog refreshed");
         if catalog.is_empty() {

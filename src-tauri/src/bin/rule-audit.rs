@@ -124,26 +124,29 @@ fn run(input: &str) -> Result<Audit, String> {
         sources: sources.len(),
         ..Default::default()
     };
+    let token_patterns = TOKENS
+        .iter()
+        .map(|(name, pattern)| (*name, Regex::new(pattern).expect("token regex")))
+        .collect::<Vec<_>>();
+    let java_pattern = Regex::new(r"java\.([A-Za-z0-9_]+)").expect("java method regex");
     for (source_id, source) in sources.iter().enumerate() {
         let rules = source_rules(source);
         let mut source_clean = true;
         for (path, raw) in rules {
             report.rules += 1;
-            for (name, pattern) in TOKENS {
-                if Regex::new(pattern).expect("token regex").is_match(&raw) {
+            for (name, pattern) in &token_patterns {
+                if pattern.is_match(&raw) {
                     let entry = report.token_hits.entry((*name).to_owned()).or_default();
                     entry.0 += 1;
                     entry.1.insert(source_id);
                 }
             }
-            if let Ok(java) = Regex::new(r"java\.([A-Za-z0-9_]+)") {
-                for method in java.captures_iter(&raw).filter_map(|m| m.get(1)) {
-                    report
-                        .java_methods
-                        .entry(method.as_str().to_owned())
-                        .or_default()
-                        .insert(source_id);
-                }
+            for method in java_pattern.captures_iter(&raw).filter_map(|m| m.get(1)) {
+                report
+                    .java_methods
+                    .entry(method.as_str().to_owned())
+                    .or_default()
+                    .insert(source_id);
             }
             // URL templates, headers and JS libraries are metadata rather than
             // evaluator rules; only actual rule fields are dry-run here.

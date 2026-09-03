@@ -2,6 +2,7 @@
 
 use super::jsoup::{Matcher, Selection};
 use super::model::RuleExecutionError;
+use super::position::split_position;
 
 /// The extraction terminals legado's default mode understands.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -10,6 +11,7 @@ pub(super) enum Terminal<'a> {
     TextNodes,
     OwnText,
     Html,
+    All,
     Attribute(&'a str),
 }
 
@@ -27,6 +29,7 @@ fn keyword_terminal(step: &str) -> Option<Terminal<'static>> {
         "textNodes" => Some(Terminal::TextNodes),
         "ownText" => Some(Terminal::OwnText),
         "html" | "outerHtml" => Some(Terminal::Html),
+        "all" => Some(Terminal::All),
         _ => None,
     }
 }
@@ -55,27 +58,15 @@ fn private_kind(step: &str) -> Option<(&str, &str)> {
     matches!(kind, "class" | "id" | "tag" | "text" | "children").then_some((kind, rest))
 }
 
-/// Splits a trailing `.<integer>` index off a step, e.g. `tag.a.-1` -> index -1.
-fn split_index(value: &str) -> (&str, Option<i32>) {
-    match value.rsplit_once('.') {
-        Some((head, tail)) => match tail.parse::<i32>() {
-            Ok(index) if !head.is_empty() => (head, Some(index)),
-            _ => (value, None),
-        },
-        None => (value, None),
-    }
-}
-
 fn parse_selection(step: &str) -> Result<Selection, RuleExecutionError> {
-    let (body, index) = split_index(step);
+    let (body, positions) = split_position(step);
+    if body.is_empty() {
+        return Ok(Selection {
+            matcher: Matcher::Children,
+            positions,
+        });
+    }
     if let Some((kind, name)) = private_kind(body) {
-        // `.0:1:2` ranges and `!` exclusions exist in legado but are not
-        // implemented here; reporting beats returning an empty match set.
-        if name.contains(':') || name.contains('!') {
-            return Err(RuleExecutionError::UnsupportedJsoup(format!(
-                "`{step}` uses a range or exclusion"
-            )));
-        }
         let matcher = match kind {
             "class" => Matcher::Css(format!(".{name}")),
             "id" => Matcher::Css(format!("#{name}")),
@@ -83,17 +74,17 @@ fn parse_selection(step: &str) -> Result<Selection, RuleExecutionError> {
             "text" => Matcher::Text(name.to_owned()),
             _ => Matcher::Children,
         };
-        return Ok(Selection { matcher, index });
+        return Ok(Selection { matcher, positions });
     }
     if body == "children" {
         return Ok(Selection {
             matcher: Matcher::Children,
-            index,
+            positions,
         });
     }
     Ok(Selection {
         matcher: Matcher::Css(body.to_owned()),
-        index,
+        positions,
     })
 }
 
@@ -136,7 +127,10 @@ mod tests {
     fn maps_private_kinds_and_indexes() {
         assert!(matches!(selection("class.odd").matcher, Matcher::Css(ref css) if css == ".odd"));
         assert!(matches!(selection("id.main").matcher, Matcher::Css(ref css) if css == "#main"));
-        assert_eq!(selection("tag.a.-1").index, Some(-1));
+        assert_ne!(
+            selection("tag.a.-1").positions,
+            super::super::position::PositionFilter::All
+        );
         assert!(matches!(selection("text.下一章").matcher, Matcher::Text(_)));
         assert!(matches!(selection("children.0").matcher, Matcher::Children));
     }
@@ -146,14 +140,21 @@ mod tests {
         assert!(
             matches!(selection(".col-2 a").matcher, Matcher::Css(ref css) if css == ".col-2 a")
         );
-        assert!(selection(".col-2 a").index.is_none());
+        assert_eq!(
+            selection(".col-2 a").positions,
+            super::super::position::PositionFilter::All
+        );
     }
 
     #[test]
-    fn rejects_ranges_and_exclusions() {
+    fn parses_ranges_and_exclusions() {
         assert!(matches!(
             parse_step("tag.a.0:2", false),
-            Err(RuleExecutionError::UnsupportedJsoup(_))
+            Ok(Step::Select(_))
+        ));
+        assert!(matches!(
+            parse_step("tag.a[!0:2]", false),
+            Ok(Step::Select(_))
         ));
     }
 }

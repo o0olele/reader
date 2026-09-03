@@ -182,6 +182,7 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
             sign_script: field(object, "sign_script", "signScript")
                 .or_else(|| field(object, "js", "js")),
             proxy_url: field(object, "proxy_url", "proxyUrl"),
+            concurrent_rate: field(object, "concurrent_rate", "concurrentRate"),
             next_toc_url_selector: rule(catalog.as_ref(), &["nextTocUrl", "nextUrl", "next"])
                 .map(|value| attr(value, "href")),
             next_content_url_selector: rule(
@@ -214,11 +215,12 @@ mod tests {
 
     #[test]
     fn imports_legacy_legado_source() {
-        let input = r#"[{"bookSourceName":"Demo","bookSourceUrl":"https://example.com","searchUrl":"https://example.com/s?q={{key}}","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
+        let input = r#"[{"bookSourceName":"Demo","bookSourceUrl":"https://example.com","searchUrl":"https://example.com/s?q={{key}}","concurrentRate":"5/1000","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
         let sources = parse_sources_json(input).unwrap();
         assert_eq!(sources[0].name, "Demo");
         assert_eq!(sources[0].search_rule.url, "a::attr(href)");
         assert_eq!(sources[0].catalog_rule.item, ".chapter");
+        assert_eq!(sources[0].concurrent_rate.as_deref(), Some("5/1000"));
     }
 
     #[test]

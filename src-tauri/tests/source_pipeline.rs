@@ -45,6 +45,7 @@ fn source_a() -> BookSource {
         session_expires_at: None,
         sign_script: None,
         proxy_url: None,
+        concurrent_rate: None,
         enabled: true,
         raw_rules: RawSourceRules::default(),
     }

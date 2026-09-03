@@ -149,6 +149,7 @@ mod tests {
             token_path: None,
             sign_script: None,
             proxy_url: None,
+            concurrent_rate: None,
             next_toc_url_selector: None,
             next_content_url_selector: None,
             enabled: true,

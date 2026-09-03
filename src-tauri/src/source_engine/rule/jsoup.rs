@@ -16,6 +16,7 @@
 
 use super::evaluator::apply_postprocess;
 use super::model::{RuleExecutionError, SourceRule};
+use super::position::{apply_positions, PositionFilter};
 use super::step::{parse_step, Step, Terminal};
 use scraper::{ElementRef, Html, Selector};
 
@@ -35,6 +36,15 @@ pub fn normalized_text(element: ElementRef<'_>) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn own_text(element: ElementRef<'_>) -> String {
+    element
+        .children()
+        .filter_map(|child| child.value().as_text().map(|text| text.trim()))
+        .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -85,7 +95,7 @@ pub fn execute_jsoup(
 /// A selection step: a matcher plus an optional index into its matches.
 pub(super) struct Selection {
     pub matcher: Matcher,
-    pub index: Option<i32>,
+    pub positions: PositionFilter,
 }
 
 pub(super) enum Matcher {
@@ -100,66 +110,45 @@ fn apply_selection<'a>(
     nodes: &[ElementRef<'a>],
     selection: &Selection,
 ) -> Result<Vec<ElementRef<'a>>, RuleExecutionError> {
-    let mut matched = Vec::new();
-    match &selection.matcher {
-        Matcher::Css(css) => {
-            let selector = Selector::parse(css).map_err(|error| {
-                RuleExecutionError::UnsupportedJsoup(format!(
-                    "`{css}` is not a CSS selector: {error}"
-                ))
-            })?;
-            for node in nodes {
-                matched.extend(node.select(&selector));
-            }
-        }
-        Matcher::Text(needle) => {
-            for node in nodes {
-                matched.extend(
-                    node.descendants()
-                        .filter_map(ElementRef::wrap)
-                        .filter(|element| normalized_text(*element).contains(needle.as_str())),
-                );
-            }
-        }
-        Matcher::Children => {
-            for node in nodes {
-                matched.extend(node.children().filter_map(ElementRef::wrap));
-            }
-        }
-    }
-    Ok(match selection.index {
-        Some(index) => pick(matched, index).into_iter().collect(),
-        None => matched,
-    })
-}
-
-/// Resolves a legado index, where negatives count back from the end.
-fn pick<T>(items: Vec<T>, index: i32) -> Option<T> {
-    let length = items.len();
-    let resolved = if index < 0 {
-        length.checked_sub(index.unsigned_abs() as usize)?
-    } else {
-        index as usize
+    let selector = match &selection.matcher {
+        Matcher::Css(css) => Some(Selector::parse(css).map_err(|error| {
+            RuleExecutionError::UnsupportedJsoup(format!("`{css}` is not a CSS selector: {error}"))
+        })?),
+        _ => None,
     };
-    items.into_iter().nth(resolved)
+    let mut matched = Vec::new();
+    for node in nodes {
+        let candidates = match (&selection.matcher, &selector) {
+            (Matcher::Css(_), Some(selector)) => node.select(selector).collect(),
+            (Matcher::Text(needle), _) => node
+                .descendants()
+                .filter_map(ElementRef::wrap)
+                .filter(|element| own_text(*element).contains(needle.as_str()))
+                .collect(),
+            (Matcher::Children, _) => node.children().filter_map(ElementRef::wrap).collect(),
+            _ => unreachable!("CSS matchers always have a compiled selector"),
+        };
+        matched.extend(apply_positions(candidates, &selection.positions));
+    }
+    Ok(matched)
 }
 
 fn collect_terminal(nodes: &[ElementRef<'_>], terminal: Terminal<'_>) -> Vec<String> {
+    if matches!(terminal, Terminal::Html | Terminal::All) {
+        let markup = nodes
+            .iter()
+            .map(|node| node.html())
+            .collect::<Vec<_>>()
+            .join("\n");
+        return (!markup.is_empty()).then_some(markup).into_iter().collect();
+    }
     let mut values = Vec::new();
     for node in nodes {
         match terminal {
             Terminal::Text => values.push(normalized_text(*node)),
-            Terminal::OwnText => values.push(
-                node.children()
-                    .filter_map(|child| child.value().as_text().map(|text| text.trim()))
-                    .filter(|text| !text.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            ),
-            // `textNodes` yields one value per text child, not one per
-            // element. A child spanning several source lines is split further,
-            // otherwise the markup's indentation would leak into the output.
-            Terminal::TextNodes => values.extend(
+            Terminal::OwnText => values.push(own_text(*node)),
+            // Legado returns one newline-joined value per element.
+            Terminal::TextNodes => values.push(
                 node.children()
                     .filter_map(|child| child.value().as_text().map(|text| text.to_string()))
                     .flat_map(|text| {
@@ -168,9 +157,11 @@ fn collect_terminal(nodes: &[ElementRef<'_>], terminal: Terminal<'_>) -> Vec<Str
                             .filter(|line| !line.is_empty())
                             .map(str::to_owned)
                             .collect::<Vec<_>>()
-                    }),
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             ),
-            Terminal::Html => values.push(node.html()),
+            Terminal::Html | Terminal::All => unreachable!("markup terminals return above"),
             Terminal::Attribute(name) => values.push(
                 node.value()
                     .attr(name)
@@ -235,6 +226,28 @@ mod tests {
     }
 
     #[test]
+    fn applies_legacy_position_lists_and_exclusions() {
+        let html = "<ul><li>零</li><li>一</li><li>二</li><li>三</li></ul>";
+        assert_eq!(run("tag.li.0:2:-1@text", html), vec!["零", "二", "三"]);
+        assert_eq!(run("tag.li!0:2@text", html), vec!["一", "三"]);
+        assert_eq!(run("tag.li.!-1@text", html), vec!["零", "一", "二"]);
+    }
+
+    #[test]
+    fn applies_bracket_ranges_including_reverse_and_exclusion() {
+        let html = "<ul><li>零</li><li>一</li><li>二</li><li>三</li></ul>";
+        assert_eq!(run("tag.li[1:3]@text", html), vec!["一", "二", "三"]);
+        assert_eq!(run("tag.li[-1:0]@text", html), vec!["三", "二", "一", "零"]);
+        assert_eq!(run("tag.li[!1:2]@text", html), vec!["零", "三"]);
+    }
+
+    #[test]
+    fn applies_positions_independently_for_each_parent() {
+        let html = "<div><i>A0</i><i>A1</i></div><div><i>B0</i><i>B1</i></div>";
+        assert_eq!(run("tag.div@tag.i.0@text", html), vec!["A0", "B0"]);
+    }
+
+    #[test]
     fn executes_css_selectors_and_attribute_terminals() {
         assert_eq!(run("ul.odd li a@href", LIST), vec!["/one", "/two"]);
         assert_eq!(run(".odd a.0@text", LIST), vec!["第一章"]);
@@ -250,7 +263,15 @@ mod tests {
         let html = r#"<div id="c">前<span>中</span>后</div>"#;
         assert_eq!(run("id.c@text", html), vec!["前 中 后"]);
         assert_eq!(run("id.c@ownText", html), vec!["前 后"]);
-        assert_eq!(run("id.c@textNodes", html), vec!["前", "后"]);
+        assert_eq!(run("id.c@textNodes", html), vec!["前\n后"]);
+    }
+
+    #[test]
+    fn combines_markup_terminals_into_one_value() {
+        let html = "<p>一</p><p>二</p>";
+        let all = run("tag.p@all", html);
+        assert_eq!(all.len(), 1);
+        assert!(all[0].contains("<p>一</p>\n<p>二</p>"));
     }
 
     #[test]
@@ -264,10 +285,6 @@ mod tests {
     fn reports_unsupported_spellings_instead_of_returning_empty() {
         assert!(matches!(
             execute_jsoup(&rule("class.odd@text@tag.a"), LIST, Extraction::Values),
-            Err(RuleExecutionError::UnsupportedJsoup(_))
-        ));
-        assert!(matches!(
-            execute_jsoup(&rule("tag.a.0:2@text"), LIST, Extraction::Values),
             Err(RuleExecutionError::UnsupportedJsoup(_))
         ));
     }

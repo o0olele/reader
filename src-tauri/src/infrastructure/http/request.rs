@@ -106,78 +106,6 @@ pub fn evaluate_sign_script(script: &str, url: &str) -> Option<String> {
     Some(format!("{:x}", hasher.finalize()))
 }
 
-pub async fn send_source_request(
-    client: &reqwest::Client,
-    url: &str,
-    source: &BookSource,
-) -> Result<reqwest::Response, AppError> {
-    send_source_request_with_method(client, url, source, reqwest::Method::GET, None).await
-}
-
-pub async fn send_source_request_with_method(
-    client: &reqwest::Client,
-    url: &str,
-    source: &BookSource,
-    method: reqwest::Method,
-    body: Option<String>,
-) -> Result<reqwest::Response, AppError> {
-    send_source_request_with_options(client, url, source, method, body, &[], None, 2).await
-}
-
-pub async fn send_source_request_with_options(
-    client: &reqwest::Client,
-    url: &str,
-    source: &BookSource,
-    method: reqwest::Method,
-    body: Option<String>,
-    headers: &[(String, String)],
-    origin: Option<&str>,
-    retry: usize,
-) -> Result<reqwest::Response, AppError> {
-    let mut last_error = String::new();
-    let attempts = retry.saturating_add(1).max(1);
-    for attempt in 0..attempts {
-        let started = std::time::Instant::now();
-        tracing::debug!(target: "network", url = %url, attempt, "sending source request");
-        let mut request =
-            source_request_with_method(client, url, source, method.clone(), body.clone())?;
-        if let Some(origin) = origin {
-            request = request.header(reqwest::header::ORIGIN, origin);
-        }
-        for (name, value) in headers {
-            request = request.header(name, value);
-        }
-        let request = request.build().map_err(|error| {
-            AppError::Network(format!("请求构造失败，请检查认证 Header: {error}"))
-        })?;
-        match client.execute(request).await {
-            Ok(response) => {
-                tracing::debug!(target: "network", url = %url, status = response.status().as_u16(), elapsed_ms = started.elapsed().as_millis() as u64, "source response received");
-                return Ok(response);
-            }
-            Err(error) => {
-                tracing::warn!(target: "network", url = %url, attempt, elapsed_ms = started.elapsed().as_millis() as u64, error = %error, "source request failed");
-                last_error = if error.is_timeout() {
-                    "连接超时，请检查网络或代理".into()
-                } else if error.is_connect() {
-                    format!("无法连接目标站点（{}），请检查 DNS、防火墙或代理", error)
-                } else if error.is_builder() {
-                    format!("请求配置无效: {error}")
-                } else {
-                    error.to_string()
-                };
-                if attempt + 1 < attempts {
-                    tokio::time::sleep(std::time::Duration::from_millis(
-                        250_u64 * (attempt as u64 + 1),
-                    ))
-                    .await;
-                }
-            }
-        }
-    }
-    Err(AppError::Network(last_error))
-}
-
 pub async fn response_error(response: reqwest::Response, source_name: &str) -> String {
     let status = response.status();
     let detail = response.text().await.unwrap_or_default();
@@ -233,6 +161,7 @@ mod tests {
             session_expires_at: None,
             sign_script: sign_script.map(str::to_owned),
             proxy_url: None,
+            concurrent_rate: None,
             enabled: true,
             raw_rules: Default::default(),
         }

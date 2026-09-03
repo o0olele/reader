@@ -14,9 +14,10 @@ use crate::{
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
     source_engine::pipeline::parse_search,
-    source_engine::url::{build as build_url_request, RequestSpec},
+    source_engine::url::{
+        build as build_url_request, decode_text, send as send_url_request, RequestSpec,
+    },
 };
-use encoding_rs::GBK;
 use grouping::group_results;
 use serde::Serialize;
 use std::{sync::Arc, time::Instant};
@@ -61,7 +62,7 @@ impl SearchService {
         let proxy = self.settings.proxy_url().await?;
         let shared = build_shared_client(15)?;
         let limiter = Arc::new(tokio::sync::Semaphore::new(8));
-        let keyword = encode_query(query);
+        let keyword = query.to_owned();
         let jobs = sources.into_iter().map(|source| {
             let shared = shared.clone();
             let proxy = proxy.clone();
@@ -109,23 +110,13 @@ impl SearchService {
             .get(source_id)
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
-        let request = build_search_request(&source, &encode_query(query.trim()))?;
+        let request = build_search_request(&source, query.trim())?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let response = crate::infrastructure::http::request::send_source_request_with_options(
-            &client,
-            request.url.as_str(),
-            &source,
-            request.method,
-            request.body,
-            &request.headers,
-            request.origin.as_deref(),
-            request.retry,
-        )
-        .await?;
+        let response = send_url_request(&client, &source, &request).await?;
         let status = response.status().as_u16();
         let (results, auth_required, cloudflare_challenge) = if response.status().is_success() {
             (
-                parse_search(&source, &decode_response(response, request.charset).await?)?,
+                parse_search(&source, &decode_text(response, &request, &source).await?)?,
                 false,
                 false,
             )
@@ -188,19 +179,6 @@ pub struct SearchResponse {
     pub searched_sources: usize,
 }
 
-fn encode_query(value: &str) -> String {
-    value
-        .bytes()
-        .map(|b| {
-            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
-                (b as char).to_string()
-            } else {
-                format!("%{b:02X}")
-            }
-        })
-        .collect()
-}
-
 async fn search_one_source(
     source: BookSource,
     keyword: String,
@@ -223,41 +201,19 @@ async fn search_one_source(
         .await
         .map_err(|_| AppError::Source("搜索并发限制器不可用".into()))?;
     let request = build_search_request(&source, &keyword)?;
-    let response = crate::infrastructure::http::request::send_source_request_with_options(
-        &client,
-        request.url.as_str(),
-        &source,
-        request.method,
-        request.body,
-        &request.headers,
-        request.origin.as_deref(),
-        request.retry,
-    )
-    .await?;
+    let response = send_url_request(&client, &source, &request).await?;
     if !response.status().is_success() {
         return Err(AppError::Network(
             response_error(response, &source.name).await,
         ));
     }
-    parse_search(&source, &decode_response(response, request.charset).await?)
+    parse_search(&source, &decode_text(response, &request, &source).await?)
 }
 
 type SearchRequest = RequestSpec;
 
 fn build_search_request(source: &BookSource, keyword: &str) -> Result<SearchRequest, AppError> {
     build_url_request(source, &source.search_url, Some(keyword), "搜索 URL")
-}
-
-async fn decode_response(
-    response: reqwest::Response,
-    charset: Option<String>,
-) -> Result<String, AppError> {
-    let bytes = response.bytes().await.map_err(AppError::network)?;
-    if charset.as_deref() == Some("gbk") || charset.as_deref() == Some("gb2312") {
-        return Ok(GBK.decode(&bytes).0.into_owned());
-    }
-    String::from_utf8(bytes.to_vec())
-        .map_err(|error| AppError::Parse(format!("响应不是 UTF-8: {error}")))
 }
 
 #[cfg(test)]
@@ -298,6 +254,7 @@ mod tests {
             session_expires_at: None,
             sign_script: None,
             proxy_url: None,
+            concurrent_rate: None,
             enabled: true,
             raw_rules: Default::default(),
         }
@@ -308,7 +265,7 @@ mod tests {
         let source = source(
             "<js>/modules/article/search.php,{'charset':'gbk','body':'searchkey={{key}}&searchtype=all','method':'POST'};result='';result;</js>",
         );
-        let request = build_search_request(&source, "%E6%96%97%E7%A0%B4").unwrap();
+        let request = build_search_request(&source, "斗破").unwrap();
         assert_eq!(
             request.url.as_str(),
             "https://www.69shuba.com/modules/article/search.php"
@@ -316,7 +273,7 @@ mod tests {
         assert_eq!(request.method, reqwest::Method::POST);
         assert_eq!(
             request.body.as_deref(),
-            Some("searchkey=%E6%96%97%E7%A0%B4&searchtype=all")
+            Some("searchkey=%B6%B7%C6%C6&searchtype=all")
         );
         assert_eq!(request.charset.as_deref(), Some("gbk"));
     }
@@ -324,7 +281,7 @@ mod tests {
     #[test]
     fn keeps_regular_search_urls_as_get_requests() {
         let source = source("search?q={{key}}");
-        let request = build_search_request(&source, "%E6%96%97").unwrap();
+        let request = build_search_request(&source, "斗").unwrap();
         assert_eq!(
             request.url.as_str(),
             "https://www.69shuba.com/search?q=%E6%96%97"
