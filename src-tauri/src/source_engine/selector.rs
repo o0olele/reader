@@ -149,6 +149,10 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
                 author,
                 cover,
                 url,
+                intro: None,
+                kind: None,
+                latest_chapter: None,
+                word_count: None,
             })
         })
         .collect())
@@ -165,6 +169,7 @@ mod tests {
             name: "test".into(),
             base_url: "https://example.com".into(),
             search_url: String::new(),
+            explore_url: None,
             search_rule: SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),

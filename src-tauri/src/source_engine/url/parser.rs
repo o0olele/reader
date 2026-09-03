@@ -247,6 +247,7 @@ mod tests {
             name: "test".into(),
             base_url: "https://example.com/books/".into(),
             search_url: String::new(),
+            explore_url: None,
             search_rule: SearchRule {
                 item: "a".into(),
                 title: "a".into(),

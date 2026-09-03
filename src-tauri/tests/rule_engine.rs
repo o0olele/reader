@@ -22,6 +22,7 @@ fn raw_rules() -> RawSourceRules {
         book_info: encode("ruleBookInfo"),
         toc: encode("ruleToc"),
         content: encode("ruleContent"),
+        explore: None,
     }
 }
 
@@ -33,6 +34,7 @@ fn source_c() -> BookSource {
         name: "Fixture C".into(),
         base_url: "https://legado.example".into(),
         search_url: "https://legado.example/s?wd={{key}}".into(),
+        explore_url: None,
         search_rule: SearchRule {
             item: ".no-such-item".into(),
             title: ".no-such-title".into(),

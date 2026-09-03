@@ -51,6 +51,7 @@ export interface RawSourceRules {
   book_info?: string
   toc?: string
   content?: string
+  explore?: string
 }
 
 export interface BookSource {
@@ -58,6 +59,7 @@ export interface BookSource {
   name: string
   base_url: string
   search_url: string
+  explore_url?: string
   search_rule: SearchRule
   raw_rules: RawSourceRules
   enabled: boolean
@@ -93,6 +95,10 @@ export interface BookSearchResult {
   author?: string
   cover?: string
   url: string
+  intro?: string
+  kind?: string
+  latest_chapter?: string
+  word_count?: string
 }
 
 /** The same book merged across every source that returned it. */
@@ -114,6 +120,13 @@ export interface SearchResponse {
   groups: SearchResultGroup[]
   failures: SourceFailure[]
   searched_sources: number
+}
+
+export interface ExploreCategory {
+  source_id: number
+  source_name: string
+  title: string
+  url: string
 }
 
 export interface SourceTestResult {

@@ -26,6 +26,7 @@ const FIELDS = [
   { key: 'name', label: '名称', placeholder: '名称' },
   { key: 'base_url', label: '基础 URL', placeholder: '基础 URL，如 https://example.com' },
   { key: 'search_url', label: '搜索 URL', placeholder: '搜索 URL，使用 {{key}}' },
+  { key: 'explore_url', label: '发现页 URL', placeholder: '发现页 URL，可用 名称::URL 多行配置' },
   { key: 'item', label: '结果项 CSS', placeholder: '结果项 CSS，如 .book' },
   { key: 'title', label: '标题 CSS', placeholder: '标题 CSS，如 .title' },
   { key: 'author', label: '作者 CSS', placeholder: '作者 CSS（可选）' },

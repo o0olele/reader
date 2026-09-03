@@ -5,6 +5,7 @@
 
 pub mod book;
 pub mod bookshelf;
+pub mod explore;
 pub mod reader;
 pub mod search;
 pub mod settings;

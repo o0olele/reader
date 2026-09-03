@@ -21,6 +21,7 @@ pub struct RawSourceRules {
     pub book_info: Option<String>,
     pub toc: Option<String>,
     pub content: Option<String>,
+    pub explore: Option<String>,
 }
 
 impl RawSourceRules {
@@ -29,6 +30,7 @@ impl RawSourceRules {
             && self.book_info.is_none()
             && self.toc.is_none()
             && self.content.is_none()
+            && self.explore.is_none()
     }
 }
 
@@ -38,6 +40,7 @@ pub struct BookSource {
     pub name: String,
     pub base_url: String,
     pub search_url: String,
+    pub explore_url: Option<String>,
     pub search_rule: SearchRule,
     pub info_rule: InfoRule,
     pub catalog_rule: CatalogRule,
@@ -83,6 +86,7 @@ pub struct SourceImport {
     pub name: String,
     pub base_url: String,
     pub search_url: String,
+    pub explore_url: Option<String>,
     pub search_rule: SearchRule,
     pub info_rule: InfoRule,
     pub catalog_rule: CatalogRule,
@@ -148,6 +152,7 @@ impl BookSource {
             name: import.name.clone(),
             base_url: import.base_url.clone(),
             search_url: import.search_url.clone(),
+            explore_url: import.explore_url.clone(),
             search_rule: import.search_rule.clone(),
             info_rule: import.info_rule.clone(),
             catalog_rule: import.catalog_rule.clone(),
@@ -214,6 +219,10 @@ pub struct BookSearchResult {
     pub author: Option<String>,
     pub cover: Option<String>,
     pub url: String,
+    pub intro: Option<String>,
+    pub kind: Option<String>,
+    pub latest_chapter: Option<String>,
+    pub word_count: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -236,6 +245,7 @@ mod tests {
             name: "示例".into(),
             base_url: "https://example.com".into(),
             search_url: "https://example.com?q={{key}}".into(),
+            explore_url: None,
             search_rule: SearchRule {
                 item: ".item".into(),
                 title: ".title".into(),
@@ -281,6 +291,7 @@ mod tests {
             name: "state".into(),
             base_url: "https://example.com".into(),
             search_url: "https://example.com?q={{key}}".into(),
+            explore_url: None,
             search_rule: SearchRule {
                 item: "a".into(),
                 title: "a".into(),

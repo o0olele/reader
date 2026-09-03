@@ -67,6 +67,10 @@ mod tests {
             author: author.map(str::to_owned),
             cover: None,
             url: url.into(),
+            intro: None,
+            kind: None,
+            latest_chapter: None,
+            word_count: None,
         }
     }
 

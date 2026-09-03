@@ -127,6 +127,7 @@ mod tests {
             name: "demo".into(),
             base_url: "https://example.com".into(),
             search_url: "https://example.com?q={{key}}".into(),
+            explore_url: None,
             search_rule: crate::domain::source::SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),

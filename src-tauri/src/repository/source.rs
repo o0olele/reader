@@ -15,15 +15,15 @@ impl SqliteSourceRepository {
 
     pub async fn upsert(&self, source: &BookSource) -> Result<i64, AppError> {
         sqlx::query(
-            "INSERT INTO book_sources (name, base_url, search_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, enabled, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, header, login_url, login_method, login_body, token_path, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET base_url=excluded.base_url, search_url=excluded.search_url, search_item_selector=excluded.search_item_selector, title_selector=excluded.title_selector, author_selector=excluded.author_selector, cover_selector=excluded.cover_selector, url_selector=excluded.url_selector, enabled=excluded.enabled, info_title_selector=excluded.info_title_selector, info_author_selector=excluded.info_author_selector, info_intro_selector=excluded.info_intro_selector, info_cover_selector=excluded.info_cover_selector, catalog_item_selector=excluded.catalog_item_selector, catalog_title_selector=excluded.catalog_title_selector, catalog_url_selector=excluded.catalog_url_selector, content_selector=excluded.content_selector, next_toc_url_selector=excluded.next_toc_url_selector, next_content_url_selector=excluded.next_content_url_selector, header=excluded.header, login_url=excluded.login_url, login_method=excluded.login_method, login_body=excluded.login_body, token_path=excluded.token_path, sign_script=excluded.sign_script, proxy_url=excluded.proxy_url, concurrent_rate=excluded.concurrent_rate, rule_search=excluded.rule_search, rule_book_info=excluded.rule_book_info, rule_toc=excluded.rule_toc, rule_content=excluded.rule_content, updated_at=CURRENT_TIMESTAMP",
+            "INSERT INTO book_sources (name, base_url, search_url, explore_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, enabled, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, header, login_url, login_method, login_body, token_path, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content, rule_explore) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET base_url=excluded.base_url, search_url=excluded.search_url, explore_url=excluded.explore_url, search_item_selector=excluded.search_item_selector, title_selector=excluded.title_selector, author_selector=excluded.author_selector, cover_selector=excluded.cover_selector, url_selector=excluded.url_selector, enabled=excluded.enabled, info_title_selector=excluded.info_title_selector, info_author_selector=excluded.info_author_selector, info_intro_selector=excluded.info_intro_selector, info_cover_selector=excluded.info_cover_selector, catalog_item_selector=excluded.catalog_item_selector, catalog_title_selector=excluded.catalog_title_selector, catalog_url_selector=excluded.catalog_url_selector, content_selector=excluded.content_selector, next_toc_url_selector=excluded.next_toc_url_selector, next_content_url_selector=excluded.next_content_url_selector, header=excluded.header, login_url=excluded.login_url, login_method=excluded.login_method, login_body=excluded.login_body, token_path=excluded.token_path, sign_script=excluded.sign_script, proxy_url=excluded.proxy_url, concurrent_rate=excluded.concurrent_rate, rule_search=excluded.rule_search, rule_book_info=excluded.rule_book_info, rule_toc=excluded.rule_toc, rule_content=excluded.rule_content, rule_explore=excluded.rule_explore, updated_at=CURRENT_TIMESTAMP",
         )
-            .bind(&source.name).bind(&source.base_url).bind(&source.search_url)
+            .bind(&source.name).bind(&source.base_url).bind(&source.search_url).bind(&source.explore_url)
             .bind(&source.search_rule.item).bind(&source.search_rule.title).bind(&source.search_rule.author).bind(&source.search_rule.cover).bind(&source.search_rule.url)
             .bind(source.enabled as i64).bind(&source.info_rule.title).bind(&source.info_rule.author).bind(&source.info_rule.intro).bind(&source.info_rule.cover)
             .bind(&source.catalog_rule.item).bind(&source.catalog_rule.title).bind(&source.catalog_rule.url).bind(&source.content_selector)
             .bind(&source.next_toc_url_selector).bind(&source.next_content_url_selector)
             .bind(&source.header).bind(&source.login_url).bind(&source.login_method).bind(&source.login_body).bind(&source.token_path).bind(&source.sign_script).bind(&source.proxy_url).bind(&source.concurrent_rate)
-            .bind(&source.raw_rules.search).bind(&source.raw_rules.book_info).bind(&source.raw_rules.toc).bind(&source.raw_rules.content)
+            .bind(&source.raw_rules.search).bind(&source.raw_rules.book_info).bind(&source.raw_rules.toc).bind(&source.raw_rules.content).bind(&source.raw_rules.explore)
             .execute(&self.pool).await.map_err(|error| AppError::Database(error.to_string()))?;
         sqlx::query_scalar("SELECT id FROM book_sources WHERE name = ?")
             .bind(&source.name)
@@ -82,6 +82,7 @@ struct SourceRow {
     name: String,
     base_url: String,
     search_url: String,
+    explore_url: Option<String>,
     search_item_selector: String,
     title_selector: String,
     author_selector: Option<String>,
@@ -113,6 +114,7 @@ struct SourceRow {
     rule_book_info: Option<String>,
     rule_toc: Option<String>,
     rule_content: Option<String>,
+    rule_explore: Option<String>,
 }
 
 fn map_source(row: SourceRow) -> BookSource {
@@ -121,6 +123,7 @@ fn map_source(row: SourceRow) -> BookSource {
         name: row.name,
         base_url: row.base_url,
         search_url: row.search_url,
+        explore_url: row.explore_url,
         search_rule: SearchRule {
             item: row.search_item_selector,
             title: row.title_selector,
@@ -164,11 +167,12 @@ fn map_source(row: SourceRow) -> BookSource {
             book_info: row.rule_book_info,
             toc: row.rule_toc,
             content: row.rule_content,
+            explore: row.rule_explore,
         },
     }
 }
 
-const SOURCE_SELECT: &str = "SELECT id, name, base_url, search_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, enabled, header, login_url, login_method, login_body, token_path, access_token, session_cookie, session_expires_at, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content FROM book_sources";
+const SOURCE_SELECT: &str = "SELECT id, name, base_url, search_url, explore_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, enabled, header, login_url, login_method, login_body, token_path, access_token, session_cookie, session_expires_at, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content, rule_explore FROM book_sources";
 
 impl SourceRepository for SqliteSourceRepository {
     async fn list(&self) -> Result<Vec<BookSource>, AppError> {
@@ -207,6 +211,7 @@ mod tests {
             name: "proxy-test".into(),
             base_url: "https://example.com".into(),
             search_url: "https://example.com/?q={{key}}".into(),
+            explore_url: Some("热门::/hot".into()),
             search_rule: SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),
@@ -236,7 +241,10 @@ mod tests {
             proxy_url: Some("socks5://127.0.0.1:1080".into()),
             concurrent_rate: Some("5/1000".into()),
             enabled: true,
-            raw_rules: Default::default(),
+            raw_rules: RawSourceRules {
+                explore: Some(r#"{"bookList":".book"}"#.into()),
+                ..Default::default()
+            },
         };
         let id = repository.upsert(&source).await.unwrap();
         assert_eq!(
@@ -259,6 +267,12 @@ mod tests {
                 .as_deref(),
             Some("5/1000")
         );
+        let saved = repository.get(id).await.unwrap().unwrap();
+        assert_eq!(saved.explore_url.as_deref(), Some("热门::/hot"));
+        assert_eq!(
+            saved.raw_rules.explore.as_deref(),
+            Some(r#"{"bookList":".book"}"#)
+        );
     }
 
     #[tokio::test]
@@ -275,6 +289,7 @@ mod tests {
             name: "expired-test".into(),
             base_url: "https://example.com".into(),
             search_url: "https://example.com/?q={{key}}".into(),
+            explore_url: None,
             search_rule: SearchRule {
                 item: "a".into(),
                 title: "a".into(),

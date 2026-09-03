@@ -118,6 +118,7 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 .get("content_rule")
                 .or_else(|| object.get("ruleContent")),
         );
+        let explore_url = field(object, "explore_url", "exploreUrl");
         let content_selector = content
             .as_ref()
             .and_then(|value| value.as_str().map(normalize_rule))
@@ -133,6 +134,7 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
             name,
             base_url,
             search_url,
+            explore_url,
             search_rule: SearchRule {
                 item: rule(search.as_ref(), &["item", "bookList", "list"])
                     .unwrap_or_else(|| ".book".into()),
@@ -199,6 +201,7 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 book_info: raw_rule(object, &["info_rule", "ruleBookInfo"]),
                 toc: raw_rule(object, &["catalog_rule", "ruleToc"]),
                 content: raw_rule(object, &["content_rule", "ruleContent"]),
+                explore: raw_rule(object, &["explore_rule", "ruleExplore"]),
             },
         });
     }
@@ -215,12 +218,18 @@ mod tests {
 
     #[test]
     fn imports_legacy_legado_source() {
-        let input = r#"[{"bookSourceName":"Demo","bookSourceUrl":"https://example.com","searchUrl":"https://example.com/s?q={{key}}","concurrentRate":"5/1000","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
+        let input = r#"[{"bookSourceName":"Demo","bookSourceUrl":"https://example.com","searchUrl":"https://example.com/s?q={{key}}","exploreUrl":"热门::/hot","concurrentRate":"5/1000","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"},"ruleExplore":{"bookList":".book","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
         let sources = parse_sources_json(input).unwrap();
         assert_eq!(sources[0].name, "Demo");
         assert_eq!(sources[0].search_rule.url, "a::attr(href)");
         assert_eq!(sources[0].catalog_rule.item, ".chapter");
         assert_eq!(sources[0].concurrent_rate.as_deref(), Some("5/1000"));
+        assert_eq!(sources[0].explore_url.as_deref(), Some("热门::/hot"));
+        assert!(sources[0]
+            .raw_rules
+            .explore
+            .as_deref()
+            .is_some_and(|rule| rule.contains("bookList")));
     }
 
     #[test]

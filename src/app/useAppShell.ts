@@ -56,6 +56,7 @@ export function useAppShell() {
 
   async function refreshAll() {
     await Promise.all([bookshelf.refresh(), sources.refresh(), settings.refresh()])
+    await search.loadExplore()
   }
 
   let stopCatalogUpdates: (() => void) | undefined

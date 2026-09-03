@@ -318,6 +318,24 @@ h2 {
   max-width: 760px;
   margin-top: 30px;
 }
+
+.explore-panel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.explore-heading,
+.explore-categories {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.explore-heading {
+  justify-content: space-between;
+}
 .search-result {
   display: flex;
   align-items: center;

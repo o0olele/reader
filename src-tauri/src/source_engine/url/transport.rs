@@ -180,6 +180,7 @@ mod tests {
             name: "transport".into(),
             base_url,
             search_url: String::new(),
+            explore_url: None,
             search_rule: SearchRule {
                 item: "a".into(),
                 title: "a".into(),

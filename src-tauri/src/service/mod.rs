@@ -2,6 +2,7 @@
 
 pub mod book_service;
 pub mod bookshelf_service;
+pub mod explore_service;
 pub mod reader_service;
 pub mod search_service;
 pub mod settings_service;

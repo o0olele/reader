@@ -1,11 +1,14 @@
 import { reactive, ref } from 'vue'
 import {
   addOnlineBook,
+  exploreBooks,
+  listExploreCategories,
   searchBooks,
   type Book,
   type BookSearchResult,
   type SearchResultGroup,
   type SourceFailure,
+  type ExploreCategory,
 } from '../../services/api'
 
 /** Owns online search: the query, grouped results and per-source failures. */
@@ -17,6 +20,10 @@ export function useSearch(report: (cause: unknown) => void, onAdded: (book: Book
   const searching = ref(false)
   const hasSearched = ref(false)
   const addingResult = ref<string>()
+  const exploreCategories = ref<ExploreCategory[]>([])
+  const exploring = ref(false)
+  const exploreResults = ref<BookSearchResult[]>([])
+  const selectedExplore = ref<ExploreCategory>()
 
   async function run() {
     if (!query.value.trim()) return
@@ -48,6 +55,27 @@ export function useSearch(report: (cause: unknown) => void, onAdded: (book: Book
     }
   }
 
+  async function loadExplore() {
+    try {
+      exploreCategories.value = await listExploreCategories()
+    } catch (cause) {
+      report(cause)
+    }
+  }
+
+  async function runExplore(category: ExploreCategory) {
+    selectedExplore.value = category
+    exploring.value = true
+    try {
+      exploreResults.value = await exploreBooks(category.source_id, category.url)
+    } catch (cause) {
+      exploreResults.value = []
+      report(cause)
+    } finally {
+      exploring.value = false
+    }
+  }
+
   return reactive({
     query,
     groups,
@@ -58,5 +86,11 @@ export function useSearch(report: (cause: unknown) => void, onAdded: (book: Book
     addingResult,
     run,
     addToShelf,
+    exploreCategories,
+    exploring,
+    exploreResults,
+    selectedExplore,
+    loadExplore,
+    runExplore,
   })
 }

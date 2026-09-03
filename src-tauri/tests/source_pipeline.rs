@@ -11,6 +11,7 @@ fn source_a() -> BookSource {
         name: "Fixture A".into(),
         base_url: "https://fiction.example".into(),
         search_url: "https://fiction.example/search?q={{key}}".into(),
+        explore_url: None,
         search_rule: SearchRule {
             item: "article.result".into(),
             title: "h2 a".into(),
@@ -167,6 +168,7 @@ fn the_engine_and_the_css_projection_agree_on_the_same_source() {
         book_info: encode("ruleBookInfo"),
         toc: encode("ruleToc"),
         content: encode("ruleContent"),
+        explore: None,
     };
 
     let search_html = include_str!("fixtures/source_a/search.html");

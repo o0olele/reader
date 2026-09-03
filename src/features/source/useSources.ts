@@ -22,6 +22,7 @@ function emptyForm(): SourceForm {
     name: '',
     base_url: '',
     search_url: '',
+    explore_url: '',
     item: '',
     title: '',
     author: '',
@@ -92,6 +93,7 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
         name: current.name,
         base_url: current.base_url,
         search_url: current.search_url,
+        explore_url: current.explore_url || undefined,
         search_rule: {
           item: current.item,
           title: current.title,

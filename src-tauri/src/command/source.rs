@@ -54,6 +54,8 @@ pub struct BookSourceInput {
     pub name: String,
     pub base_url: String,
     pub search_url: String,
+    #[serde(default)]
+    pub explore_url: Option<String>,
     pub search_rule: SearchRule,
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -131,6 +133,7 @@ pub async fn save_book_source_cmd(
         name: name.to_owned(),
         base_url: base_url.to_owned(),
         search_url: search_url.to_owned(),
+        explore_url: input.explore_url.filter(|value| !value.trim().is_empty()),
         search_rule: input.search_rule,
         info_rule: input.info_rule,
         catalog_rule: input.catalog_rule,

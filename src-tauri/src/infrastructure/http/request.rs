@@ -134,6 +134,7 @@ mod tests {
             name: "test".into(),
             base_url: "https://example.com".into(),
             search_url: "https://example.com/?q={{key}}".into(),
+            explore_url: None,
             search_rule: SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),

@@ -35,6 +35,11 @@ pub struct LegadoSearchRule {
     pub book_url: Option<String>,
     #[serde(alias = "coverUrl", alias = "cover")]
     pub cover_url: Option<String>,
+    pub intro: Option<String>,
+    pub kind: Option<String>,
+    #[serde(alias = "lastChapter", alias = "latestChapter")]
+    pub last_chapter: Option<String>,
+    pub word_count: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -73,6 +78,25 @@ pub struct LegadoContentRule {
     pub next_content_url: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct LegadoExploreRule {
+    #[serde(alias = "bookList", alias = "list", alias = "item")]
+    pub book_list: Option<String>,
+    #[serde(alias = "title")]
+    pub name: Option<String>,
+    pub author: Option<String>,
+    #[serde(alias = "coverUrl", alias = "cover")]
+    pub cover_url: Option<String>,
+    #[serde(alias = "bookUrl", alias = "url", alias = "detail")]
+    pub book_url: Option<String>,
+    pub intro: Option<String>,
+    pub kind: Option<String>,
+    #[serde(alias = "lastChapter", alias = "latestChapter")]
+    pub last_chapter: Option<String>,
+    pub word_count: Option<String>,
+}
+
 /// The four rule objects of one source, as far as they could be decoded.
 #[derive(Debug, Default)]
 pub struct LegadoRules {
@@ -80,6 +104,7 @@ pub struct LegadoRules {
     pub book_info: Option<LegadoBookInfoRule>,
     pub toc: Option<LegadoTocRule>,
     pub content: Option<LegadoContentRule>,
+    pub explore: Option<LegadoExploreRule>,
 }
 
 impl LegadoRules {
@@ -89,6 +114,7 @@ impl LegadoRules {
             book_info: parse(raw.book_info.as_ref(), "name"),
             toc: parse(raw.toc.as_ref(), "chapterList"),
             content: parse(raw.content.as_ref(), "content"),
+            explore: parse(raw.explore.as_ref(), "bookList"),
         }
     }
 }
@@ -132,6 +158,21 @@ mod tests {
             rules.content.unwrap().content.as_deref(),
             Some("id.content@textNodes")
         );
+    }
+
+    #[test]
+    fn decodes_explore_rule_fields() {
+        let rules = LegadoRules::decode(&RawSourceRules {
+            explore: Some(
+                r#"{"bookList":".book","name":".title","bookUrl":"a@href","author":".author"}"#
+                    .into(),
+            ),
+            ..Default::default()
+        });
+        let explore = rules.explore.unwrap();
+        assert_eq!(explore.book_list.as_deref(), Some(".book"));
+        assert_eq!(explore.book_url.as_deref(), Some("a@href"));
+        assert_eq!(explore.author.as_deref(), Some(".author"));
     }
 
     #[test]

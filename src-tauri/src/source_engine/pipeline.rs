@@ -93,6 +93,10 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
                     cover: first(source, rules.cover_url.as_ref(), item)?
                         .map(|value| absolutize(&source.base_url, &value)),
                     url: absolutize(&source.base_url, &url),
+                    intro: joined(source, rules.intro.as_ref(), item)?,
+                    kind: first(source, rules.kind.as_ref(), item)?,
+                    latest_chapter: first(source, rules.last_chapter.as_ref(), item)?,
+                    word_count: first(source, rules.word_count.as_ref(), item)?,
                 });
             }
             if !results.is_empty() {
@@ -101,6 +105,45 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
         }
     }
     selector::parse_search(source, html).map_err(AppError::parse)
+}
+
+pub fn parse_explore(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
+    let Some(rules) = LegadoRules::decode(&source.raw_rules).explore else {
+        return Err(AppError::parse(format!(
+            "书源 `{}` 未配置发现规则",
+            source.name
+        )));
+    };
+    let Some(list) = rules.book_list.as_deref() else {
+        return Err(AppError::parse(format!(
+            "书源 `{}` 的发现规则缺少 bookList",
+            source.name
+        )));
+    };
+    let items = values(source, list, html, Extraction::Nodes)?;
+    let mut results = Vec::new();
+    for item in &items {
+        let Some(title) = first(source, rules.name.as_ref(), item)? else {
+            continue;
+        };
+        let Some(url) = first(source, rules.book_url.as_ref(), item)? else {
+            continue;
+        };
+        results.push(BookSearchResult {
+            source_id: source.id,
+            source_name: source.name.clone(),
+            title,
+            author: first(source, rules.author.as_ref(), item)?,
+            cover: first(source, rules.cover_url.as_ref(), item)?
+                .map(|value| absolutize(&source.base_url, &value)),
+            url: absolutize(&source.base_url, &url),
+            intro: joined(source, rules.intro.as_ref(), item)?,
+            kind: first(source, rules.kind.as_ref(), item)?,
+            latest_chapter: first(source, rules.last_chapter.as_ref(), item)?,
+            word_count: first(source, rules.word_count.as_ref(), item)?,
+        });
+    }
+    Ok(results)
 }
 
 pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppError> {
