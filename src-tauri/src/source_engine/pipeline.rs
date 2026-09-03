@@ -20,10 +20,18 @@ fn strict_engine() -> bool {
 
 fn engine_error(source: &BookSource, rule: &str, error: impl std::fmt::Display) -> AppError {
     tracing::debug!(target: "source", source = %source.name, rule = %rule, %error, "rule engine could not execute rule");
-    AppError::parse(format!("source `{}` rule `{rule}` is not executable: {error}", source.name))
+    AppError::parse(format!(
+        "source `{}` rule `{rule}` is not executable: {error}",
+        source.name
+    ))
 }
 
-fn values(source: &BookSource, rule: &str, input: &str, want: Extraction) -> Result<Vec<String>, AppError> {
+fn values(
+    source: &BookSource,
+    rule: &str,
+    input: &str,
+    want: Extraction,
+) -> Result<Vec<String>, AppError> {
     let mut context = RuleContext::default();
     context.with_http(source.http_context());
     match evaluate(rule, input, want, &mut context) {
@@ -36,7 +44,11 @@ fn values(source: &BookSource, rule: &str, input: &str, want: Extraction) -> Res
     }
 }
 
-fn first(source: &BookSource, rule: Option<&String>, input: &str) -> Result<Option<String>, AppError> {
+fn first(
+    source: &BookSource,
+    rule: Option<&String>,
+    input: &str,
+) -> Result<Option<String>, AppError> {
     let Some(rule) = rule else { return Ok(None) };
     let mut context = RuleContext::default();
     context.with_http(source.http_context());
@@ -50,17 +62,26 @@ fn first(source: &BookSource, rule: Option<&String>, input: &str) -> Result<Opti
     }
 }
 
-fn joined(source: &BookSource, rule: Option<&String>, input: &str) -> Result<Option<String>, AppError> {
+fn joined(
+    source: &BookSource,
+    rule: Option<&String>,
+    input: &str,
+) -> Result<Option<String>, AppError> {
     let Some(rule) = rule else { return Ok(None) };
     let text = values(source, rule, input, Extraction::Values)?.join("\n");
     Ok((!text.trim().is_empty()).then_some(text))
 }
 
 fn absolute(base: &str, value: &str) -> String {
-    reqwest::Url::parse(value).map(|url| url.to_string()).unwrap_or_else(|_| {
-        reqwest::Url::parse(base).ok().and_then(|url| url.join(value).ok())
-            .map(|url| url.to_string()).unwrap_or_else(|| value.to_owned())
-    })
+    reqwest::Url::parse(value)
+        .map(|url| url.to_string())
+        .unwrap_or_else(|_| {
+            reqwest::Url::parse(base)
+                .ok()
+                .and_then(|url| url.join(value).ok())
+                .map(|url| url.to_string())
+                .unwrap_or_else(|| value.to_owned())
+        })
 }
 
 pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
@@ -69,18 +90,25 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
             let items = values(source, list, html, Extraction::Nodes)?;
             let mut results = Vec::new();
             for item in &items {
-                let Some(title) = first(source, rules.name.as_ref(), item)? else { continue };
-                let Some(url) = first(source, rules.book_url.as_ref(), item)? else { continue };
+                let Some(title) = first(source, rules.name.as_ref(), item)? else {
+                    continue;
+                };
+                let Some(url) = first(source, rules.book_url.as_ref(), item)? else {
+                    continue;
+                };
                 results.push(BookSearchResult {
                     source_id: source.id,
                     source_name: source.name.clone(),
                     title,
                     author: first(source, rules.author.as_ref(), item)?,
-                    cover: first(source, rules.cover_url.as_ref(), item)?.map(|value| absolute(&source.base_url, &value)),
+                    cover: first(source, rules.cover_url.as_ref(), item)?
+                        .map(|value| absolute(&source.base_url, &value)),
                     url: absolute(&source.base_url, &url),
                 });
             }
-            if !results.is_empty() { return Ok(results); }
+            if !results.is_empty() {
+                return Ok(results);
+            }
         }
     }
     selector::parse_search(source, html).map_err(AppError::parse)
@@ -92,11 +120,22 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppE
             title: first(source, rules.name.as_ref(), html)?,
             author: first(source, rules.author.as_ref(), html)?,
             intro: joined(source, rules.intro.as_ref(), html)?,
-            cover: first(source, rules.cover_url.as_ref(), html)?.map(|value| absolute(&source.base_url, &value)),
+            cover: first(source, rules.cover_url.as_ref(), html)?
+                .map(|value| absolute(&source.base_url, &value)),
             kind: first(source, rules.kind.as_ref(), html)?,
             latest_chapter: first(source, rules.last_chapter.as_ref(), html)?,
         };
-        if [&info.title, &info.author, &info.intro, &info.cover, &info.kind, &info.latest_chapter].iter().any(|v| v.is_some()) {
+        if [
+            &info.title,
+            &info.author,
+            &info.intro,
+            &info.cover,
+            &info.kind,
+            &info.latest_chapter,
+        ]
+        .iter()
+        .any(|v| v.is_some())
+        {
             return Ok(info);
         }
     }
@@ -105,13 +144,23 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppE
 
 type CatalogPage = (Vec<(String, String)>, Option<String>);
 
-fn engine_catalog(source: &BookSource, rules: &LegadoTocRule, html: &str) -> Result<Option<Vec<(String, String)>>, AppError> {
-    let Some(list) = rules.chapter_list.as_deref() else { return Ok(None) };
+fn engine_catalog(
+    source: &BookSource,
+    rules: &LegadoTocRule,
+    html: &str,
+) -> Result<Option<Vec<(String, String)>>, AppError> {
+    let Some(list) = rules.chapter_list.as_deref() else {
+        return Ok(None);
+    };
     let items = values(source, list, html, Extraction::Nodes)?;
     let mut chapters = Vec::new();
     for item in &items {
-        let Some(name) = first(source, rules.chapter_name.as_ref(), item)? else { continue };
-        let Some(url) = first(source, rules.chapter_url.as_ref(), item)? else { continue };
+        let Some(name) = first(source, rules.chapter_name.as_ref(), item)? else {
+            continue;
+        };
+        let Some(url) = first(source, rules.chapter_url.as_ref(), item)? else {
+            continue;
+        };
         chapters.push((name, absolute(&source.base_url, &url)));
     }
     Ok((!chapters.is_empty()).then_some(chapters))
@@ -141,13 +190,19 @@ mod tests {
     }
 }
 
-pub fn parse_content_page(source: &BookSource, html: &str) -> Result<(String, Option<String>), AppError> {
+pub fn parse_content_page(
+    source: &BookSource,
+    html: &str,
+) -> Result<(String, Option<String>), AppError> {
     let rules = LegadoRules::decode(&source.raw_rules).content;
     if let Some(rules) = rules.as_ref() {
         if let Some(rule) = rules.content.as_deref() {
             let content = values(source, rule, html, Extraction::Values)?.join("\n");
             if !content.trim().is_empty() {
-                return Ok((content, first(source, rules.next_content_url.as_ref(), html)?));
+                return Ok((
+                    content,
+                    first(source, rules.next_content_url.as_ref(), html)?,
+                ));
             }
         }
     }

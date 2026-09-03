@@ -139,16 +139,17 @@ pub async fn send_source_request_with_options(
     for attempt in 0..attempts {
         let started = std::time::Instant::now();
         tracing::debug!(target: "network", url = %url, attempt, "sending source request");
-        let mut request = source_request_with_method(client, url, source, method.clone(), body.clone())?;
+        let mut request =
+            source_request_with_method(client, url, source, method.clone(), body.clone())?;
         if let Some(origin) = origin {
             request = request.header(reqwest::header::ORIGIN, origin);
         }
         for (name, value) in headers {
             request = request.header(name, value);
         }
-        let request = request
-            .and_then(|builder| builder.build().map_err(AppError::network))
-            .map_err(|e| AppError::Network(format!("请求构造失败，请检查认证 Header: {e}")))?;
+        let request = request.build().map_err(|error| {
+            AppError::Network(format!("请求构造失败，请检查认证 Header: {error}"))
+        })?;
         match client.execute(request).await {
             Ok(response) => {
                 tracing::debug!(target: "network", url = %url, status = response.status().as_u16(), elapsed_ms = started.elapsed().as_millis() as u64, "source response received");
@@ -166,7 +167,10 @@ pub async fn send_source_request_with_options(
                     error.to_string()
                 };
                 if attempt + 1 < attempts {
-                    tokio::time::sleep(std::time::Duration::from_millis(250 * (attempt + 1))).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        250_u64 * (attempt as u64 + 1),
+                    ))
+                    .await;
                 }
             }
         }

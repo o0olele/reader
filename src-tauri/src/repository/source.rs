@@ -54,7 +54,11 @@ impl SqliteSourceRepository {
         self.update_session(source_id, None, None, None).await
     }
 
-    pub async fn update_raw_rules(&self, source_id: i64, rules: &RawSourceRules) -> Result<(), AppError> {
+    pub async fn update_raw_rules(
+        &self,
+        source_id: i64,
+        rules: &RawSourceRules,
+    ) -> Result<(), AppError> {
         sqlx::query("UPDATE book_sources SET rule_search = ?, rule_book_info = ?, rule_toc = ?, rule_content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
             .bind(&rules.search).bind(&rules.book_info).bind(&rules.toc).bind(&rules.content).bind(source_id)
             .execute(&self.pool).await.map(|_| ()).map_err(AppError::database)

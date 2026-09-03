@@ -11,10 +11,10 @@ use crate::{
         client::{build_shared_client, build_source_client},
         request::response_error,
     },
-    source_engine::url::{build as build_url_request, RequestSpec},
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
     source_engine::pipeline::parse_search,
+    source_engine::url::{build as build_url_request, RequestSpec},
 };
 use encoding_rs::GBK;
 use grouping::group_results;
@@ -112,9 +112,16 @@ impl SearchService {
         let request = build_search_request(&source, &encode_query(query.trim()))?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
         let response = crate::infrastructure::http::request::send_source_request_with_options(
-            &client, request.url.as_str(), &source, request.method, request.body,
-            &request.headers, request.origin.as_deref(), request.retry,
-        ).await?;
+            &client,
+            request.url.as_str(),
+            &source,
+            request.method,
+            request.body,
+            &request.headers,
+            request.origin.as_deref(),
+            request.retry,
+        )
+        .await?;
         let status = response.status().as_u16();
         let (results, auth_required, cloudflare_challenge) = if response.status().is_success() {
             (
@@ -217,9 +224,16 @@ async fn search_one_source(
         .map_err(|_| AppError::Source("搜索并发限制器不可用".into()))?;
     let request = build_search_request(&source, &keyword)?;
     let response = crate::infrastructure::http::request::send_source_request_with_options(
-        &client, request.url.as_str(), &source, request.method, request.body,
-        &request.headers, request.origin.as_deref(), request.retry,
-    ).await?;
+        &client,
+        request.url.as_str(),
+        &source,
+        request.method,
+        request.body,
+        &request.headers,
+        request.origin.as_deref(),
+        request.retry,
+    )
+    .await?;
     if !response.status().is_success() {
         return Err(AppError::Network(
             response_error(response, &source.name).await,

@@ -1,6 +1,7 @@
 [package]
 name = "reader-desktop"
 version = "0.1.0"
+default-run = "reader-desktop"
 description = "A desktop novel and ebook reader"
 authors = ["Reader Desktop"]
 edition = "2021"

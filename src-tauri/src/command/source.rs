@@ -17,15 +17,29 @@ pub async fn debug_source_stage_cmd(
     stage: crate::service::source_debug_service::SourceDebugStage,
     input: String,
 ) -> Result<crate::service::source_debug_service::SourceDebugResult, AppError> {
-    let _ = app.emit("source-test-progress", serde_json::json!({"source_id": source_id, "stage": stage, "state": "started"}));
-    let result = crate::service::source_debug_service::SourceDebugService::new(state.database()?).run(source_id, stage, &input).await?;
-    let _ = app.emit("source-test-progress", serde_json::json!({"source_id": source_id, "stage": result.stage, "state": "completed"}));
+    let _ = app.emit(
+        "source-test-progress",
+        serde_json::json!({"source_id": source_id, "stage": stage, "state": "started"}),
+    );
+    let result = crate::service::source_debug_service::SourceDebugService::new(state.database()?)
+        .run(source_id, stage, &input)
+        .await?;
+    let _ = app.emit(
+        "source-test-progress",
+        serde_json::json!({"source_id": source_id, "stage": result.stage, "state": "completed"}),
+    );
     Ok(result)
 }
 
 #[tauri::command(rename = "update_book_source_rules")]
-pub async fn update_book_source_rules_cmd(state: State<'_, AppState>, source_id: i64, raw_rules: RawSourceRules) -> Result<(), AppError> {
-    crate::service::source_debug_service::SourceDebugService::new(state.database()?).update_rules(source_id, raw_rules).await
+pub async fn update_book_source_rules_cmd(
+    state: State<'_, AppState>,
+    source_id: i64,
+    raw_rules: RawSourceRules,
+) -> Result<(), AppError> {
+    crate::service::source_debug_service::SourceDebugService::new(state.database()?)
+        .update_rules(source_id, raw_rules)
+        .await
 }
 
 #[tauri::command(rename = "list_book_sources")]
