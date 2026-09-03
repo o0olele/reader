@@ -390,7 +390,11 @@ P7  性能 / 稳定性 / 发布                  2 周
 > 2026-09-03 用 Rust evaluator 重跑后的严格口径为 **191 / 970 = 19.7%**；31.3% 保留为早期 token 正则近似基线，两者不再混用。
 > 2026-09-03 完成 §4.2 后严格口径升至 **330 / 970 = 34.0%**，相对上一严格基线增加 **139 源 / 14.3pp**。
 - [ ] 报告能直接回答：「当前 N 个源里，M 个所有规则均可执行；剩余 N−M 个的阻塞 token TOP10 是 …」
-- [ ] `txtTocRule.json` 27 条规则移植进 `infrastructure/ebook/txt.rs`，替换手写启发式，附对照测试
+- [x] `txtTocRule.json` 27 条规则移植进 `infrastructure/ebook/txt.rs`，替换手写启发式，附对照测试
+
+> 2026-09-03：27 条默认规则已作为 `src-tauri/assets/defaultData/txtTocRule.json` 随程序打包；
+> TXT 导入会从 12 条启用规则中按 legado 的稀疏命中策略选择最佳规则，并兼容 Java 可变长度后向断言。
+> 中文数字、英文 Chapter、数字标题、长行误判和卷规则均有对照测试。
 - [ ] `defaultData/bookSources.json` 进 `tests/fixtures/`，作为字段级导入回归
 
 ---
@@ -729,7 +733,7 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | 2 | **`rule-audit` bin**：把 Node 原型移植成 Rust，用真实 `split_rule`/evaluator 判定 | 31.3% 这个数字有了权威口径 | §3.2 | ✅
 | 3 | **提取 `source_engine/url/`**，`build_search_request` 搬过去并推广到六阶段 | 31.3% → 62.9% | §4.1 | 🟡（现有五阶段已接入，Explore 待 §4.6） |
 | 4 | **JSoup 三项：`!n` / `.a:b` / `@@`** | 62.9% → **81.8%** | §4.2 | ✅ |
-| 5 | **移植 `txtTocRule.json` 27 条规则**替换手写启发式（可与 3/4 并行） | TXT 目录识别对齐 legado | §3.5 |
+| 5 | **移植 `txtTocRule.json` 27 条规则**替换手写启发式（可与 3/4 并行） | TXT 目录识别对齐 legado | §3.5 | ✅ |
 | 6 | JSONPath `..` + `?()`，XPath 按 58 条实例逐条扩展 | 81.8% → 99.1% | §4.3 |
 | 7 | 发现页 + 字段补齐 | `exploreUrl` 67% 的源解锁第二入口 | §4.6 |
 
