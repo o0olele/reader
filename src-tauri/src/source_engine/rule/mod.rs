@@ -5,6 +5,7 @@ mod directive;
 mod engine;
 mod evaluator;
 mod js_runtime;
+mod jsonpath;
 mod jsoup;
 mod model;
 mod position;

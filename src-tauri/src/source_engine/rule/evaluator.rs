@@ -1,8 +1,8 @@
+pub use super::jsonpath::execute_json;
 use super::jsoup::{execute_jsoup, Extraction};
 use super::model::{RuleContext, RuleExecutionError, RuleMode, SourceRule};
 use super::xpath::execute_xpath;
 use super::{JsContext, JsValue, QuickJsRuntime};
-use serde_json::Value;
 
 pub(super) fn mode_name(mode: RuleMode) -> &'static str {
     match mode {
@@ -64,23 +64,6 @@ pub fn execute_js(
     Ok(values)
 }
 
-/// Execute a JSONPath rule. This intentionally implements the portable subset
-/// used by legado sources: object keys, array indexes, and `[*]` wildcards.
-pub fn execute_json(rule: &SourceRule, input: &str) -> Result<Vec<String>, RuleExecutionError> {
-    if rule.mode != RuleMode::Json {
-        return Err(RuleExecutionError::UnsupportedMode("non-Json"));
-    }
-    let value: Value = serde_json::from_str(input)
-        .map_err(|error| RuleExecutionError::InvalidJson(error.to_string()))?;
-    let nodes = json_path(&value, rule.rule.trim())?;
-    let mut values = nodes
-        .into_iter()
-        .filter_map(json_value_to_string)
-        .collect::<Vec<_>>();
-    apply_postprocess(rule, &mut values);
-    Ok(values)
-}
-
 /// Executes one Regex-mode rule against text.
 ///
 /// Legado regex rules return capture group 1 when present and the complete
@@ -129,89 +112,6 @@ pub(super) fn apply_postprocess(rule: &SourceRule, values: &mut Vec<String>) {
     if rule.reverse {
         values.reverse();
     }
-}
-
-fn json_value_to_string(value: &Value) -> Option<String> {
-    match value {
-        Value::String(value) => Some(value.clone()),
-        Value::Number(value) => Some(value.to_string()),
-        Value::Bool(value) => Some(value.to_string()),
-        Value::Null => None,
-        Value::Array(_) | Value::Object(_) => Some(value.to_string()),
-    }
-}
-
-fn json_path<'a>(root: &'a Value, path: &str) -> Result<Vec<&'a Value>, RuleExecutionError> {
-    let path = path.trim();
-    if !path.starts_with('$') {
-        return Err(RuleExecutionError::InvalidJsonPath(
-            "path must start with `$`".into(),
-        ));
-    }
-    let mut current = vec![root];
-    let mut cursor = 1;
-    while cursor < path.len() {
-        let bytes = path.as_bytes();
-        if bytes[cursor] == b'.' {
-            cursor += 1;
-            if cursor < path.len() && bytes[cursor] == b'.' {
-                return Err(RuleExecutionError::InvalidJsonPath(
-                    "recursive descent is not supported".into(),
-                ));
-            }
-            let start = cursor;
-            while cursor < path.len()
-                && (path.as_bytes()[cursor].is_ascii_alphanumeric()
-                    || path.as_bytes()[cursor] == b'_')
-            {
-                cursor += 1;
-            }
-            if start == cursor {
-                return Err(RuleExecutionError::InvalidJsonPath(
-                    "missing object key".into(),
-                ));
-            }
-            current = current
-                .into_iter()
-                .filter_map(|value| value.get(&path[start..cursor]))
-                .collect();
-        } else if bytes[cursor] == b'[' {
-            let end = path[cursor + 1..]
-                .find(']')
-                .map(|offset| cursor + 1 + offset)
-                .ok_or_else(|| RuleExecutionError::InvalidJsonPath("unclosed bracket".into()))?;
-            let token = path[cursor + 1..end].trim();
-            if token == "*" {
-                current = current
-                    .into_iter()
-                    .flat_map(|value| value.as_array().into_iter().flatten())
-                    .collect();
-            } else if let Ok(index) = token.parse::<usize>() {
-                current = current
-                    .into_iter()
-                    .filter_map(|value| value.as_array().and_then(|items| items.get(index)))
-                    .collect();
-            } else if (token.starts_with('\'') && token.ends_with('\''))
-                || (token.starts_with('"') && token.ends_with('"'))
-            {
-                let key = &token[1..token.len() - 1];
-                current = current
-                    .into_iter()
-                    .filter_map(|value| value.get(key))
-                    .collect();
-            } else {
-                return Err(RuleExecutionError::InvalidJsonPath(format!(
-                    "unsupported bracket `{token}`"
-                )));
-            }
-            cursor = end + 1;
-        } else {
-            return Err(RuleExecutionError::InvalidJsonPath(format!(
-                "unexpected character at {cursor}"
-            )));
-        }
-    }
-    Ok(current)
 }
 
 #[cfg(test)]

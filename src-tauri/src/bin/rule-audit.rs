@@ -151,9 +151,18 @@ fn run(input: &str) -> Result<Audit, String> {
             // URL templates, headers and JS libraries are metadata rather than
             // evaluator rules; only actual rule fields are dry-run here.
             if path.starts_with("rule") {
+                let normalized = raw.trim_start_matches('-').trim_start();
+                let dummy_input = if normalized.starts_with("$.")
+                    || normalized.starts_with("$[")
+                    || normalized.to_ascii_lowercase().starts_with("@json:")
+                {
+                    "{}"
+                } else {
+                    "<html><body>audit</body></html>"
+                };
                 if let Err(error) = evaluate(
                     &raw,
-                    "<html><body>audit</body></html>",
+                    dummy_input,
                     Extraction::Values,
                     &mut RuleContext::default(),
                 ) {
@@ -241,5 +250,12 @@ mod tests {
         let report = run(r#"[{"ruleContent":"||"}]"#).unwrap();
         assert_eq!(report.clean, 0);
         assert!(!report.errors.is_empty());
+    }
+
+    #[test]
+    fn json_rules_are_audited_against_json_input() {
+        let report = run(r#"[{"ruleContent":{"content":"$..content"}}]"#).unwrap();
+        assert_eq!(report.clean, 1);
+        assert!(report.errors.is_empty());
     }
 }
