@@ -121,11 +121,32 @@ pub async fn send_source_request_with_method(
     method: reqwest::Method,
     body: Option<String>,
 ) -> Result<reqwest::Response, AppError> {
+    send_source_request_with_options(client, url, source, method, body, &[], None, 2).await
+}
+
+pub async fn send_source_request_with_options(
+    client: &reqwest::Client,
+    url: &str,
+    source: &BookSource,
+    method: reqwest::Method,
+    body: Option<String>,
+    headers: &[(String, String)],
+    origin: Option<&str>,
+    retry: usize,
+) -> Result<reqwest::Response, AppError> {
     let mut last_error = String::new();
-    for attempt in 0..3 {
+    let attempts = retry.saturating_add(1).max(1);
+    for attempt in 0..attempts {
         let started = std::time::Instant::now();
         tracing::debug!(target: "network", url = %url, attempt, "sending source request");
-        let request = source_request_with_method(client, url, source, method.clone(), body.clone())
+        let mut request = source_request_with_method(client, url, source, method.clone(), body.clone())?;
+        if let Some(origin) = origin {
+            request = request.header(reqwest::header::ORIGIN, origin);
+        }
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+        let request = request
             .and_then(|builder| builder.build().map_err(AppError::network))
             .map_err(|e| AppError::Network(format!("请求构造失败，请检查认证 Header: {e}")))?;
         match client.execute(request).await {
@@ -144,7 +165,7 @@ pub async fn send_source_request_with_method(
                 } else {
                     error.to_string()
                 };
-                if attempt < 2 {
+                if attempt + 1 < attempts {
                     tokio::time::sleep(std::time::Duration::from_millis(250 * (attempt + 1))).await;
                 }
             }

@@ -10,9 +10,8 @@ use crate::{
     infrastructure::http::{
         client::{build_shared_client, build_source_client},
         request::response_error,
-        request::send_source_request_with_method,
-        url::resolve_url,
     },
+    source_engine::url::{build as build_url_request, RequestSpec},
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
     source_engine::pipeline::parse_search,
@@ -112,14 +111,10 @@ impl SearchService {
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let request = build_search_request(&source, &encode_query(query.trim()))?;
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let response = send_source_request_with_method(
-            &client,
-            request.url.as_str(),
-            &source,
-            request.method,
-            request.body,
-        )
-        .await?;
+        let response = crate::infrastructure::http::request::send_source_request_with_options(
+            &client, request.url.as_str(), &source, request.method, request.body,
+            &request.headers, request.origin.as_deref(), request.retry,
+        ).await?;
         let status = response.status().as_u16();
         let (results, auth_required, cloudflare_challenge) = if response.status().is_success() {
             (
@@ -199,18 +194,6 @@ fn encode_query(value: &str) -> String {
         .collect()
 }
 
-// `<searchKey>` is already rewritten to `{{key}}` at import time, and manually
-// saved sources are required to carry `{{key}}`/`{key}`. Kept until Step 2's
-// rule engine subsumes URL templating.
-fn expand_search_url(source: &BookSource, keyword: &str) -> String {
-    source
-        .search_url
-        .replace("{{key}}", keyword)
-        .replace("{key}", keyword)
-        .replace("<key>", keyword)
-        .replace("<searchKey>", keyword)
-}
-
 async fn search_one_source(
     source: BookSource,
     keyword: String,
@@ -233,14 +216,10 @@ async fn search_one_source(
         .await
         .map_err(|_| AppError::Source("搜索并发限制器不可用".into()))?;
     let request = build_search_request(&source, &keyword)?;
-    let response = send_source_request_with_method(
-        &client,
-        request.url.as_str(),
-        &source,
-        request.method,
-        request.body,
-    )
-    .await?;
+    let response = crate::infrastructure::http::request::send_source_request_with_options(
+        &client, request.url.as_str(), &source, request.method, request.body,
+        &request.headers, request.origin.as_deref(), request.retry,
+    ).await?;
     if !response.status().is_success() {
         return Err(AppError::Network(
             response_error(response, &source.name).await,
@@ -249,67 +228,10 @@ async fn search_one_source(
     parse_search(&source, &decode_response(response, request.charset).await?)
 }
 
-struct SearchRequest {
-    url: reqwest::Url,
-    method: reqwest::Method,
-    body: Option<String>,
-    charset: Option<String>,
-}
+type SearchRequest = RequestSpec;
 
 fn build_search_request(source: &BookSource, keyword: &str) -> Result<SearchRequest, AppError> {
-    let raw = expand_search_url(source, keyword);
-    let trimmed = raw.trim();
-    let Some(script) = trimmed
-        .strip_prefix("<js>")
-        .and_then(|value| value.strip_suffix("</js>"))
-    else {
-        return Ok(SearchRequest {
-            url: resolve_url(&source.base_url, &raw, "搜索 URL")?,
-            method: reqwest::Method::GET,
-            body: None,
-            charset: None,
-        });
-    };
-    let (target, options) = script
-        .split_once(',')
-        .ok_or_else(|| AppError::Parse("搜索 JS 缺少请求选项".into()))?;
-    let options = options
-        .split_once(';')
-        .map(|(value, _)| value)
-        .unwrap_or(options)
-        .trim();
-    let options = options.replace('\'', "\"").replace("undefined", "null");
-    let options: serde_json::Value = serde_json::from_str(&options)
-        .map_err(|error| AppError::Parse(format!("搜索 JS 请求选项无效: {error}")))?;
-    let method = options
-        .get("method")
-        .and_then(|value| value.as_str())
-        .unwrap_or("GET")
-        .parse::<reqwest::Method>()
-        .map_err(|error| AppError::InvalidArgument(format!("搜索 HTTP method 无效: {error}")))?;
-    let body = options
-        .get("body")
-        .and_then(|value| value.as_str())
-        .map(str::to_owned)
-        .map(|body| expand_search_url_value(&body, keyword));
-    let charset = options
-        .get("charset")
-        .and_then(|value| value.as_str())
-        .map(str::to_ascii_lowercase);
-    Ok(SearchRequest {
-        url: resolve_url(&source.base_url, target.trim(), "搜索 URL")?,
-        method,
-        body,
-        charset,
-    })
-}
-
-fn expand_search_url_value(value: &str, keyword: &str) -> String {
-    value
-        .replace("{{key}}", keyword)
-        .replace("{key}", keyword)
-        .replace("<searchKey>", keyword)
-        .replace("<key>", keyword)
+    build_url_request(source, &source.search_url, Some(keyword), "搜索 URL")
 }
 
 async fn decode_response(

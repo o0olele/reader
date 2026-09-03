@@ -64,11 +64,7 @@ export function saveBookSourceBrowserSession(sourceId: number): Promise<SourceLo
 }
 
 /** Run one stage of the rule engine against the source's saved rules. */
-export function debugSourceStage(
-  sourceId: number,
-  stage: SourceDebugStage,
-  input: string,
-): Promise<SourceDebugResult> {
+export function debugSourceStage(sourceId: number, stage: SourceDebugStage, input: string): Promise<SourceDebugResult> {
   return invoke<SourceDebugResult>('debug_source_stage', { sourceId, stage, input })
 }
 

@@ -4,9 +4,7 @@ import { sourceDebugKey } from '../../app/shellKeys'
 
 const debug = inject(sourceDebugKey)!
 
-const stageHint = computed(
-  () => debug.stages.find((item) => item.value === debug.stage)?.hint ?? '输入 URL 或关键词',
-)
+const stageHint = computed(() => debug.stages.find((item) => item.value === debug.stage)?.hint ?? '输入 URL 或关键词')
 const finalText = computed(() =>
   debug.result?.final_json === null || debug.result?.final_json === undefined
     ? ''
@@ -38,7 +36,12 @@ const finalText = computed(() =>
       <button type="button" class="primary" :disabled="debug.running || !debug.sourceId" @click="debug.run()">
         {{ debug.running ? '执行中...' : '单步执行' }}
       </button>
-      <button type="button" class="secondary" :disabled="debug.savingRules || !debug.sourceId" @click="debug.saveRules()">
+      <button
+        type="button"
+        class="secondary"
+        :disabled="debug.savingRules || !debug.sourceId"
+        @click="debug.saveRules()"
+      >
         {{ debug.savingRules ? '保存中...' : '保存规则' }}
       </button>
     </div>
@@ -56,7 +59,9 @@ const finalText = computed(() =>
       <section class="debug-output">
         <h2>执行结果</h2>
         <div v-if="debug.running && !debug.result" class="search-empty">
-          正在执行「{{ debug.stageLabel }}」阶段（{{ debug.progressState === 'started' ? '已收到进度' : '等待进度' }}）...
+          正在执行「{{ debug.stageLabel }}」阶段（{{
+            debug.progressState === 'started' ? '已收到进度' : '等待进度'
+          }}）...
         </div>
         <div v-else-if="!debug.result" class="search-empty">选择书源和输入后点击「单步执行」</div>
         <template v-else>
@@ -74,10 +79,16 @@ const finalText = computed(() =>
               </thead>
               <tbody>
                 <tr v-for="(step, index) in debug.result.steps" :key="`${step.field}-${index}`">
-                  <td><code>{{ step.field }}</code></td>
-                  <td><code>{{ step.input_preview }}</code></td>
+                  <td>
+                    <code>{{ step.field }}</code>
+                  </td>
+                  <td>
+                    <code>{{ step.input_preview }}</code>
+                  </td>
                   <td>{{ step.node_count }}</td>
-                  <td><code>{{ step.error ?? step.output_preview }}</code></td>
+                  <td>
+                    <code>{{ step.error ?? step.output_preview }}</code>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -99,12 +110,16 @@ const finalText = computed(() =>
           </div>
           <details v-if="debug.result.request" :open="false">
             <summary>请求 Header / Body</summary>
-            <pre class="debug-pre">{{ debug.result.request.headers.map(([key, value]) => `${key}: ${value}`).join('\n') }}</pre>
+            <pre class="debug-pre">{{
+              debug.result.request.headers.map(([key, value]) => `${key}: ${value}`).join('\n')
+            }}</pre>
             <pre v-if="debug.result.request.body" class="debug-pre">{{ debug.result.request.body }}</pre>
           </details>
           <details v-if="debug.result.response_headers.length">
             <summary>响应 Header</summary>
-            <pre class="debug-pre">{{ debug.result.response_headers.map(([key, value]) => `${key}: ${value}`).join('\n') }}</pre>
+            <pre class="debug-pre">{{
+              debug.result.response_headers.map(([key, value]) => `${key}: ${value}`).join('\n')
+            }}</pre>
           </details>
           <div v-if="!debug.result.request && !debug.result.error" class="search-empty">该阶段没有发起网络请求</div>
         </template>

@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   debugSourceStage,
@@ -53,20 +53,30 @@ export function useSourceDebug(
   })
   onBeforeUnmount(() => stopProgress?.())
 
-  /** Debug entry from the source list: load the source's rules, open the debug view. */
-  function openFor(id: number) {
+  /** Load a source's saved rules into the editor and drop stale results. */
+  function loadRules(id: number) {
     const source = sourceOptions.value.find((item) => item.id === id)
     if (!source) return
-    sourceId.value = id
     rules.value = {
       search: source.raw_rules.search ?? '',
       book_info: source.raw_rules.book_info ?? '',
       toc: source.raw_rules.toc ?? '',
       content: source.raw_rules.content ?? '',
     }
-    input.value = ''
     result.value = undefined
     progressState.value = undefined
+  }
+
+  watch(sourceId, (id) => {
+    if (id) loadRules(id)
+  })
+
+  /** Debug entry from the source list: load the source's rules, open the debug view. */
+  function openFor(id: number) {
+    if (!sourceOptions.value.some((item) => item.id === id)) return
+    sourceId.value = id
+    loadRules(id)
+    input.value = ''
     void router.push({ name: 'sources' })
   }
 
