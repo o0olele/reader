@@ -97,6 +97,26 @@ impl QuickJsRuntime {
         script: &str,
         context: JsContext,
     ) -> Result<(JsValue, HashMap<String, String>), AppError> {
+        // `reqwest::blocking::Client` owns a private Tokio runtime. Dropping
+        // it on a Tokio worker panics (`Cannot drop a runtime in a context
+        // where blocking is not allowed`). URL parsing and the rule pipeline
+        // are synchronous APIs, so isolate the whole QuickJS session on a
+        // plain thread whenever this entry point is reached from async code.
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let runtime = self.clone();
+            let script = script.to_owned();
+            return std::thread::spawn(move || runtime.execute_blocking_inner(&script, context))
+                .join()
+                .map_err(|_| AppError::Source("JavaScript worker panicked".into()))?;
+        }
+        self.execute_blocking_inner(script, context)
+    }
+
+    fn execute_blocking_inner(
+        &self,
+        script: &str,
+        context: JsContext,
+    ) -> Result<(JsValue, HashMap<String, String>), AppError> {
         let runtime =
             Runtime::new().map_err(|error| AppError::Source(format!("JS runtime: {error}")))?;
         runtime.set_memory_limit(self.memory_limit);
@@ -751,6 +771,21 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(error, AppError::InvalidArgument(_)));
+    }
+
+    #[tokio::test]
+    async fn blocking_execution_with_http_context_is_safe_inside_async_context() {
+        let value = QuickJsRuntime::default()
+            .execute_blocking(
+                "result",
+                JsContext {
+                    result: "safe".into(),
+                    http: Some(JsHttpContext::default()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(value, JsValue::String("safe".into()));
     }
 
     #[tokio::test]
