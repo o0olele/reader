@@ -116,6 +116,14 @@ const chooseFile = () => fileInput.value?.click()
               字号
               <input v-model.number="reader.fontSize" type="range" min="14" max="25" step="1" />
             </label>
+            <label>
+              行距
+              <input v-model.number="reader.lineHeight" type="range" min="1.4" max="2.4" step="0.1" />
+            </label>
+            <label>
+              页边距
+              <input v-model.number="reader.pageMargin" type="range" min="16" max="64" step="4" />
+            </label>
           </div>
         </div>
 
@@ -171,11 +179,15 @@ const chooseFile = () => fileInput.value?.click()
           :selected-chapter="reader.selectedChapter"
           :theme="reader.theme"
           :font-size="reader.fontSize"
+          :line-height="reader.lineHeight"
+          :page-margin="reader.pageMargin"
+          :reader-mode="reader.readerMode"
           :loading="reader.loadingChapter"
           :book="reader.selectedBook"
           @select-chapter="reader.selectChapter"
           @scroll="reader.scheduleProgressSave"
           @reader-content="reader.readerContent = $event"
+          @reader-mode="reader.readerMode = $event"
         />
         <SettingsPage v-else-if="view === 'settings'" />
         <SourceDebugPage v-else-if="view === 'sources'" />

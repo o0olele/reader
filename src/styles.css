@@ -522,7 +522,65 @@ h2 {
   max-width: 720px;
   height: calc(100vh - 190px);
   overflow-y: auto;
-  padding: 4px 18px 60px 0;
+  padding: 4px var(--reader-margin, 32px) 60px 0;
+  outline: none;
+  scroll-behavior: smooth;
+}
+.reader-content:focus-visible {
+  outline: 2px solid var(--color-primary-border);
+  outline-offset: 3px;
+}
+.reader-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  color: var(--color-muted);
+  font-family: inherit;
+  font-size: 12px;
+  column-span: all;
+}
+.reader-mode-toggle,
+.reader-page-actions,
+.reader-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.reader-tools {
+  margin-left: auto;
+  gap: 8px;
+}
+.reader-tools input {
+  width: 130px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  color: inherit;
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 12px;
+}
+.reader-search-count {
+  min-width: 28px;
+  color: var(--color-muted);
+  text-align: right;
+}
+.reader-toolbar button {
+  padding: 5px 9px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+}
+.reader-toolbar button:hover,
+.reader-toolbar button.active {
+  color: var(--color-primary-strong);
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
 }
 .reader-content h2 {
   margin: 0 0 26px;
@@ -532,9 +590,30 @@ h2 {
   margin: 0 0 18px;
   color: var(--color-reader);
   font-family: Georgia, 'Noto Serif SC', serif;
-  font-size: 17px;
-  line-height: 1.95;
+  font-size: var(--reader-font-size, 17px);
+  line-height: var(--reader-line-height, 1.8);
+  text-indent: 2em;
   white-space: pre-wrap;
+}
+.reader-content .reader-title,
+.reader-content .book-intro,
+.reader-content .reader-loading {
+  text-indent: 0;
+}
+.reader-content.mode-paged {
+  overflow-x: auto;
+  overflow-y: hidden;
+  column-width: calc(100% - 48px);
+  column-gap: 48px;
+  column-fill: auto;
+}
+.reader-content.mode-paged > .reader-title,
+.reader-content.mode-paged > .book-intro,
+.reader-content.mode-paged > .reader-loading {
+  break-after: avoid;
+}
+.reader-content.mode-paged p {
+  break-inside: avoid;
 }
 .reader-loading {
   color: var(--color-muted) !important;
@@ -572,6 +651,17 @@ h2 {
   }
   .reader-settings input {
     width: 58px;
+  }
+  .reader-toolbar {
+    flex-wrap: wrap;
+  }
+  .reader-tools {
+    width: 100%;
+    margin-left: 0;
+  }
+  .reader-tools input {
+    flex: 1;
+    width: auto;
   }
   .online-heading {
     display: block;

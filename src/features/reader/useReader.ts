@@ -26,11 +26,17 @@ export function useReader(report: (cause: unknown) => void) {
   const readerContent = ref<HTMLElement | null>(null)
   const fontSize = ref(Number(localStorage.getItem('reader-font-size') ?? '17'))
   const theme = ref(localStorage.getItem('reader-theme') ?? 'light')
+  const lineHeight = ref(Number(localStorage.getItem('reader-line-height') ?? '1.8'))
+  const pageMargin = ref(Number(localStorage.getItem('reader-page-margin') ?? '32'))
+  const readerMode = ref<'scroll' | 'paged'>((localStorage.getItem('reader-mode') as 'scroll' | 'paged') ?? 'scroll')
 
   let saveTimer: ReturnType<typeof setTimeout> | undefined
 
   watch(fontSize, (value) => localStorage.setItem('reader-font-size', String(value)))
   watch(theme, (value) => localStorage.setItem('reader-theme', value))
+  watch(lineHeight, (value) => localStorage.setItem('reader-line-height', String(value)))
+  watch(pageMargin, (value) => localStorage.setItem('reader-page-margin', String(value)))
+  watch(readerMode, (value) => localStorage.setItem('reader-mode', value))
 
   const isOnline = (book: Book) => book.source_id !== undefined && book.source_id !== null
 
@@ -51,7 +57,8 @@ export function useReader(report: (cause: unknown) => void) {
       await loadChapterContent(selectedChapter.value)
       await nextTick()
       if (readerContent.value && progress && selectedChapter.value?.id === progress.chapter_id) {
-        readerContent.value.scrollTop = progress.offset
+        if (readerMode.value === 'paged') readerContent.value.scrollLeft = progress.offset
+        else readerContent.value.scrollTop = progress.offset
       }
     } catch (cause) {
       report(cause)
@@ -128,7 +135,8 @@ export function useReader(report: (cause: unknown) => void) {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       if (selectedBook.value && selectedChapter.value && readerContent.value) {
-        void saveReadingProgress(selectedBook.value.id, selectedChapter.value.id, readerContent.value.scrollTop)
+        const offset = readerMode.value === 'paged' ? readerContent.value.scrollLeft : readerContent.value.scrollTop
+        void saveReadingProgress(selectedBook.value.id, selectedChapter.value.id, Math.round(offset))
       }
     }, PROGRESS_DEBOUNCE_MS)
   }
@@ -137,7 +145,6 @@ export function useReader(report: (cause: unknown) => void) {
     selectedChapter.value = chapter
     await loadChapterContent(chapter)
     await nextTick()
-    if (readerContent.value) readerContent.value.scrollTop = 0
     scheduleProgressSave()
   }
 
@@ -160,6 +167,9 @@ export function useReader(report: (cause: unknown) => void) {
     readerContent,
     fontSize,
     theme,
+    lineHeight,
+    pageMargin,
+    readerMode,
     openBook,
     refreshCatalogForBook,
     switchSource,
