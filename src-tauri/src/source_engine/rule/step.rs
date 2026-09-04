@@ -34,6 +34,15 @@ fn keyword_terminal(step: &str) -> Option<Terminal<'static>> {
     }
 }
 
+fn attribute_terminal(step: &str) -> Option<&str> {
+    let name = step.strip_prefix("attr(")?.strip_suffix(')')?.trim();
+    (!name.is_empty()
+        && name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        }))
+    .then_some(name)
+}
+
 /// A bare identifier — no CSS punctuation, no dots — is an attribute name when
 /// it closes the rule, and a tag selector anywhere else.
 fn is_bare_identifier(step: &str) -> bool {
@@ -46,6 +55,9 @@ fn is_bare_identifier(step: &str) -> bool {
 pub(super) fn parse_step(step: &str, is_last: bool) -> Result<Step<'_>, RuleExecutionError> {
     if let Some(terminal) = keyword_terminal(step) {
         return Ok(Step::Terminal(terminal));
+    }
+    if let Some(attribute) = attribute_terminal(step) {
+        return Ok(Step::Terminal(Terminal::Attribute(attribute)));
     }
     if is_last && is_bare_identifier(step) && private_kind(step).is_none() {
         return Ok(Step::Terminal(Terminal::Attribute(step)));
@@ -120,6 +132,14 @@ mod tests {
         assert!(matches!(
             parse_step("href", false).unwrap(),
             Step::Select(_)
+        ));
+    }
+
+    #[test]
+    fn recognizes_explicit_attribute_terminals() {
+        assert!(matches!(
+            parse_step("attr(data-src)", true).unwrap(),
+            Step::Terminal(Terminal::Attribute("data-src"))
         ));
     }
 

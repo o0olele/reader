@@ -27,15 +27,14 @@ fn engine_error(source: &BookSource, rule: &str, error: impl std::fmt::Display) 
     ))
 }
 
-fn values(
+fn values_in(
     source: &BookSource,
     rule: &str,
     input: &str,
     want: Extraction,
+    context: &mut RuleContext,
 ) -> Result<Vec<String>, AppError> {
-    let mut context = RuleContext::default();
-    context.with_http(source.http_context());
-    match evaluate(rule, input, want, &mut context) {
+    match evaluate(rule, input, want, context) {
         Ok(values) => Ok(values),
         Err(error) if strict_engine() => Err(engine_error(source, rule, error)),
         Err(error) => {
@@ -45,15 +44,14 @@ fn values(
     }
 }
 
-fn first(
+fn first_in(
     source: &BookSource,
     rule: Option<&String>,
     input: &str,
+    context: &mut RuleContext,
 ) -> Result<Option<String>, AppError> {
     let Some(rule) = rule else { return Ok(None) };
-    let mut context = RuleContext::default();
-    context.with_http(source.http_context());
-    match evaluate_first(rule, input, &mut context) {
+    match evaluate_first(rule, input, context) {
         Ok(value) => Ok(value),
         Err(error) if strict_engine() => Err(engine_error(source, rule, error)),
         Err(error) => {
@@ -63,40 +61,51 @@ fn first(
     }
 }
 
-fn joined(
+fn joined_in(
     source: &BookSource,
     rule: Option<&String>,
     input: &str,
+    context: &mut RuleContext,
 ) -> Result<Option<String>, AppError> {
     let Some(rule) = rule else { return Ok(None) };
-    let text = values(source, rule, input, Extraction::Values)?.join("\n");
+    let text = values_in(source, rule, input, Extraction::Values, context)?.join("\n");
     Ok((!text.trim().is_empty()).then_some(text))
 }
 
 pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
     if let Some(rules) = LegadoRules::decode(&source.raw_rules).search {
         if let Some(list) = rules.book_list.as_deref() {
-            let items = values(source, list, html, Extraction::Nodes)?;
+            let mut list_context = RuleContext::default();
+            list_context.with_http(source.http_context());
+            let items = values_in(source, list, html, Extraction::Nodes, &mut list_context)?;
             let mut results = Vec::new();
             for item in &items {
-                let Some(title) = first(source, rules.name.as_ref(), item)? else {
+                let mut context = RuleContext::new(list_context.snapshot());
+                context.with_http(source.http_context());
+                let Some(title) = first_in(source, rules.name.as_ref(), item, &mut context)? else {
                     continue;
                 };
-                let Some(url) = first(source, rules.book_url.as_ref(), item)? else {
+                let Some(url) = first_in(source, rules.book_url.as_ref(), item, &mut context)?
+                else {
                     continue;
                 };
                 results.push(BookSearchResult {
                     source_id: source.id,
                     source_name: source.name.clone(),
                     title,
-                    author: first(source, rules.author.as_ref(), item)?,
-                    cover: first(source, rules.cover_url.as_ref(), item)?
+                    author: first_in(source, rules.author.as_ref(), item, &mut context)?,
+                    cover: first_in(source, rules.cover_url.as_ref(), item, &mut context)?
                         .map(|value| absolutize(&source.base_url, &value)),
                     url: absolutize(&source.base_url, &url),
-                    intro: joined(source, rules.intro.as_ref(), item)?,
-                    kind: first(source, rules.kind.as_ref(), item)?,
-                    latest_chapter: first(source, rules.last_chapter.as_ref(), item)?,
-                    word_count: first(source, rules.word_count.as_ref(), item)?,
+                    intro: joined_in(source, rules.intro.as_ref(), item, &mut context)?,
+                    kind: first_in(source, rules.kind.as_ref(), item, &mut context)?,
+                    latest_chapter: first_in(
+                        source,
+                        rules.last_chapter.as_ref(),
+                        item,
+                        &mut context,
+                    )?,
+                    word_count: first_in(source, rules.word_count.as_ref(), item, &mut context)?,
                 });
             }
             if !results.is_empty() {
@@ -120,27 +129,31 @@ pub fn parse_explore(source: &BookSource, html: &str) -> Result<Vec<BookSearchRe
             source.name
         )));
     };
-    let items = values(source, list, html, Extraction::Nodes)?;
+    let mut list_context = RuleContext::default();
+    list_context.with_http(source.http_context());
+    let items = values_in(source, list, html, Extraction::Nodes, &mut list_context)?;
     let mut results = Vec::new();
     for item in &items {
-        let Some(title) = first(source, rules.name.as_ref(), item)? else {
+        let mut context = RuleContext::new(list_context.snapshot());
+        context.with_http(source.http_context());
+        let Some(title) = first_in(source, rules.name.as_ref(), item, &mut context)? else {
             continue;
         };
-        let Some(url) = first(source, rules.book_url.as_ref(), item)? else {
+        let Some(url) = first_in(source, rules.book_url.as_ref(), item, &mut context)? else {
             continue;
         };
         results.push(BookSearchResult {
             source_id: source.id,
             source_name: source.name.clone(),
             title,
-            author: first(source, rules.author.as_ref(), item)?,
-            cover: first(source, rules.cover_url.as_ref(), item)?
+            author: first_in(source, rules.author.as_ref(), item, &mut context)?,
+            cover: first_in(source, rules.cover_url.as_ref(), item, &mut context)?
                 .map(|value| absolutize(&source.base_url, &value)),
             url: absolutize(&source.base_url, &url),
-            intro: joined(source, rules.intro.as_ref(), item)?,
-            kind: first(source, rules.kind.as_ref(), item)?,
-            latest_chapter: first(source, rules.last_chapter.as_ref(), item)?,
-            word_count: first(source, rules.word_count.as_ref(), item)?,
+            intro: joined_in(source, rules.intro.as_ref(), item, &mut context)?,
+            kind: first_in(source, rules.kind.as_ref(), item, &mut context)?,
+            latest_chapter: first_in(source, rules.last_chapter.as_ref(), item, &mut context)?,
+            word_count: first_in(source, rules.word_count.as_ref(), item, &mut context)?,
         });
     }
     Ok(results)
@@ -148,14 +161,16 @@ pub fn parse_explore(source: &BookSource, html: &str) -> Result<Vec<BookSearchRe
 
 pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppError> {
     if let Some(rules) = LegadoRules::decode(&source.raw_rules).book_info {
+        let mut context = RuleContext::default();
+        context.with_http(source.http_context());
         let info = BookInfo {
-            title: first(source, rules.name.as_ref(), html)?,
-            author: first(source, rules.author.as_ref(), html)?,
-            intro: joined(source, rules.intro.as_ref(), html)?,
-            cover: first(source, rules.cover_url.as_ref(), html)?
+            title: first_in(source, rules.name.as_ref(), html, &mut context)?,
+            author: first_in(source, rules.author.as_ref(), html, &mut context)?,
+            intro: joined_in(source, rules.intro.as_ref(), html, &mut context)?,
+            cover: first_in(source, rules.cover_url.as_ref(), html, &mut context)?
                 .map(|value| absolutize(&source.base_url, &value)),
-            kind: first(source, rules.kind.as_ref(), html)?,
-            latest_chapter: first(source, rules.last_chapter.as_ref(), html)?,
+            kind: first_in(source, rules.kind.as_ref(), html, &mut context)?,
+            latest_chapter: first_in(source, rules.last_chapter.as_ref(), html, &mut context)?,
         };
         if [
             &info.title,
@@ -184,13 +199,17 @@ fn engine_catalog(
     let Some(list) = rules.chapter_list.as_deref() else {
         return Ok(None);
     };
-    let items = values(source, list, html, Extraction::Nodes)?;
+    let mut list_context = RuleContext::default();
+    list_context.with_http(source.http_context());
+    let items = values_in(source, list, html, Extraction::Nodes, &mut list_context)?;
     let mut chapters = Vec::new();
     for item in &items {
-        let Some(name) = first(source, rules.chapter_name.as_ref(), item)? else {
+        let mut context = RuleContext::new(list_context.snapshot());
+        context.with_http(source.http_context());
+        let Some(name) = first_in(source, rules.chapter_name.as_ref(), item, &mut context)? else {
             continue;
         };
-        let Some(url) = first(source, rules.chapter_url.as_ref(), item)? else {
+        let Some(url) = first_in(source, rules.chapter_url.as_ref(), item, &mut context)? else {
             continue;
         };
         chapters.push((name, absolutize(&source.base_url, &url)));
@@ -202,7 +221,12 @@ pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage
     let rules = LegadoRules::decode(&source.raw_rules).toc;
     if let Some(rules) = rules.as_ref() {
         if let Some(chapters) = engine_catalog(source, rules, html)? {
-            return Ok((chapters, first(source, rules.next_toc_url.as_ref(), html)?));
+            let mut context = RuleContext::default();
+            context.with_http(source.http_context());
+            return Ok((
+                chapters,
+                first_in(source, rules.next_toc_url.as_ref(), html, &mut context)?,
+            ));
         }
     }
     selector::parse_catalog_page(source, html).map_err(AppError::parse)
@@ -215,11 +239,14 @@ pub fn parse_content_page(
     let rules = LegadoRules::decode(&source.raw_rules).content;
     if let Some(rules) = rules.as_ref() {
         if let Some(rule) = rules.content.as_deref() {
-            let content = values(source, rule, html, Extraction::Values)?.join("\n");
+            let mut context = RuleContext::default();
+            context.with_http(source.http_context());
+            let content =
+                values_in(source, rule, html, Extraction::Values, &mut context)?.join("\n");
             if !content.trim().is_empty() {
                 return Ok((
                     content,
-                    first(source, rules.next_content_url.as_ref(), html)?,
+                    first_in(source, rules.next_content_url.as_ref(), html, &mut context)?,
                 ));
             }
         }

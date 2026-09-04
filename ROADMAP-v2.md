@@ -54,7 +54,7 @@
 | WebJs | ✅ | ⛔ | **实测 970 源零出现，降级为不做** |
 | **URL 构造 `AnalyzeUrl`** | **1,007 行，六阶段共用** | 🟡 | **仅 search 阶段的子集（29% 源受影响，边际收益最高）—— 最大结构性缺口，见 §1.2** |
 | `jsLib` 书源级 JS 库 | `SharedJsScope.kt` | ⬜ | 代码库 0 处引用；实测仅 6 源（1%）使用 |
-| `concurrentRate` 限速 | ✅ | ⬜ | 只有全局 `Semaphore(8)`；实测 57 源（6%）配置 |
+| `concurrentRate` 限速 | ✅ | ⬜ | 全局搜索并发默认 `Semaphore(32)`，可通过 `READER_SEARCH_CONCURRENCY` 调整为 1–64；按源 `concurrentRate` 待补；实测 57 源（6%）配置 |
 
 **B 层 · 抓取编排（`webBook` 对位）**
 
@@ -449,6 +449,8 @@ P7  性能 / 稳定性 / 发布                  2 周
 负索引 `.-1`（184 源 / 19%）**已实测确认支持**（`jsoup.rs:136` + `step.rs:58`，各有单测）。
 
 > 2026-09-03 进度：本节完成。统一位置筛选器现支持旧式索引列表 `.0:1:2`、排除 `!0` / `!1:2` / `!-1`、方括号单索引与包含端点区间、缺省端点、负索引、反向范围和负步长；筛选按每个父节点独立应用。`@@` 与 allInOne `:` 前缀已补回归测试，并对齐 `text` 私有匹配、`textNodes`、`ownText`、`all` 的边界行为。真实语料中原有的 range/exclusion `UnsupportedJsoup` 错误已清零。
+
+> 2026-09-05 调试进度：补齐 legado 常见 `:attr(name)` / `::attr(name)` 终端归一化，空 Default 规则按无匹配处理；请求级和书源级 header 现在会清理引号、校验非法名称/值并忽略坏的可选项，避免单个脏 header 令整源失败；URL 选项的 `charset` 会清理导出值尾部引号。QuickJS 增加 `getString` / `getElement(s)` / `toNumChapter`、`source`/`cookie`/`book`/`chapter` 兼容对象与常见 Java 辅助函数，并保留真实 JS 异常消息；多语句脚本支持换行分隔的隐式分号和未声明赋值，`java.ajax` 兼容 Legado 常见的 1/2/3 参数调用。导入器将 legado 私有 `@tag/@class/@id` 链投影到 CSS 兜底，同时保留 `@href/@src/@content` 属性终端；旧数据库缺少 `raw_rules` 时，CSS 兜底也会按同一规则归一化。187 个 Rust 单测通过；同一 970 源语料的保守静态 harness 当前为 **355 / 970（36.6%）**，该数字不等同于在线可用率。剩余线上失败主要是 DNS/超时、Cloudflare 挑战和源脚本/站点本身不兼容，不能仅靠本地规则解析修复。
 
 ### 4.3 JSONPath / XPath（按实测降级）
 

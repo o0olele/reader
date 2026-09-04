@@ -1,4 +1,8 @@
-use crate::{domain::source::BookSource, error::AppError};
+use crate::{
+    domain::source::BookSource,
+    error::AppError,
+    source_engine::rule::{JsContext, JsValue, QuickJsRuntime},
+};
 use sha2::{Digest, Sha256};
 use std::sync::RwLock;
 
@@ -181,32 +185,8 @@ pub fn source_request_with_method(
         tracing::debug!(target: "network", source = %source.name, "source session expired; omitting credentials");
     }
     if let Some(raw) = source.header.as_deref() {
-        if let Ok(headers) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(raw)
-        {
-            for (name, value) in headers {
-                request = request.header(
-                    &name,
-                    value
-                        .as_str()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| value.to_string()),
-                );
-            }
-        } else {
-            for line in raw
-                .split(&['\n', '&'][..])
-                .filter(|line| !line.trim().is_empty())
-            {
-                let Some((name, value)) = line.split_once(':') else {
-                    continue;
-                };
-                request = request
-                    .header(name.trim(), value.trim())
-                    .try_clone()
-                    .ok_or_else(|| {
-                        AppError::InvalidArgument(format!("非法请求头: {}", name.trim()))
-                    })?;
-            }
+        for (name, value) in resolve_source_headers(raw, source, url)? {
+            request = add_custom_header(request, &name, &value);
         }
     }
     if let Some(script) = source.sign_script.as_deref() {
@@ -218,6 +198,109 @@ pub fn source_request_with_method(
         request = request.body(body);
     }
     Ok(request)
+}
+
+fn add_custom_header(
+    request: reqwest::RequestBuilder,
+    name: &str,
+    value: &str,
+) -> reqwest::RequestBuilder {
+    let cleaned_name = trim_header_token(name);
+    let Ok(name) = reqwest::header::HeaderName::from_bytes(cleaned_name.as_bytes()) else {
+        tracing::warn!(target: "network", header = %name, "ignoring invalid source header name");
+        return request;
+    };
+    let cleaned_value = trim_header_token(value);
+    let Ok(value) = reqwest::header::HeaderValue::from_str(&cleaned_value) else {
+        tracing::warn!(target: "network", header = %name, "ignoring invalid source header value");
+        return request;
+    };
+    request.header(name, value)
+}
+
+fn resolve_source_headers(
+    raw: &str,
+    source: &BookSource,
+    url: &str,
+) -> Result<Vec<(String, String)>, AppError> {
+    let raw = raw.trim();
+    let evaluated = if let Some(script) = raw.strip_prefix("@js:") {
+        Some(QuickJsRuntime::default().execute_blocking(
+            script,
+            JsContext {
+                url: Some(url.to_owned()),
+                base_url: Some(source.base_url.clone()),
+                http: Some(source.http_context()),
+                ..Default::default()
+            },
+        )?)
+    } else if raw.starts_with('{') && serde_json::from_str::<serde_json::Value>(raw).is_err() {
+        QuickJsRuntime::default()
+            .execute_blocking(raw, JsContext::default())
+            .ok()
+    } else {
+        None
+    };
+    if let Some(value) = evaluated {
+        return Ok(match value {
+            JsValue::Json(value) => header_pairs_from_value(value),
+            JsValue::String(value) => parse_header_text(&value),
+            JsValue::Null => Vec::new(),
+            other => parse_header_text(&js_header_string(other)),
+        });
+    }
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
+        return Ok(header_pairs_from_value(value));
+    }
+    Ok(parse_header_text(raw))
+}
+
+fn header_pairs_from_value(value: serde_json::Value) -> Vec<(String, String)> {
+    value
+        .as_object()
+        .into_iter()
+        .flat_map(|object| object.iter())
+        .map(|(name, value)| {
+            (
+                name.clone(),
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| value.to_string()),
+            )
+        })
+        .collect()
+}
+
+fn parse_header_text(raw: &str) -> Vec<(String, String)> {
+    raw.trim()
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .split(&['\n', '&', ','][..])
+        .filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            let name = trim_header_token(name);
+            (!name.is_empty()).then(|| (name, trim_header_token(value)))
+        })
+        .collect()
+}
+
+fn trim_header_token(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches(|character| matches!(character, '\'' | '"' | '`' | ','))
+        .trim()
+        .to_owned()
+}
+
+fn js_header_string(value: JsValue) -> String {
+    match value {
+        JsValue::String(value) => value,
+        JsValue::Number(value) => value.to_string(),
+        JsValue::Boolean(value) => value.to_string(),
+        JsValue::Null => String::new(),
+        JsValue::Json(value) => value.to_string(),
+    }
 }
 
 pub fn evaluate_sign_script(script: &str, url: &str) -> Option<String> {
@@ -373,6 +456,45 @@ mod tests {
         );
         assert!(request.headers().contains_key("x-signature"));
         assert_eq!(request.headers()["x-api-key"], "abc");
+    }
+
+    #[test]
+    fn accepts_javascript_object_source_headers() {
+        let request = build(
+            &test_source(
+                None,
+                Some("{'User-Agent':'Source/1.0','X-Source-Key':'abc'}"),
+            ),
+            "https://example.com/chapter",
+        );
+        assert_eq!(request.headers()["x-source-key"], "abc");
+    }
+
+    #[test]
+    fn evaluates_javascript_source_headers() {
+        let request = build(
+            &test_source(None, Some("@js:({'X-From-Js': baseUrl})")),
+            "https://example.com/chapter",
+        );
+        assert_eq!(request.headers()["x-from-js"], "https://example.com");
+    }
+
+    #[test]
+    fn trims_quotes_from_line_style_header_names() {
+        let request = build(
+            &test_source(None, Some(r#""X-Line-Header":"yes""#)),
+            "https://example.com/chapter",
+        );
+        assert_eq!(request.headers()["x-line-header"], "yes");
+    }
+
+    #[test]
+    fn ignores_invalid_optional_source_headers() {
+        let request = build(
+            &test_source(None, Some("bad header:value\nX-Good:yes")),
+            "https://example.com/chapter",
+        );
+        assert_eq!(request.headers()["x-good"], "yes");
     }
 
     #[test]

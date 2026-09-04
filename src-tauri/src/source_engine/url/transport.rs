@@ -29,6 +29,10 @@ pub fn prepare(
         request = request.header(reqwest::header::REFERER, referer);
     }
     for (name, value) in &spec.headers {
+        let name = reqwest::header::HeaderName::from_bytes(name.trim().as_bytes())
+            .map_err(|_| AppError::InvalidArgument(format!("非法请求头名称: {name}")))?;
+        let value = reqwest::header::HeaderValue::from_str(value.trim())
+            .map_err(|_| AppError::InvalidArgument(format!("非法请求头值: {}", name.as_str())))?;
         request = request.header(name, value);
     }
     request

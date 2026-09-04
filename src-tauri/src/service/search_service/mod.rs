@@ -32,6 +32,20 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 
 static NEXT_BROWSER_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
+const DEFAULT_SEARCH_CONCURRENCY: usize = 32;
+const MAX_SEARCH_CONCURRENCY: usize = 64;
+
+fn search_concurrency() -> usize {
+    search_concurrency_from_env(std::env::var("READER_SEARCH_CONCURRENCY").ok().as_deref())
+}
+
+fn search_concurrency_from_env(value: Option<&str>) -> usize {
+    value
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .map(|value| value.clamp(1, MAX_SEARCH_CONCURRENCY))
+        .unwrap_or(DEFAULT_SEARCH_CONCURRENCY)
+}
+
 #[derive(Clone)]
 pub struct SearchService {
     sources: SqliteSourceRepository,
@@ -72,7 +86,14 @@ impl SearchService {
         let searched_sources = sources.len();
         let proxy = self.settings.proxy_url().await?;
         let shared = build_shared_client(15)?;
-        let limiter = Arc::new(tokio::sync::Semaphore::new(8));
+        let concurrency = search_concurrency();
+        tracing::info!(
+            target: "source",
+            concurrency,
+            searched_sources,
+            "source search concurrency configured"
+        );
+        let limiter = Arc::new(tokio::sync::Semaphore::new(concurrency));
         let keyword = query.to_owned();
         let jobs = sources.into_iter().map(|source| {
             let service = self.clone();
@@ -648,5 +669,29 @@ mod tests {
         assert!(!browser_body_looks_like_challenge(
             "<html><div class='newbox'><li><h3>Book</h3></li></div></html>"
         ));
+    }
+
+    #[test]
+    fn search_concurrency_defaults_to_thirty_two() {
+        assert_eq!(
+            search_concurrency_from_env(None),
+            DEFAULT_SEARCH_CONCURRENCY
+        );
+        assert_eq!(
+            search_concurrency_from_env(Some("not-a-number")),
+            DEFAULT_SEARCH_CONCURRENCY
+        );
+    }
+
+    #[test]
+    fn search_concurrency_is_clamped_to_safe_bounds() {
+        assert_eq!(search_concurrency_from_env(Some("0")), 1);
+        assert_eq!(search_concurrency_from_env(Some("1")), 1);
+        assert_eq!(search_concurrency_from_env(Some("64")), 64);
+        assert_eq!(
+            search_concurrency_from_env(Some("999")),
+            MAX_SEARCH_CONCURRENCY
+        );
+        assert_eq!(search_concurrency_from_env(Some(" 16 ")), 16);
     }
 }

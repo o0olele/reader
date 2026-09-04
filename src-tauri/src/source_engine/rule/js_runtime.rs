@@ -4,12 +4,13 @@
 //! can therefore use a real QuickJS implementation today while tests and
 //! future WebView-backed implementations can provide another runtime.
 
+use super::{engine::evaluate, jsoup::Extraction, model::RuleContext};
 use crate::error::AppError;
 use crate::infrastructure::http::request::{evaluate_sign_script, user_agent};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use md5::{Digest, Md5};
-use rquickjs::{Context, Ctx, Function, Object, Runtime};
+use rquickjs::{CatchResultExt, Context, Ctx, Function, Object, Runtime};
 use serde_json::Value as JsonValue;
 use std::{
     collections::HashMap,
@@ -179,6 +180,8 @@ fn install_globals<'js>(
     http: Option<JsHttpContext>,
 ) -> Result<(), AppError> {
     let globals = ctx.globals();
+    let rule_input = result.clone();
+    let base_url_value = base_url.unwrap_or_default();
     globals.set("result", result).map_err(js_error)?;
     globals
         .set("url", url.unwrap_or_default())
@@ -187,8 +190,12 @@ fn install_globals<'js>(
         .set("key", key.unwrap_or_default())
         .map_err(js_error)?;
     globals
-        .set("baseUrl", base_url.unwrap_or_default())
+        .set("baseUrl", base_url_value.clone())
         .map_err(js_error)?;
+    // Legado exposes pagination as a built-in even when the URL rule does not
+    // explicitly declare it.  Source exports commonly reference `page`
+    // directly while constructing signed API requests.
+    globals.set("page", "1").map_err(js_error)?;
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
     let session_state = http
@@ -217,7 +224,11 @@ fn install_globals<'js>(
     )
     .map_err(js_error)?;
     let get_values = Arc::clone(variables);
-    let http_session = http.map(build_js_http_session).transpose()?.map(Arc::new);
+    let http_session = http
+        .clone()
+        .map(build_js_http_session)
+        .transpose()?
+        .map(Arc::new);
     let get_session = http_session.clone();
     java.set(
         "get",
@@ -253,6 +264,59 @@ fn install_globals<'js>(
                 values.insert(key, value.clone());
             }
             value
+        }),
+    )
+    .map_err(js_error)?;
+    let get_string_values = Arc::clone(variables);
+    let get_string_http = http.clone();
+    let get_string_input = rule_input.clone();
+    java.set(
+        "getString",
+        Function::new(ctx.clone(), move |rule: String| {
+            nested_rule_values(
+                &rule,
+                &get_string_input,
+                Extraction::Values,
+                &get_string_values,
+                get_string_http.clone(),
+            )
+            .map(|values| values.into_iter().next().unwrap_or_default())
+            .map_err(rule_js_error)
+        }),
+    )
+    .map_err(js_error)?;
+    let get_elements_values = Arc::clone(variables);
+    let get_elements_http = http.clone();
+    let get_elements_input = rule_input.clone();
+    java.set(
+        "getElements",
+        Function::new(ctx.clone(), move |rule: String| {
+            nested_rule_values(
+                &rule,
+                &get_elements_input,
+                Extraction::Nodes,
+                &get_elements_values,
+                get_elements_http.clone(),
+            )
+            .map_err(rule_js_error)
+        }),
+    )
+    .map_err(js_error)?;
+    let get_element_values = Arc::clone(variables);
+    let get_element_http = http.clone();
+    let get_element_input = rule_input;
+    java.set(
+        "getElement",
+        Function::new(ctx.clone(), move |rule: String| {
+            nested_rule_values(
+                &rule,
+                &get_element_input,
+                Extraction::Nodes,
+                &get_element_values,
+                get_element_http.clone(),
+            )
+            .map(|values| values.into_iter().next().unwrap_or_default())
+            .map_err(rule_js_error)
         }),
     )
     .map_err(js_error)?;
@@ -348,16 +412,384 @@ fn install_globals<'js>(
     )
     .map_err(js_error)?;
     java.set(
+        "toNumChapter",
+        Function::new(ctx.clone(), |value: String| {
+            normalize_chapter_numbers(&value)
+        }),
+    )
+    .map_err(js_error)?;
+    java.set("toast", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set("longToast", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set(
+        "getStringList",
+        Function::new(ctx.clone(), |rule: String| vec![rule]),
+    )
+    .map_err(js_error)?;
+    java.set("t2s", Function::new(ctx.clone(), |value: String| value))
+        .map_err(js_error)?;
+    java.set(
+        "htmlFormat",
+        Function::new(ctx.clone(), |value: String| value),
+    )
+    .map_err(js_error)?;
+    java.set("startBrowser", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set("startBrowserAwait", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set("openUrl", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set("setContent", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set("refreshBookUrl", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set("refreshTocUrl", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set("refreshExplore", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    java.set(
         "log",
         Function::new(ctx.clone(), |value: String| {
             tracing::debug!(target: "source", "JS: {value}");
         }),
     )
     .map_err(js_error)?;
+    install_source_compat(
+        ctx.clone(),
+        &globals,
+        variables,
+        &base_url_value,
+        http.clone(),
+    )?;
+    // Make the object visible while HTTP compatibility wrappers are installed;
+    // the wrappers are ordinary JavaScript functions that delegate to the
+    // fixed-arity native entry points below.
+    globals.set("java", java.clone()).map_err(js_error)?;
     if let Some(session) = http_session {
         install_http_functions(ctx.clone(), &java, session)?;
     }
     globals.set("java", java).map_err(js_error)
+}
+
+fn install_source_compat<'js>(
+    ctx: Ctx<'js>,
+    globals: &Object<'js>,
+    variables: &Arc<Mutex<HashMap<String, String>>>,
+    base_url: &str,
+    http: Option<JsHttpContext>,
+) -> Result<(), AppError> {
+    let source = Object::new(ctx.clone()).map_err(js_error)?;
+    let get_values = Arc::clone(variables);
+    source
+        .set(
+            "getVariable",
+            Function::new(ctx.clone(), move |key: Option<String>| {
+                let values = get_values.lock().ok();
+                let raw = values
+                    .as_ref()
+                    .and_then(|values| values.get("source"))
+                    .cloned()
+                    .unwrap_or_default();
+                match key.as_deref().filter(|key| !key.is_empty()) {
+                    None => raw,
+                    Some(key) => values
+                        .as_ref()
+                        .and_then(|values| values.get(key))
+                        .cloned()
+                        .or_else(|| {
+                            serde_json::from_str::<JsonValue>(&raw)
+                                .ok()
+                                .and_then(|value| value.get(key).map(|value| value.to_string()))
+                        })
+                        .unwrap_or_default(),
+                }
+            }),
+        )
+        .map_err(js_error)?;
+    let set_values = Arc::clone(variables);
+    source
+        .set(
+            "setVariable",
+            Function::new(ctx.clone(), move |value: String| {
+                if let Ok(mut values) = set_values.lock() {
+                    values.insert("source".into(), value.clone());
+                }
+                value
+            }),
+        )
+        .map_err(js_error)?;
+    let get_key = base_url.to_owned();
+    source
+        .set(
+            "getKey",
+            Function::new(ctx.clone(), move || get_key.clone()),
+        )
+        .map_err(js_error)?;
+    let login_header = Arc::new(Mutex::new(
+        http.as_ref()
+            .and_then(|context| context.headers.clone())
+            .unwrap_or_default(),
+    ));
+    let get_header = Arc::clone(&login_header);
+    source
+        .set(
+            "getLoginHeader",
+            Function::new(ctx.clone(), move || {
+                get_header
+                    .lock()
+                    .map(|header| header.clone())
+                    .unwrap_or_default()
+            }),
+        )
+        .map_err(js_error)?;
+    let put_header = Arc::clone(&login_header);
+    source
+        .set(
+            "putLoginHeader",
+            Function::new(ctx.clone(), move |header: String| {
+                if let Ok(mut value) = put_header.lock() {
+                    *value = header.clone();
+                }
+                header
+            }),
+        )
+        .map_err(js_error)?;
+    let clear_header = Arc::clone(&login_header);
+    source
+        .set(
+            "removeLoginHeader",
+            Function::new(ctx.clone(), move || {
+                if let Ok(mut value) = clear_header.lock() {
+                    value.clear();
+                }
+            }),
+        )
+        .map_err(js_error)?;
+    source.set("key", base_url.to_owned()).map_err(js_error)?;
+    source
+        .set("loginUrl", base_url.to_owned())
+        .map_err(js_error)?;
+    globals.set("source", source).map_err(js_error)?;
+
+    // Legado returns Java Map-like objects from these methods. A small JS
+    // wrapper gives source rules both property access and `.get(key)` without
+    // exposing Rust implementation details to QuickJS.
+    ctx.eval::<(), _>(
+        r#"
+        source.getLoginHeaderMap = function() {
+            var raw = String(source.getLoginHeader() || '').replace(/^#/, '');
+            var map = {};
+            try { map = JSON.parse(raw || '{}') || {}; } catch (e) {}
+            map.get = function(key) { return map[key]; };
+            return map;
+        };
+        source.getLoginInfoMap = function() {
+            var map = {};
+            map.get = function(key) { return map[key]; };
+            return map;
+        };
+        "#,
+    )
+    .map_err(js_error)?;
+
+    let s_values = Arc::clone(variables);
+    let s_input = globals
+        .get::<_, String>("result")
+        .map_err(js_error)
+        .unwrap_or_default();
+    let s_http = http.clone();
+    globals
+        .set(
+            "S",
+            Function::new(ctx.clone(), move |rule: String| {
+                nested_rule_values(
+                    &rule,
+                    &s_input,
+                    Extraction::Values,
+                    &s_values,
+                    s_http.clone(),
+                )
+                .map(|values| values.into_iter().next().unwrap_or_default())
+                .map_err(rule_js_error)
+            }),
+        )
+        .map_err(js_error)?;
+
+    let book = Object::new(ctx.clone()).map_err(js_error)?;
+    let chapter = Object::new(ctx.clone()).map_err(js_error)?;
+    for object in [&book, &chapter] {
+        let get_values = Arc::clone(variables);
+        object
+            .set(
+                "getVariable",
+                Function::new(ctx.clone(), move |key: Option<String>| {
+                    key.as_deref()
+                        .and_then(|key| {
+                            get_values
+                                .lock()
+                                .ok()
+                                .and_then(|values| values.get(key).cloned())
+                        })
+                        .unwrap_or_default()
+                }),
+            )
+            .map_err(js_error)?;
+        let put_values = Arc::clone(variables);
+        object
+            .set(
+                "putVariable",
+                Function::new(ctx.clone(), move |key: String, value: String| {
+                    if let Ok(mut values) = put_values.lock() {
+                        values.insert(key, value.clone());
+                    }
+                    value
+                }),
+            )
+            .map_err(js_error)?;
+    }
+    globals.set("book", book).map_err(js_error)?;
+    globals.set("chapter", chapter).map_err(js_error)?;
+    let cookie = Object::new(ctx.clone()).map_err(js_error)?;
+    let cookie_value = http
+        .as_ref()
+        .and_then(|context| context.session_cookie.clone())
+        .unwrap_or_default();
+    let get_cookie = cookie_value.clone();
+    cookie
+        .set(
+            "getCookie",
+            Function::new(ctx.clone(), move |_url: Option<String>| get_cookie.clone()),
+        )
+        .map_err(js_error)?;
+    let get_cookie_key = cookie_value;
+    cookie
+        .set(
+            "getKey",
+            Function::new(ctx.clone(), move |_url: Option<String>, key: String| {
+                get_cookie_key
+                    .split(';')
+                    .filter_map(|part| part.trim().split_once('='))
+                    .find_map(|(name, value)| {
+                        (name.trim() == key).then_some(value.trim().to_owned())
+                    })
+                    .unwrap_or_default()
+            }),
+        )
+        .map_err(js_error)?;
+    cookie
+        .set("removeCookie", Function::new(ctx.clone(), || {}))
+        .map_err(js_error)?;
+    globals.set("cookie", cookie).map_err(js_error)?;
+    globals.set("content", "").map_err(js_error)
+}
+
+fn nested_rule_values(
+    rule: &str,
+    input: &str,
+    want: Extraction,
+    variables: &Arc<Mutex<HashMap<String, String>>>,
+    http: Option<JsHttpContext>,
+) -> Result<Vec<String>, String> {
+    let snapshot = variables
+        .lock()
+        .map(|values| values.clone())
+        .unwrap_or_default();
+    let mut context = RuleContext::new(snapshot);
+    if let Some(http) = http {
+        context.with_http(http);
+    }
+    let values = evaluate(rule, input, want, &mut context).map_err(|error| error.to_string())?;
+    if let Ok(mut shared) = variables.lock() {
+        shared.extend(context.snapshot());
+    }
+    Ok(values)
+}
+
+fn rule_js_error(error: String) -> rquickjs::Error {
+    rquickjs::Error::new_from_js_message("Rule", "String", error)
+}
+
+fn normalize_chapter_numbers(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut chinese = String::new();
+    let flush = |output: &mut String, chinese: &mut String| {
+        if chinese.is_empty() {
+            return;
+        }
+        if let Some(number) = chinese_number(chinese) {
+            output.push_str(&number.to_string());
+        } else {
+            output.push_str(chinese);
+        }
+        chinese.clear();
+    };
+    for character in value.chars() {
+        if chinese_digit(character).is_some() || chinese_unit(character).is_some() {
+            chinese.push(character);
+        } else {
+            flush(&mut output, &mut chinese);
+            output.push(character);
+        }
+    }
+    flush(&mut output, &mut chinese);
+    output
+}
+
+fn chinese_number(value: &str) -> Option<u64> {
+    let has_unit = value
+        .chars()
+        .any(|character| chinese_unit(character).is_some());
+    if !has_unit {
+        return value.chars().try_fold(0_u64, |number, character| {
+            Some(number * 10 + chinese_digit(character)?)
+        });
+    }
+    let mut total = 0_u64;
+    let mut section = 0_u64;
+    let mut digit = 0_u64;
+    for character in value.chars() {
+        if let Some(value) = chinese_digit(character) {
+            digit = value;
+            continue;
+        }
+        let unit = chinese_unit(character)?;
+        if unit == 10_000 {
+            section = (section + digit) * unit;
+            total += section;
+            section = 0;
+        } else {
+            section += digit.max(1) * unit;
+        }
+        digit = 0;
+    }
+    Some(total + section + digit)
+}
+
+fn chinese_digit(character: char) -> Option<u64> {
+    match character {
+        '零' | '〇' => Some(0),
+        '一' => Some(1),
+        '二' | '两' => Some(2),
+        '三' => Some(3),
+        '四' => Some(4),
+        '五' => Some(5),
+        '六' => Some(6),
+        '七' => Some(7),
+        '八' => Some(8),
+        '九' => Some(9),
+        _ => None,
+    }
+}
+
+fn chinese_unit(character: char) -> Option<u64> {
+    match character {
+        '十' => Some(10),
+        '百' => Some(100),
+        '千' => Some(1_000),
+        '万' => Some(10_000),
+        _ => None,
+    }
 }
 
 fn install_http_functions<'js>(
@@ -490,21 +922,42 @@ fn install_http_functions<'js>(
     .map_err(js_error)?;
     let ajax_http = session;
     java.set(
-        "ajax",
+        "ajaxRaw",
         Function::new(
-            ctx,
-            move |url: String, method: Option<String>, body: Option<String>| {
+            ctx.clone(),
+            move |url: String, method: String, body: String| {
                 blocking_http_request(
                     &ajax_http,
-                    method.as_deref().unwrap_or("GET"),
+                    if method.is_empty() {
+                        "GET"
+                    } else {
+                        method.as_str()
+                    },
                     &url,
-                    body.filter(|value| !value.is_empty()),
+                    (!body.is_empty()).then_some(body),
                 )
                 .map_err(|error| {
                     rquickjs::Error::new_from_js_message("HTTP", "String", error.to_string())
                 })
             },
         ),
+    )
+    .map_err(js_error)?;
+    // Legado calls java.ajax with one, two, or three arguments. QuickJS
+    // enforces the native function's arity, so normalize omitted arguments in
+    // a JS wrapper and always call the fixed-arity bridge with three values.
+    ctx.eval::<(), _>(
+        r#"
+        java.ajax = function(url, method, body) {
+            if (method && typeof method === 'object') {
+                body = method.body;
+                method = method.method;
+            }
+            method = method == null ? 'GET' : String(method);
+            body = body == null ? '' : String(body);
+            return java.ajaxRaw(String(url), method, body);
+        };
+        "#,
     )
     .map_err(js_error)
 }
@@ -699,22 +1152,47 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
 }
 
 fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError> {
+    let script = normalize_js_statement_boundaries(script);
     // Most legado rules are expressions (`result.trim()`). Try that first;
     // statement blocks use an explicit `return` and are evaluated second.
     let expression = format!("JSON.stringify(({script}))");
-    let serialized = ctx
-        .eval::<String, _>(expression.as_str())
-        .or_else(|_| {
-            let block_script = script
-                .rsplit_once(';')
-                .map(|(body, tail)| format!("{body}; return ({tail});"))
-                .unwrap_or_else(|| script.to_owned());
-            let block = format!(
-                "JSON.stringify((function() {{ {block_script} }})()) || JSON.stringify(result)"
+    let serialized = match ctx.eval::<String, _>(expression.as_str()) {
+        Ok(serialized) => serialized,
+        Err(_) => {
+            // Expression failure is expected for statement-style rules. A
+            // direct eval preserves JavaScript's completion value, including
+            // scripts whose statements are separated only by newlines (a
+            // common Legado style). The old function wrapper tried to infer
+            // the final expression from semicolons and turned scripts such as
+            // `headerSign=...\nparamSign=...\nurl` into an invalid single
+            // `return (...)` expression.
+            let _ = ctx.catch();
+            let source = serde_json::to_string(&script)
+                .map_err(|error| AppError::Parse(format!("JavaScript 编码失败: {error}")))?;
+            let program = format!(
+                "JSON.stringify((function() {{ return eval({source}); }})()) || JSON.stringify(result)"
             );
-            ctx.eval::<String, _>(block.as_str())
-        })
-        .map_err(js_error)?;
+            let direct = ctx.eval::<String, _>(program.as_str()).catch(&ctx);
+            match direct {
+                Ok(serialized) => serialized,
+                Err(_direct_error) if has_top_level_return(&script) => {
+                    // A script containing an explicit top-level `return`
+                    // cannot run through eval. Keep the function-wrapper
+                    // fallback for those exports and report its real error.
+                    let block_script = split_last_statement(&script)
+                        .map(|(body, tail)| format!("{body}; return ({tail});"))
+                        .unwrap_or_else(|| script.to_owned());
+                    let block = format!(
+                        "JSON.stringify((function() {{ {block_script} }})()) || JSON.stringify(result)"
+                    );
+                    ctx.eval::<String, _>(block.as_str())
+                        .catch(&ctx)
+                        .map_err(js_error)?
+                }
+                Err(direct_error) => return Err(js_error(direct_error)),
+            }
+        }
+    };
     let value: JsonValue = serde_json::from_str(&serialized)
         .map_err(|error| AppError::Parse(format!("JavaScript 返回值不是 JSON: {error}")))?;
     Ok(match value {
@@ -724,6 +1202,290 @@ fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError
         JsonValue::Null => JsValue::Null,
         other => JsValue::Json(other),
     })
+}
+
+/// Legado exports frequently omit semicolons between assignment statements,
+/// relying on Android's JavaScript engine to insert them at line boundaries.
+/// QuickJS is stricter for a few otherwise-valid continuations (notably
+/// `headerSign=...` followed by `paramSign=...`). Add terminators only where a
+/// new declaration/assignment clearly starts, leaving multiline expressions,
+/// control headers, and object/function bodies untouched.
+fn normalize_js_statement_boundaries(script: &str) -> String {
+    let script = declare_implicit_assignments(script);
+    let mut lines: Vec<String> = script.lines().map(declare_implicit_assignment).collect();
+    if lines.len() < 2 {
+        return script;
+    }
+    for index in 1..lines.len() {
+        if should_insert_statement_semicolon(&lines[index - 1], &lines[index]) {
+            let previous = lines[index - 1].trim_end();
+            if !previous.ends_with(';') {
+                lines[index - 1].push(';');
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+fn declare_implicit_assignments(script: &str) -> String {
+    let mut names = Vec::new();
+    let bytes = script.as_bytes();
+    let mut index = 0;
+    let mut quote = None;
+    let mut escaped = false;
+    let mut statement_start = true;
+    while index < bytes.len() {
+        let character = bytes[index] as char;
+        if escaped {
+            escaped = false;
+            index += 1;
+            continue;
+        }
+        if let Some(active) = quote {
+            if character == '\\' {
+                escaped = true;
+            } else if character == active {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        if matches!(character, '\'' | '"' | '`') {
+            quote = Some(character);
+            index += 1;
+            continue;
+        }
+        if character == '/' && bytes.get(index + 1) == Some(&b'/') {
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+            statement_start = true;
+            continue;
+        }
+        if character == ';' || character == '\n' || character == '{' {
+            statement_start = true;
+            index += 1;
+            continue;
+        }
+        if character.is_ascii_whitespace() {
+            index += 1;
+            continue;
+        }
+        if statement_start
+            && (character == '_' || character == '$' || character.is_ascii_alphabetic())
+        {
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && (bytes[index] == b'_'
+                    || bytes[index] == b'$'
+                    || bytes[index].is_ascii_alphanumeric())
+            {
+                index += 1;
+            }
+            let name = &script[start..index];
+            let mut cursor = index;
+            while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+                cursor += 1;
+            }
+            let declared = matches!(
+                name,
+                "var" | "let" | "const" | "function" | "if" | "for" | "while" | "return"
+            );
+            let known_global = matches!(
+                name,
+                "result"
+                    | "url"
+                    | "key"
+                    | "baseUrl"
+                    | "page"
+                    | "java"
+                    | "source"
+                    | "book"
+                    | "chapter"
+                    | "content"
+            );
+            if !declared
+                && !known_global
+                && bytes.get(cursor) == Some(&b'=')
+                && bytes.get(cursor + 1) != Some(&b'=')
+                && bytes.get(cursor + 1) != Some(&b'>')
+                && !names.iter().any(|existing| existing == name)
+            {
+                names.push(name.to_owned());
+            }
+            statement_start = false;
+            continue;
+        }
+        statement_start = false;
+        index += 1;
+    }
+    if names.is_empty() {
+        script.to_owned()
+    } else {
+        format!("var {};\n{script}", names.join(", "))
+    }
+}
+
+fn declare_implicit_assignment(line: &str) -> String {
+    let trimmed = line.trim_start();
+    let Some(equal) = trimmed.find('=') else {
+        return line.to_owned();
+    };
+    if trimmed
+        .as_bytes()
+        .get(equal + 1)
+        .is_some_and(|next| matches!(next, b'=' | b'>'))
+    {
+        return line.to_owned();
+    }
+    let name = trimmed[..equal].trim_end();
+    if name.ends_with(['!', '<', '>']) {
+        return line.to_owned();
+    }
+    let known_global = matches!(name, "result" | "url" | "key" | "baseUrl" | "page" | "java");
+    let identifier = !name.is_empty()
+        && name.chars().enumerate().all(|(index, character)| {
+            character == '_'
+                || character == '$'
+                || character.is_ascii_alphanumeric() && (index > 0 || !character.is_ascii_digit())
+        });
+    if !known_global && identifier {
+        let indent = &line[..line.len() - trimmed.len()];
+        format!("{indent}var {trimmed}")
+    } else {
+        line.to_owned()
+    }
+}
+
+fn should_insert_statement_semicolon(previous: &str, current: &str) -> bool {
+    let previous = previous.trim();
+    let current = current.trim_start();
+    if previous.is_empty()
+        || previous.starts_with("//")
+        || previous.ends_with([
+            '{', '(', '[', ',', '.', ':', '?', '=', '+', '-', '*', '/', '&', '|',
+        ])
+        || ["else", "catch", "finally"]
+            .iter()
+            .any(|keyword| current.starts_with(keyword))
+    {
+        return false;
+    }
+    if is_control_header(previous) {
+        return false;
+    }
+    starts_assignment_or_declaration(current)
+        || matches!(current.chars().next(), Some('\'' | '"' | '`'))
+}
+
+fn is_control_header(line: &str) -> bool {
+    ["if", "for", "while", "switch", "with", "catch"]
+        .iter()
+        .any(|keyword| {
+            line.strip_prefix(keyword)
+                .is_some_and(|rest| rest.trim_start().starts_with('('))
+        })
+}
+
+fn starts_assignment_or_declaration(line: &str) -> bool {
+    let line = line.trim_start();
+    if ["var ", "let ", "const "]
+        .iter()
+        .any(|prefix| line.starts_with(prefix))
+    {
+        return true;
+    }
+    let Some(equal) = line.find('=') else {
+        return false;
+    };
+    let lhs = line[..equal].trim_end();
+    if lhs.is_empty() || lhs.ends_with(['=', '!', '<', '>']) {
+        return false;
+    }
+    lhs.chars().all(|character| {
+        character.is_ascii_alphanumeric()
+            || matches!(character, '_' | '$' | '.' | '[' | ']' | '\'' | '"')
+            || character.is_ascii_whitespace()
+    })
+}
+
+fn split_last_statement(script: &str) -> Option<(&str, &str)> {
+    let mut quote = None;
+    let mut escaped = false;
+    let mut depth = 0_i32;
+    let mut split = None;
+    for (index, character) in script.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quote.is_some() {
+            if character == '\\' {
+                escaped = true;
+            } else if Some(character) == quote {
+                quote = None;
+            }
+            continue;
+        }
+        match character {
+            '\'' | '"' | '`' => quote = Some(character),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ';' if depth == 0 => split = Some(index),
+            _ => {}
+        }
+    }
+    let index = split?;
+    let tail = script[index + 1..].trim();
+    (!tail.is_empty()).then_some((&script[..index], tail))
+}
+
+fn has_top_level_return(script: &str) -> bool {
+    let mut depth = 0_i32;
+    let mut quote = None;
+    let mut escaped = false;
+    let bytes = script.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let character = bytes[index] as char;
+        if escaped {
+            escaped = false;
+            index += 1;
+            continue;
+        }
+        if let Some(active) = quote {
+            if character == '\\' {
+                escaped = true;
+            } else if character == active {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        if matches!(character, '\'' | '"' | '`') {
+            quote = Some(character);
+            index += 1;
+            continue;
+        }
+        match character {
+            '{' | '(' | '[' => depth += 1,
+            '}' | ')' | ']' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0
+            && (index == 0 || bytes[index - 1].is_ascii_whitespace() || bytes[index - 1] == b';')
+            && script[index..].starts_with("return")
+            && script[index + 6..]
+                .chars()
+                .next()
+                .is_some_and(|next| next.is_ascii_whitespace() || next == ';')
+        {
+            return true;
+        }
+        index += 1;
+    }
+    false
 }
 
 fn js_error(error: impl std::fmt::Display) -> AppError {
@@ -780,6 +1542,153 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reports_the_javascript_exception_message() {
+        let error = QuickJsRuntime::default()
+            .execute("missingHelper()", JsContext::default())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("missingHelper"), "{error}");
+        assert!(!error.contains("Exception generated by QuickJS"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn executes_newline_separated_statement_scripts() {
+        let script = r#"
+signKey='secret'
+headers={'platform':'android'}
+params={'page':page,'wd':key}
+var encode = function(values) {
+  return Object.keys(values).map(k=>k+'='+values[k]).join('&')
+};
+headerSign=java.md5Encode(encode(headers)+signKey)
+paramSign=java.md5Encode(encode(params)+signKey)
+headers['sign']=headerSign
+params['sign']=paramSign
+'/search?'+encode(params)+','+JSON.stringify({'headers':headers})
+"#;
+        let value = QuickJsRuntime::default()
+            .execute(
+                script,
+                JsContext {
+                    key: Some("斗破苍穹".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        match value {
+            JsValue::String(value) => {
+                assert!(value.starts_with("/search?page=1&wd="), "{value}");
+                assert!(value.contains("headers"), "{value}");
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn executes_real_qimao_search_script() {
+        let script = r#"
+sign_key='d3dGiJc651gSQ8w1'
+
+headers={'app-version':'51110','platform':'android','reg':'0','AUTHORIZATION':'','application-id':'com.****.reader','net-env':'1','channel':'unknown','qm-params':''}
+
+params={'gender':'3','imei_ip':'2937357107','page':page,'wd':key}
+
+var urlEncode = function (param, key, encode) {
+  if(param==null) return '';
+  var paramStr = '';
+  var t = typeof (param);
+  if (t == 'string' || t == 'number' || t == 'boolean') {
+    paramStr += '&' + key + '=' + ((encode==null||encode) ? encodeURIComponent(param) : param);
+  } else {
+    for (var i in param) {
+      var k = key == null ? i : key + (param instanceof Array ? '[' + i + ']' : '.' + i);
+      paramStr += urlEncode(param[i], k, encode);
+    }
+  }
+  return paramStr;
+};
+
+headerSign=String(java.md5Encode(Object.keys(headers).sort().reduce((pre,n)=>pre+n+'='+headers[n],'' )+sign_key))
+paramSign=String(java.md5Encode(Object.keys(params).sort().reduce((pre,n)=>pre+n+'='+params[n],'' )+sign_key))
+headers['sign']=headerSign
+params['sign']=paramSign
+body=urlEncode(params)
+
+"/api/v5/search/words?" +body+","+java.put("headers",JSON.stringify({"headers":headers}))"#;
+        let value = QuickJsRuntime::default()
+            .execute(
+                script,
+                JsContext {
+                    key: Some("斗破苍穹".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(value, JsValue::String(value) if value.starts_with("/api/v5/search/words?"))
+        );
+    }
+
+    #[tokio::test]
+    async fn executes_statement_scripts_starting_with_control_flow() {
+        let value = QuickJsRuntime::default()
+            .execute(
+                "if (key) { result = key; }\nresult",
+                JsContext {
+                    key: Some("ok".into()),
+                    result: "before".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(value, JsValue::String("ok".into()));
+    }
+
+    #[tokio::test]
+    async fn executes_legado_control_flow_after_function_declarations() {
+        let value = QuickJsRuntime::default()
+            .execute(
+                r#"
+var category = function () { return 'category'; };
+var tag = function () { return 'tag'; };
+if (baseUrl.match(/category/)) {
+  category()
+} else {
+  tag()
+}
+"#,
+                JsContext {
+                    base_url: Some("https://example.test/tag".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(value, JsValue::String("tag".into()));
+    }
+
+    #[tokio::test]
+    async fn accepts_legado_one_argument_ajax_calls() {
+        let error = QuickJsRuntime::default()
+            .execute(
+                "java.ajax('not a valid URL')",
+                JsContext {
+                    http: Some(JsHttpContext::default()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(!error.contains("argument(s)"), "{error}");
+        assert!(error.contains("network error"), "{error}");
+    }
+
+    #[tokio::test]
     async fn blocking_execution_with_http_context_is_safe_inside_async_context() {
         let value = QuickJsRuntime::default()
             .execute_blocking(
@@ -810,6 +1719,48 @@ mod tests {
                 "4869|Hi|5d41402abc4b2a76b9719d911017c592|72,105|Hi|1970-01-01 00:00:00".into()
             )
         );
+    }
+
+    #[tokio::test]
+    async fn exposes_nested_rule_helpers() {
+        let runtime = QuickJsRuntime::default();
+        let value = runtime
+            .execute(
+                "java.getString('$.book.name')",
+                JsContext {
+                    result: r#"{"book":{"name":"斗破苍穹"}}"#.into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(value, JsValue::String("斗破苍穹".into()));
+
+        let value = runtime
+            .execute(
+                "java.getElements('tag.li').length + ':' + java.getElement('tag.li')",
+                JsContext {
+                    result: "<ul><li>一</li><li>二</li></ul>".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(value, JsValue::String(value) if value.starts_with("2:") && value.contains("<li>一</li>"))
+        );
+    }
+
+    #[tokio::test]
+    async fn normalizes_chapter_numbers_and_ignores_android_toasts() {
+        let value = QuickJsRuntime::default()
+            .execute(
+                "java.toast('ignored'); java.longToast('ignored'); java.toNumChapter('第一百二十三章')",
+                JsContext::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(value, JsValue::String("第123章".into()));
     }
 
     #[tokio::test]

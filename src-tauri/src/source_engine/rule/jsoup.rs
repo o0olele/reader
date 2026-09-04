@@ -54,9 +54,10 @@ pub fn execute_jsoup(
     input: &str,
     want: Extraction,
 ) -> Result<Vec<String>, RuleExecutionError> {
-    let raw = rule.rule.trim();
+    let normalized_rule = normalize_rule(rule.rule.trim());
+    let raw = normalized_rule.as_str();
     if raw.is_empty() {
-        return Err(RuleExecutionError::EmptyRule);
+        return Ok(Vec::new());
     }
     let document = Html::parse_fragment(input);
     let mut nodes = vec![document.root_element()];
@@ -90,6 +91,49 @@ pub fn execute_jsoup(
     };
     apply_postprocess(rule, &mut values);
     Ok(values)
+}
+
+/// Legado exports both `@attr(name)`/`:attr(name)` and the CSS-looking
+/// `::attr(name)` spelling.  Normalize those terminal forms before the
+/// `@`-chain parser sees them; otherwise scraper treats `:attr` as an
+/// unsupported pseudo-class and rejects the whole source.
+fn normalize_rule(raw: &str) -> String {
+    let mut output = String::with_capacity(raw.len());
+    let bytes = raw.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let marker = if raw[index..].starts_with("::attr(") {
+            Some(7)
+        } else if raw[index..].starts_with(":attr(") {
+            Some(6)
+        } else {
+            None
+        };
+        let Some(marker_len) = marker else {
+            let length = raw[index..].chars().next().map(char::len_utf8).unwrap_or(1);
+            output.push_str(&raw[index..index + length]);
+            index += length;
+            continue;
+        };
+        let start = index + marker_len;
+        let Some(end_rel) = raw[start..].find(')') else {
+            output.push_str(&raw[index..]);
+            break;
+        };
+        let name = raw[start..start + end_rel].trim();
+        if name.is_empty()
+            || !name.chars().all(|character| {
+                character.is_ascii_alphanumeric() || character == '-' || character == '_'
+            })
+        {
+            output.push_str(&raw[index..start + end_rel + 1]);
+        } else {
+            output.push('@');
+            output.push_str(name);
+        }
+        index = start + end_rel + 1;
+    }
+    output
 }
 
 /// A selection step: a matcher plus an optional index into its matches.
@@ -296,5 +340,19 @@ mod tests {
             vec!["a[data-x='p@q']", "href"]
         );
         assert_eq!(split_steps("a::attr(href)"), vec!["a::attr(href)"]);
+    }
+
+    #[test]
+    fn normalizes_legacy_attr_pseudo_terminals() {
+        assert_eq!(run("a:attr(href)", LIST), vec!["/one", "/two"]);
+        assert_eq!(run("a::attr(href)", LIST), vec!["/one", "/two"]);
+    }
+
+    #[test]
+    fn accepts_empty_rules_as_no_matches() {
+        let mut empty = rule("*");
+        empty.rule.clear();
+        let result = execute_jsoup(&empty, LIST, Extraction::Values).unwrap();
+        assert!(result.is_empty());
     }
 }

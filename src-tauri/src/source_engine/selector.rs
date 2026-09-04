@@ -1,7 +1,7 @@
 //! CSS selector execution for the currently supported source-rule subset.
 
 use crate::domain::source::{BookInfo, BookSearchResult, BookSource};
-use crate::source_engine::url::absolutize;
+use crate::source_engine::{import::normalize_rule, url::absolutize};
 use scraper::{ElementRef, Html, Selector};
 
 fn text(element: ElementRef<'_>) -> Option<String> {
@@ -11,6 +11,8 @@ fn text(element: ElementRef<'_>) -> Option<String> {
 }
 
 fn extract(element: ElementRef<'_>, rule: &str) -> Option<String> {
+    let normalized = normalize_rule(rule);
+    let rule = normalized.as_str();
     let (selector, attribute) = rule
         .split_once("::attr(")
         .and_then(|(selector, rest)| rest.strip_suffix(')').map(|attr| (selector, Some(attr))))
@@ -33,6 +35,8 @@ fn extract(element: ElementRef<'_>, rule: &str) -> Option<String> {
 }
 
 fn first_by_rule(document: &Html, rule: &str) -> Option<String> {
+    let normalized = normalize_rule(rule);
+    let rule = normalized.as_str();
     let selector = rule.split("::attr(").next()?.trim();
     let selector = Selector::parse(selector).ok()?;
     let node = document.select(&selector).next()?;
@@ -46,8 +50,9 @@ fn first_by_rule(document: &Html, rule: &str) -> Option<String> {
 
 pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, String)>, String> {
     let document = Html::parse_document(html);
-    let items = Selector::parse(&source.catalog_rule.item)
-        .map_err(|error| format!("目录结果选择器无效: {error}"))?;
+    let item_rule = normalize_rule(&source.catalog_rule.item);
+    let items =
+        Selector::parse(&item_rule).map_err(|error| format!("目录结果选择器无效: {error}"))?;
     Ok(document
         .select(&items)
         .filter_map(|item| {
@@ -72,8 +77,9 @@ pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage
 
 pub fn parse_content(source: &BookSource, html: &str) -> Result<String, String> {
     let document = Html::parse_document(html);
-    let selector = Selector::parse(&source.content_selector)
-        .map_err(|error| format!("正文选择器无效: {error}"))?;
+    let content_rule = normalize_rule(&source.content_selector);
+    let selector =
+        Selector::parse(&content_rule).map_err(|error| format!("正文选择器无效: {error}"))?;
     let content = document
         .select(&selector)
         .next()
@@ -124,8 +130,9 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, Stri
 
 pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, String> {
     let document = Html::parse_document(html);
-    let items = Selector::parse(&source.search_rule.item)
-        .map_err(|error| format!("搜索结果选择器无效: {error}"))?;
+    let item_rule = normalize_rule(&source.search_rule.item);
+    let items =
+        Selector::parse(&item_rule).map_err(|error| format!("搜索结果选择器无效: {error}"))?;
     Ok(document
         .select(&items)
         .filter_map(|item| {
@@ -212,6 +219,24 @@ mod tests {
             results[0].cover.as_deref(),
             Some("https://example.com/cover.jpg")
         );
+    }
+
+    #[test]
+    fn normalizes_legacy_rules_when_raw_rules_are_missing() {
+        let mut source = source();
+        source.search_rule.item = "class.book".into();
+        source.search_rule.title = "tag.a@text".into();
+        source.search_rule.url = "tag.a@href".into();
+        assert_eq!(normalize_rule("class.book"), ".book");
+        assert_eq!(normalize_rule("tag.a@text"), "a");
+        assert_eq!(normalize_rule("tag.a@href"), "a::attr(href)");
+        let results = parse_search(
+            &source,
+            r#"<div class="book"><a href="/book/1">A Book</a></div>"#,
+        )
+        .unwrap();
+        assert_eq!(results[0].title, "A Book");
+        assert_eq!(results[0].url, "https://example.com/book/1");
     }
 
     #[test]

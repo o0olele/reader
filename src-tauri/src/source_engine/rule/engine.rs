@@ -15,7 +15,7 @@ use super::jsoup::Extraction;
 use super::model::{
     RuleAlternatives, RuleContext, RuleExecutionError, RuleJoin, RuleMode, SourceRule,
 };
-use super::{expand_template, split_rule};
+use super::{expand_template, split_rule, JsContext, JsValue, QuickJsRuntime};
 
 /// Parses `raw` and executes it against `input`.
 pub fn evaluate(
@@ -119,11 +119,30 @@ fn execute_one(
             .collect());
     }
     let expanded = expand_template(&rule.rule, context);
+    let rendered = if expanded.contains("{{") {
+        Some(render_inline_template(&expanded, input, context)?)
+    } else {
+        None
+    };
+    if rule.mode == RuleMode::Default {
+        if let Some(rendered) = rendered.as_ref() {
+            let mut values = vec![rendered.clone()];
+            super::evaluator::apply_postprocess(rule, &mut values);
+            return Ok(values);
+        }
+    }
     let effective = if expanded == rule.rule {
-        rule.clone()
+        if let Some(rendered) = rendered {
+            SourceRule {
+                rule: rendered,
+                ..rule.clone()
+            }
+        } else {
+            rule.clone()
+        }
     } else {
         SourceRule {
-            rule: expanded,
+            rule: rendered.unwrap_or(expanded),
             ..rule.clone()
         }
     };
@@ -131,6 +150,77 @@ fn execute_one(
         return execute_js(&effective, input, context);
     }
     execute_rule(&effective, input, want)
+}
+
+fn render_inline_template(
+    raw: &str,
+    input: &str,
+    context: &mut RuleContext,
+) -> Result<String, RuleExecutionError> {
+    let mut output = String::with_capacity(raw.len());
+    let mut cursor = 0;
+    while let Some(relative_start) = raw[cursor..].find("{{") {
+        let start = cursor + relative_start;
+        output.push_str(&raw[cursor..start]);
+        let expression_start = start + 2;
+        let Some(relative_end) = raw[expression_start..].find("}}") else {
+            return Err(RuleExecutionError::UnsupportedJsoup(
+                "template is missing `}}`".into(),
+            ));
+        };
+        let end = expression_start + relative_end;
+        let expression = raw[expression_start..end].trim();
+        output.push_str(&evaluate_inline_expression(expression, input, context)?);
+        cursor = end + 2;
+    }
+    output.push_str(&raw[cursor..]);
+    Ok(output)
+}
+
+fn evaluate_inline_expression(
+    expression: &str,
+    input: &str,
+    context: &mut RuleContext,
+) -> Result<String, RuleExecutionError> {
+    if let Some(value) = context.get(expression) {
+        return Ok(value.to_owned());
+    }
+    if let Some(rule) = expression.strip_prefix("@@") {
+        return Ok(evaluate(rule, input, Extraction::Values, context)?
+            .into_iter()
+            .next()
+            .unwrap_or_default());
+    }
+    if expression.starts_with("@Json:")
+        || expression.starts_with("@json:")
+        || expression.starts_with("$.")
+        || expression.starts_with("$[")
+    {
+        return Ok(evaluate(expression, input, Extraction::Values, context)?
+            .into_iter()
+            .next()
+            .unwrap_or_default());
+    }
+    let runtime = QuickJsRuntime::default();
+    let (value, variables) = runtime
+        .execute_blocking_with_context(
+            expression,
+            JsContext {
+                result: input.to_owned(),
+                variables: context.snapshot(),
+                http: context.http.clone(),
+                ..Default::default()
+            },
+        )
+        .map_err(|error| RuleExecutionError::UnsupportedJsoup(error.to_string()))?;
+    context.extend(variables);
+    Ok(match value {
+        JsValue::String(value) => value,
+        JsValue::Number(value) => value.to_string(),
+        JsValue::Boolean(value) => value.to_string(),
+        JsValue::Null => String::new(),
+        JsValue::Json(value) => value.to_string(),
+    })
 }
 
 fn interleave(left: Vec<String>, right: Vec<String>) -> Vec<String> {
@@ -225,6 +315,49 @@ mod tests {
             .unwrap(),
             vec!["第一章"]
         );
+    }
+
+    #[test]
+    fn renders_inline_json_and_javascript_templates() {
+        let mut context = RuleContext::default();
+        assert_eq!(
+            evaluate(
+                "书名：{{$.name}} / {{java.md5Encode('x')}}",
+                r#"{"name":"斗破苍穹"}"#,
+                Extraction::Values,
+                &mut context,
+            )
+            .unwrap(),
+            vec!["书名：斗破苍穹 / 9dd4e461268c8034f5c8564e155c67a6".to_owned()]
+        );
+    }
+
+    #[test]
+    fn expands_templates_inside_javascript_rules() {
+        let mut context = RuleContext::default();
+        assert_eq!(
+            evaluate(
+                "@js:params={'id':{{$.id}}};JSON.stringify(params)",
+                r#"{"id":42}"#,
+                Extraction::Values,
+                &mut context,
+            )
+            .unwrap(),
+            vec![r#"{"id":42}"#.to_owned()]
+        );
+    }
+
+    #[test]
+    fn renders_statement_templates_without_treating_them_as_css() {
+        let mut context = RuleContext::default();
+        let value = evaluate(
+            "前{{if(true){result='中';} result}}后",
+            "原始",
+            Extraction::Values,
+            &mut context,
+        )
+        .unwrap();
+        assert_eq!(value, vec!["前中后"]);
     }
 
     #[test]
