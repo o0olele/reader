@@ -74,7 +74,8 @@ pub fn run() {
             command_api::source::open_book_source_browser_cmd,
             command_api::source::save_book_source_browser_session_cmd,
             command_api::settings::get_app_settings_cmd,
-            command_api::settings::save_app_settings_cmd
+            command_api::settings::save_app_settings_cmd,
+            command_api::settings::report_webview_user_agent_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -25,7 +25,10 @@ zip = "4"
 quick-xml = "0.38"
 regex = "1"
 fancy-regex = "0.16"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "socks", "blocking"] }
+# gzip/brotli/deflate/zstd are not optional niceties: without them reqwest
+# sends no Accept-Encoding at all, which next to a Chrome User-Agent is one
+# more inconsistency for Cloudflare's bot detection to score against us.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "socks", "blocking", "gzip", "brotli", "deflate", "zstd"] }
 sha2 = "0.10"
 md-5 = "0.10"
 scraper = "0.22"

@@ -106,11 +106,14 @@ const FIELDS = [
     <strong>{{ sources.lastProbe.source_name }}</strong>
     <span>HTTP {{ sources.lastProbe.status }}</span>
     <span>会话：{{ sources.lastProbe.session_state }}</span>
+    <span>Cookie：{{ sources.lastProbe.has_cookie ? '已携带' : '未携带' }}</span>
+    <span>Token：{{ sources.lastProbe.has_token ? '已携带' : '未携带' }}</span>
     <span>耗时：{{ sources.lastProbe.duration_ms }} ms</span>
     <span v-if="sources.lastProbe.cloudflare_challenge">需要浏览器完成 JavaScript 验证</span>
     <span v-else-if="sources.lastProbe.auth_required">需要重新认证</span>
     <span v-else>解析 {{ sources.lastProbe.result_count }} 条</span>
     <code>{{ sources.lastProbe.request_url }}</code>
+    <code>UA={{ sources.lastProbe.user_agent }}</code>
   </div>
 
   <details v-if="sources.sources.some((source) => source.login_url)" class="source-editor">

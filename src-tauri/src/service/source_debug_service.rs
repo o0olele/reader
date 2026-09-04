@@ -3,16 +3,22 @@
 use crate::{
     domain::source::{BookSource, RawSourceRules},
     error::AppError,
-    infrastructure::http::client::build_source_client,
+    infrastructure::http::{client::build_source_client, request::is_challenge_response},
     repository::{source::SqliteSourceRepository, SourceRepository},
+    service::search_service::{
+        browser_body_looks_like_challenge, browser_request, navigate_browser_to_challenge,
+    },
     service::settings_service::SettingsService,
     source_engine::pipeline::{
         parse_book_info, parse_catalog_page, parse_content_page, parse_search,
     },
-    source_engine::url::{build as build_url_request, decode_text, prepare, send, RequestSpec},
+    source_engine::url::{
+        build as build_url_request, decode_text, decode_text_string, prepare, send, RequestSpec,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
+use tauri::WebviewWindow;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -81,11 +87,12 @@ impl SourceDebugService {
         }
     }
 
-    pub async fn run(
+    pub async fn run_with_browser(
         &self,
         source_id: i64,
         stage: SourceDebugStage,
         input: &str,
+        browser: Option<WebviewWindow>,
     ) -> Result<SourceDebugResult, AppError> {
         let source = self
             .sources
@@ -119,8 +126,8 @@ impl SourceDebugService {
         };
         let started = Instant::now();
         let response = send(&client, &source, &request_spec).await?;
-        let status = response.status().as_u16();
-        let response_headers = response
+        let mut status = response.status().as_u16();
+        let mut response_headers: Vec<(String, String)> = response
             .headers()
             .iter()
             .map(|(name, value)| {
@@ -131,12 +138,45 @@ impl SourceDebugService {
             })
             .collect();
         let raw = decode_text(response, &request_spec, &source).await?;
-        let raw_html = raw.chars().take(256 * 1024).collect::<String>();
+        let mut raw_html = raw.chars().take(256 * 1024).collect::<String>();
+        if is_cloudflare_challenge(&response_headers, &raw_html) {
+            if let Some(browser) = browser.as_ref() {
+                let mut browser_succeeded = false;
+                if let Some((browser_status, browser_body)) =
+                    browser_request(browser, &request_spec).await?
+                {
+                    let browser_text = decode_text_string(browser_body, &request_spec, &source)?;
+                    if (200..400).contains(&browser_status)
+                        && !browser_body_looks_like_challenge(&browser_text)
+                    {
+                        status = browser_status;
+                        raw_html = browser_text.chars().take(256 * 1024).collect();
+                        response_headers.clear();
+                        browser_succeeded = true;
+                    }
+                }
+                if !browser_succeeded {
+                    let _ = navigate_browser_to_challenge(browser, &request_spec);
+                }
+            }
+        }
         let mut steps = Vec::new();
-        let parsed = parse_stage(&source, &stage, &raw_html, &mut steps);
-        let (final_json, error) = match parsed {
-            Ok(value) => (value, None),
-            Err(error) => (serde_json::Value::Null, Some(error.to_string())),
+        let (final_json, error) = if is_cloudflare_challenge(&response_headers, &raw_html) {
+            let message = "Cloudflare challenge：当前响应不是书源页面，未执行规则。请在浏览器认证窗口完成验证后重新读取会话";
+            steps.push(SourceDebugStep {
+                field: "HTTP 响应".into(),
+                input_preview: raw_html.chars().take(500).collect(),
+                node_count: 0,
+                output_preview: message.into(),
+                error: Some(message.into()),
+            });
+            (serde_json::Value::Null, Some(message.into()))
+        } else {
+            let parsed = parse_stage(&source, &stage, &raw_html, &mut steps);
+            match parsed {
+                Ok(value) => (value, None),
+                Err(error) => (serde_json::Value::Null, Some(error.to_string())),
+            }
         };
         Ok(SourceDebugResult {
             source_id,
@@ -161,6 +201,15 @@ impl SourceDebugService {
     ) -> Result<(), AppError> {
         self.sources.update_raw_rules(source_id, &rules).await
     }
+}
+
+fn is_cloudflare_challenge(headers: &[(String, String)], body: &str) -> bool {
+    is_challenge_response(
+        headers
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str())),
+        body,
+    )
 }
 
 fn request_for_stage(
@@ -217,4 +266,45 @@ fn parse_stage(
         error: None,
     });
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_cloudflare_challenge;
+
+    #[test]
+    fn detects_a_real_challenge_interstitial() {
+        let headers = vec![
+            ("cf-mitigated".into(), "challenge".into()),
+            ("server".into(), "cloudflare".into()),
+        ];
+        assert!(is_cloudflare_challenge(
+            &headers,
+            "<title>Just a moment...</title>"
+        ));
+    }
+
+    /// The test this replaces was named after 69shuba and asserted that a 403
+    /// carrying `Server: cloudflare` is a challenge. Measured against the real
+    /// site, that is wrong: 69shuba answers a 14-byte `page not found` 403 with
+    /// no challenge markup at all. `Server`/`cf-ray` ride on every proxied
+    /// response, so keying off them relabels every Cloudflare-fronted 403 as
+    /// "solve a captcha" and buries the status text that would explain it.
+    #[test]
+    fn a_plain_403_from_behind_cloudflare_is_not_a_challenge() {
+        let headers = vec![
+            ("server".into(), "cloudflare".into()),
+            ("cf-ray".into(), "a35b5e2c5a90033f-HKG".into()),
+        ];
+        assert!(!is_cloudflare_challenge(&headers, "page not found"));
+    }
+
+    #[test]
+    fn does_not_classify_a_normal_book_page_as_challenge() {
+        let headers = vec![("content-type".into(), "text/html".into())];
+        assert!(!is_cloudflare_challenge(
+            &headers,
+            "<article>book</article>"
+        ));
+    }
 }

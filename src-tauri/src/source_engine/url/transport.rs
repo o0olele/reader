@@ -81,15 +81,44 @@ pub async fn decode_text(
     source: &BookSource,
 ) -> Result<String, AppError> {
     let bytes = response.bytes().await.map_err(AppError::network)?;
+    decode_text_bytes(bytes.as_ref(), spec, source)
+}
+
+/// Decodes a response body obtained outside reqwest (for example from the
+/// authenticated WebView) using the same charset and legado body script rules.
+pub fn decode_text_bytes(
+    bytes: &[u8],
+    spec: &RequestSpec,
+    source: &BookSource,
+) -> Result<String, AppError> {
     let text = match spec.charset.as_deref() {
         Some(label) => Encoding::for_label(label.as_bytes())
             .ok_or_else(|| AppError::Parse(format!("不支持的响应字符集: {label}")))?
-            .decode(&bytes)
+            .decode(bytes)
             .0
             .into_owned(),
         None => String::from_utf8(bytes.to_vec())
             .map_err(|error| AppError::Parse(format!("响应不是 UTF-8: {error}")))?,
     };
+    apply_body_script(text, spec, source)
+}
+
+/// Applies a legado body script to text that has already been decoded by the
+/// browser. WebView `XMLHttpRequest.responseText` is always a Unicode string,
+/// so applying the configured charset a second time would corrupt GBK pages.
+pub fn decode_text_string(
+    text: String,
+    spec: &RequestSpec,
+    source: &BookSource,
+) -> Result<String, AppError> {
+    apply_body_script(text, spec, source)
+}
+
+fn apply_body_script(
+    text: String,
+    spec: &RequestSpec,
+    source: &BookSource,
+) -> Result<String, AppError> {
     let Some(script) = spec.body_js.as_deref() else {
         return Ok(text);
     };

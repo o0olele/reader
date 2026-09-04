@@ -44,6 +44,11 @@ fn normalize_rule(value: &str) -> String {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             {
+                if attribute.eq_ignore_ascii_case("text")
+                    || attribute.eq_ignore_ascii_case("textnodes")
+                {
+                    return selector.trim().to_owned();
+                }
                 return format!("{}::attr({attribute})", selector.trim());
             }
         }

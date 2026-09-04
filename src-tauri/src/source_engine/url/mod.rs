@@ -7,7 +7,9 @@ mod rate_limit;
 mod transport;
 
 pub use parser::{absolutize, build, build_with_base};
-pub use transport::{decode_text, fetch_bytes, prepare, send, FetchedBytes};
+pub use transport::{
+    decode_text, decode_text_bytes, decode_text_string, fetch_bytes, prepare, send, FetchedBytes,
+};
 
 #[derive(Debug, Clone)]
 pub struct RequestSpec {

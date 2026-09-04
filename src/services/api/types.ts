@@ -139,6 +139,9 @@ export interface SourceTestResult {
   session_state: string
   request_url: string
   duration_ms: number
+  has_token: boolean
+  has_cookie: boolean
+  user_agent: string
 }
 
 /** Stages a source can be debugged through, one rule group each. */
@@ -209,4 +212,17 @@ export interface SourceSessionStatus {
 
 export interface AppSettings {
   proxy_url?: string
+  /**
+   * Explicit override. Leave blank to track the embedded webview, which is
+   * what keeps the User-Agent and the client hints Cloudflare sees mutually
+   * consistent — setting this changes the header but not the hints the
+   * browser-auth window emits.
+   */
+  user_agent?: string
+  /** Read-only: `navigator.userAgent` as last reported by the main window. */
+  detected_user_agent?: string
+  /** Read-only: what requests actually go out with right now. */
+  effective_user_agent?: string
+  /** Read-only: last-resort fallback when nothing else is known. */
+  default_user_agent?: string
 }

@@ -5,7 +5,9 @@
 use crate::{
     domain::source::BookSource,
     error::AppError,
-    infrastructure::http::{client::build_source_client, url::resolve_url},
+    infrastructure::http::{
+        client::build_source_client_with_cookie_jar, request::user_agent, url::resolve_url,
+    },
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
     source_engine::{
@@ -14,6 +16,7 @@ use crate::{
     },
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use reqwest::cookie::CookieStore;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -70,7 +73,7 @@ impl SourceService {
         // Deliberately plain: no cookie jar, and reqwest's default redirect
         // policy. Routing this through `build_shared_client` would change both.
         let client = reqwest::Client::builder()
-            .user_agent("Reader Desktop/0.1")
+            .user_agent(user_agent())
             .timeout(std::time::Duration::from_secs(20))
             .build()
             .map_err(AppError::network)?;
@@ -89,7 +92,14 @@ impl SourceService {
             .replace("{{username}}", &input.username)
             .replace("{{password}}", &input.password);
         let url = resolve_url(&source.base_url, &login_url, "登录 URL")?;
-        let client = build_source_client(&source, 20, self.settings.proxy_url().await?.as_deref())?;
+        let (client, cookie_jar) = build_source_client_with_cookie_jar(
+            &source,
+            20,
+            self.settings.proxy_url().await?.as_deref(),
+        )?;
+        if let Some(cookie) = source.session_cookie.as_deref() {
+            cookie_jar.add_cookie_str(cookie, &url);
+        }
         let body = source
             .login_body
             .as_deref()
@@ -97,9 +107,9 @@ impl SourceService {
             .replace("{{username}}", &input.username)
             .replace("{{password}}", &input.password);
         let mut request = match source.login_method.as_str() {
-            "GET" => client.get(url),
-            "PUT" => client.put(url),
-            _ => client.post(url),
+            "GET" => client.get(url.clone()),
+            "PUT" => client.put(url.clone()),
+            _ => client.post(url.clone()),
         };
         request = apply_headers(request, source.header.as_deref());
         request = if body.trim_start().starts_with('{') {
@@ -115,6 +125,7 @@ impl SourceService {
         if !response.status().is_success() {
             return Err(format!("登录返回 HTTP {}", response.status()).into());
         }
+        let response_url = response.url().clone();
         let mut cookie_expiry = None;
         let cookies = response
             .headers()
@@ -129,6 +140,16 @@ impl SourceService {
             .filter_map(|v| v.split(';').next())
             .collect::<Vec<_>>()
             .join("; ");
+        let jar_cookies = [&response_url, &url]
+            .into_iter()
+            .filter_map(|scope| cookie_jar.cookies(scope))
+            .filter_map(|value| value.to_str().ok().map(str::to_owned))
+            .collect::<Vec<_>>()
+            .join("; ");
+        let cookies = merge_cookies(
+            source.session_cookie.as_deref(),
+            Some(&format!("{cookies}; {jar_cookies}")),
+        );
         let response_text = response.text().await.map_err(AppError::network)?;
         let token = source.token_path.as_deref().and_then(|path| {
             serde_json::from_str::<serde_json::Value>(&response_text)
@@ -141,15 +162,15 @@ impl SourceService {
             .update_session(
                 input.source_id,
                 token.as_deref(),
-                (!cookies.is_empty()).then_some(cookies.as_str()),
+                cookies.as_deref(),
                 session_expires_at.as_deref(),
             )
             .await?;
         Ok(SourceLoginResult {
             source_id: input.source_id,
-            authenticated: token.is_some() || !cookies.is_empty(),
+            authenticated: token.is_some() || cookies.is_some(),
             has_token: token.is_some(),
-            has_cookie: !cookies.is_empty(),
+            has_cookie: cookies.is_some(),
             session_expires_at,
         })
     }
@@ -193,6 +214,13 @@ impl SourceService {
                 "浏览器中没有可保存的 Cookie".into(),
             ));
         }
+        if cloudflare_challenge_unsolved(cookies) {
+            return Err(AppError::InvalidArgument(
+                "Cloudflare 验证尚未完成：浏览器只返回了 __cf_bm，没有 cf_clearance。请在认证窗口里等待验证通过（页面显示出书源内容）后再读取会话".into(),
+            ));
+        }
+        let merged_cookies = merge_cookies(source.session_cookie.as_deref(), Some(cookies))
+            .ok_or_else(|| AppError::InvalidArgument("浏览器中没有可保存的有效 Cookie".into()))?;
         let session_expires_at = (!source.session_expired())
             .then(|| source.session_expires_at.clone())
             .flatten();
@@ -200,7 +228,7 @@ impl SourceService {
             .update_session(
                 source_id,
                 source.access_token.as_deref(),
-                Some(cookies),
+                Some(merged_cookies.as_str()),
                 // A 401/403 marks the previous protocol session expired. A
                 // successful browser challenge supersedes that marker; keep
                 // it would make request builders silently omit these cookies.
@@ -284,6 +312,59 @@ fn cookie_max_age(cookie: &str) -> Option<u64> {
             .then(|| value.trim().parse::<i64>().ok())
             .flatten()
             .map(|seconds| seconds.max(0) as u64)
+    })
+}
+
+/// Merge Cookie header fragments using the same name-wins semantics as
+/// legado's CookieManager. Empty/malformed fragments are ignored, and the
+/// newest value wins when a browser challenge refreshes an existing cookie.
+/// Whether a cookie set proves the user is still stuck on the challenge page.
+///
+/// Cloudflare hands `__cf_bm` (and the `cf_chl_*` scratch cookies) to every
+/// visitor, including one who has only just loaded "Just a moment…". Solving
+/// the challenge is what mints `cf_clearance`. Accepting the former as proof
+/// is what made the source report "已认证" while every later request still got
+/// bounced — the failure this whole flow exists to fix, reported as a success.
+///
+/// Sources with no Cloudflare marker at all are ordinary logins and pass
+/// through untouched.
+fn cloudflare_challenge_unsolved(cookies: &str) -> bool {
+    let mut saw_marker = false;
+    for name in cookies
+        .split(';')
+        .filter_map(|pair| pair.trim().split_once('='))
+        .map(|(name, _)| name.trim())
+    {
+        if name.eq_ignore_ascii_case("cf_clearance") {
+            return false;
+        }
+        saw_marker |= name.eq_ignore_ascii_case("__cf_bm")
+            || name.to_ascii_lowercase().starts_with("cf_chl")
+            || name.to_ascii_lowercase().starts_with("_cf_chl");
+    }
+    saw_marker
+}
+
+fn merge_cookies(values: Option<&str>, extra: Option<&str>) -> Option<String> {
+    let mut merged = std::collections::BTreeMap::new();
+    for raw in values.into_iter().chain(extra) {
+        for pair in raw.split(';') {
+            let Some((name, value)) = pair.trim().split_once('=') else {
+                continue;
+            };
+            let name = name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            merged.insert(name.to_owned(), value.trim().to_owned());
+        }
+    }
+    (!merged.is_empty()).then(|| {
+        merged
+            .into_iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect::<Vec<_>>()
+            .join("; ")
     })
 }
 fn apply_headers(
@@ -384,6 +465,42 @@ mod tests {
         assert_eq!(saved.session_cookie.as_deref(), Some("cf_clearance=ok"));
     }
 
+    /// The window can be read while "Just a moment…" is still on screen. Back
+    /// then that stored `__cf_bm` alone and reported 已认证, so the source
+    /// looked fixed and every later request still bounced.
+    #[tokio::test]
+    async fn browser_cookies_reject_an_unfinished_cloudflare_challenge() {
+        let service = SourceService::new(pool().await);
+        service
+            .import_json(
+                r#"[{"bookSourceName":"CF source","bookSourceUrl":"https://example.com","searchUrl":"https://example.com?q={{key}}","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"}}]"#,
+            )
+            .await
+            .unwrap();
+        let source = service.list().await.unwrap().remove(0);
+        let error = service
+            .save_browser_cookies(source.id, "__cf_bm=abc; cf_chl_rc_i=1")
+            .await
+            .unwrap_err();
+        assert!(format!("{error}").contains("cf_clearance"), "{error}");
+        let saved = service.get(source.id).await.unwrap();
+        assert_eq!(saved.session_state(), "anonymous");
+    }
+
+    #[test]
+    fn clearance_beside_the_challenge_markers_is_accepted() {
+        assert!(!cloudflare_challenge_unsolved(
+            "__cf_bm=abc; cf_clearance=ok"
+        ));
+    }
+
+    /// Sources behind an ordinary login have no Cloudflare cookies at all and
+    /// must not be caught by the gate.
+    #[test]
+    fn non_cloudflare_cookies_pass_through() {
+        assert!(!cloudflare_challenge_unsolved("PHPSESSID=abc; remember=1"));
+    }
+
     #[tokio::test]
     async fn browser_cookies_keep_a_live_token_expiry() {
         let service = SourceService::new(pool().await);
@@ -418,5 +535,25 @@ mod tests {
         assert_eq!(cookie_max_age("sid=1; Max-Age=3600; HttpOnly"), Some(3600));
         assert_eq!(cookie_max_age("sid=1; max-age=0"), Some(0));
         assert_eq!(cookie_max_age("sid=1; Path=/"), None);
+    }
+
+    #[test]
+    fn merges_browser_cookies_without_dropping_existing_login_state() {
+        assert_eq!(
+            merge_cookies(
+                Some("sid=old; theme=dark"),
+                Some("cf_clearance=ok; sid=new")
+            )
+            .as_deref(),
+            Some("cf_clearance=ok; sid=new; theme=dark")
+        );
+    }
+
+    #[test]
+    fn ignores_malformed_cookie_fragments() {
+        assert_eq!(
+            merge_cookies(Some("invalid; sid=1"), Some(" ")).as_deref(),
+            Some("sid=1")
+        );
     }
 }

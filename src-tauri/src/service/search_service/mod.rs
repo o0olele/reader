@@ -9,18 +9,28 @@ use crate::{
     error::AppError,
     infrastructure::http::{
         client::{build_shared_client, build_source_client},
-        request::response_error,
+        request::{is_challenge_response, response_error},
     },
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
     source_engine::pipeline::parse_search,
     source_engine::url::{
-        build as build_url_request, decode_text, send as send_url_request, RequestSpec,
+        build as build_url_request, decode_text, decode_text_string, send as send_url_request,
+        RequestSpec,
     },
 };
 use grouping::group_results;
 use serde::Serialize;
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Instant,
+};
+use tauri::{AppHandle, Manager, WebviewWindow};
+
+static NEXT_BROWSER_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct SearchService {
@@ -36,10 +46,11 @@ impl SearchService {
         }
     }
 
-    pub async fn search(
+    pub async fn search_with_browser(
         &self,
         query: &str,
         source_id: Option<i64>,
+        app: Option<AppHandle>,
     ) -> Result<SearchResponse, AppError> {
         let query = query.trim();
         tracing::info!(target: "source", query = %query, source_id = ?source_id, "starting source search");
@@ -64,13 +75,18 @@ impl SearchService {
         let limiter = Arc::new(tokio::sync::Semaphore::new(8));
         let keyword = query.to_owned();
         let jobs = sources.into_iter().map(|source| {
+            let service = self.clone();
             let shared = shared.clone();
             let proxy = proxy.clone();
             let limiter = limiter.clone();
             let keyword = keyword.clone();
+            let browser = app
+                .as_ref()
+                .and_then(|app| app.get_webview_window(&format!("source-auth-{}", source.id)));
             async move {
-                let result =
-                    search_one_source(source.clone(), keyword, shared, proxy, limiter).await;
+                let result = service
+                    .search_one_source(source.clone(), keyword, shared, proxy, limiter, browser)
+                    .await;
                 (source.id, source.name, result)
             }
         });
@@ -103,7 +119,12 @@ impl SearchService {
         })
     }
 
-    pub async fn test(&self, source_id: i64, query: &str) -> Result<SourceTestResult, AppError> {
+    pub async fn test_with_browser(
+        &self,
+        source_id: i64,
+        query: &str,
+        browser: Option<WebviewWindow>,
+    ) -> Result<SourceTestResult, AppError> {
         let started = Instant::now();
         let source = self
             .sources
@@ -114,15 +135,105 @@ impl SearchService {
         let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
         let response = send_url_request(&client, &source, &request).await?;
         let status = response.status().as_u16();
+        let response_headers = response
+            .headers()
+            .iter()
+            .filter_map(|(name, value)| {
+                Some((name.as_str().to_owned(), value.to_str().ok()?.to_owned()))
+            })
+            .collect::<Vec<_>>();
+        let header_challenge = is_challenge_response(
+            response_headers
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.as_str())),
+            "",
+        );
         let (results, auth_required, cloudflare_challenge) = if response.status().is_success() {
-            (
-                parse_search(&source, &decode_text(response, &request, &source).await?)?,
-                false,
-                false,
-            )
+            let text = decode_text(response, &request, &source).await?;
+            let cloudflare_challenge = header_challenge
+                || is_challenge_response(
+                    response_headers
+                        .iter()
+                        .map(|(name, value)| (name.as_str(), value.as_str())),
+                    &text,
+                )
+                || browser_body_looks_like_challenge(&text);
+            if cloudflare_challenge {
+                if let Some(browser) = browser.as_ref() {
+                    if let Some((browser_status, browser_body)) =
+                        browser_request(browser, &request).await?
+                    {
+                        if (200..400).contains(&browser_status) {
+                            let browser_text = decode_text_string(browser_body, &request, &source)?;
+                            if !browser_body_looks_like_challenge(&browser_text) {
+                                self.sync_browser_cookies(&source, browser, &request.url)
+                                    .await?;
+                                let parsed = parse_search(&source, &browser_text)?;
+                                let source_name = source.name.clone();
+                                let session_state = source.session_state().to_owned();
+                                let duration_ms = started.elapsed().as_millis() as u64;
+                                return Ok(SourceTestResult {
+                                    source_id,
+                                    source_name,
+                                    status: browser_status,
+                                    result_count: parsed.len(),
+                                    auth_required: false,
+                                    cloudflare_challenge: false,
+                                    session_state,
+                                    request_url: request.url.to_string(),
+                                    duration_ms,
+                                    has_token: !source.session_expired()
+                                        && source.access_token.is_some(),
+                                    has_cookie: !source.session_expired()
+                                        && source.session_cookie.is_some(),
+                                    user_agent: crate::infrastructure::http::request::user_agent(),
+                                });
+                            }
+                        }
+                    }
+                    let _ = navigate_browser_to_challenge(browser, &request);
+                }
+            }
+            (Vec::<BookSearchResult>::new(), false, cloudflare_challenge)
         } else {
             let reason = response_error(response, &source.name).await;
             let cloudflare_challenge = reason.contains("需要浏览器执行 JavaScript 验证");
+            if cloudflare_challenge {
+                if let Some(browser) = browser.as_ref() {
+                    if let Some((browser_status, browser_body)) =
+                        browser_request(browser, &request).await?
+                    {
+                        if (200..400).contains(&browser_status) {
+                            let text = decode_text_string(browser_body, &request, &source)?;
+                            if !browser_body_looks_like_challenge(&text) {
+                                self.sync_browser_cookies(&source, browser, &request.url)
+                                    .await?;
+                                let parsed = parse_search(&source, &text)?;
+                                let source_name = source.name.clone();
+                                let session_state = source.session_state().to_owned();
+                                let duration_ms = started.elapsed().as_millis() as u64;
+                                return Ok(SourceTestResult {
+                                    source_id,
+                                    source_name,
+                                    status: browser_status,
+                                    result_count: parsed.len(),
+                                    auth_required: false,
+                                    cloudflare_challenge: false,
+                                    session_state,
+                                    request_url: request.url.to_string(),
+                                    duration_ms,
+                                    has_token: !source.session_expired()
+                                        && source.access_token.is_some(),
+                                    has_cookie: !source.session_expired()
+                                        && source.session_cookie.is_some(),
+                                    user_agent: crate::infrastructure::http::request::user_agent(),
+                                });
+                            }
+                        }
+                    }
+                    let _ = navigate_browser_to_challenge(browser, &request);
+                }
+            }
             let auth_required = matches!(status, 401) || (status == 403 && !cloudflare_challenge);
             if auth_required {
                 self.sources.mark_session_expired(source_id).await?;
@@ -148,8 +259,192 @@ impl SearchService {
             session_state,
             request_url: request.url.to_string(),
             duration_ms,
+            has_token: !source.session_expired() && source.access_token.is_some(),
+            has_cookie: !source.session_expired() && source.session_cookie.is_some(),
+            user_agent: crate::infrastructure::http::request::user_agent(),
         })
     }
+
+    async fn sync_browser_cookies(
+        &self,
+        source: &BookSource,
+        browser: &WebviewWindow,
+        url: &reqwest::Url,
+    ) -> Result<(), AppError> {
+        let found = browser
+            .cookies_for_url(url.clone())
+            .map_err(|error| AppError::Source(format!("读取浏览器 Cookie 失败: {error}")))?;
+        let mut merged = std::collections::BTreeMap::new();
+        if let Some(existing) = source.session_cookie.as_deref() {
+            for pair in existing.split(';') {
+                if let Some((name, value)) = pair.trim().split_once('=') {
+                    if !name.trim().is_empty() {
+                        merged.insert(name.trim().to_owned(), value.trim().to_owned());
+                    }
+                }
+            }
+        }
+        for cookie in found {
+            merged.insert(cookie.name().to_owned(), cookie.value().to_owned());
+        }
+        if merged.is_empty() {
+            return Ok(());
+        }
+        let header = merged
+            .into_iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect::<Vec<_>>()
+            .join("; ");
+        let expiry = (!source.session_expired())
+            .then_some(source.session_expires_at.as_deref())
+            .flatten();
+        self.sources
+            .update_session(
+                source.id,
+                source.access_token.as_deref(),
+                Some(&header),
+                expiry,
+            )
+            .await
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct BrowserResponse {
+    status: u16,
+    #[serde(default)]
+    body: String,
+}
+
+/// Runs a source request inside the authenticated WebView so Cloudflare's
+/// JavaScript/runtime-bound clearance remains valid for the request.
+pub(crate) async fn browser_request(
+    window: &WebviewWindow,
+    spec: &RequestSpec,
+) -> Result<Option<(u16, String)>, AppError> {
+    let request_id = NEXT_BROWSER_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    let result_key = format!("__readerDesktopBrowserRequest_{request_id}");
+    let result_key = serde_json::to_string(&result_key).map_err(AppError::parse)?;
+    let url = serde_json::to_string(spec.url.as_str()).map_err(AppError::parse)?;
+    let method = serde_json::to_string(spec.method.as_str()).map_err(AppError::parse)?;
+    let body =
+        serde_json::to_string(spec.body.as_deref().unwrap_or("")).map_err(AppError::parse)?;
+    let mut headers = serde_json::Map::new();
+    for (name, value) in &spec.headers {
+        headers.insert(name.clone(), serde_json::Value::String(value.clone()));
+    }
+    if spec.body.is_some()
+        && !headers
+            .keys()
+            .any(|name| name.eq_ignore_ascii_case("content-type"))
+    {
+        headers.insert(
+            "Content-Type".into(),
+            serde_json::Value::String("application/x-www-form-urlencoded".into()),
+        );
+    }
+    let headers = serde_json::to_string(&headers).map_err(AppError::parse)?;
+    let script = format!(
+        r#"(() => {{ try {{
+            const resultKey = {result_key};
+            window[resultKey] = {{done: false, status: 0, body: ""}};
+            const xhr = new XMLHttpRequest();
+            xhr.open({method}, {url}, true);
+            xhr.withCredentials = true;
+            xhr.timeout = 15000;
+            const headers = {headers};
+            for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+            const finish = (status, body) => {{
+                const current = window[resultKey];
+                if (!current || current.done) return;
+                window[resultKey] = {{done: true, status, body: String(body || "")}};
+            }};
+            xhr.onload = () => finish(xhr.status, xhr.responseText);
+            xhr.onerror = () => finish(0, "浏览器请求失败");
+            xhr.ontimeout = () => finish(0, "浏览器请求超时");
+            xhr.send({body});
+            return "started";
+        }} catch (error) {{
+            window[{result_key}] = {{done: true, status: 0, body: String(error)}};
+            return "started";
+        }} }})()"#,
+        method = method,
+        url = url,
+        body = body,
+        headers = headers,
+        result_key = result_key,
+    );
+    eval_browser_script(window, script).await?;
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(20);
+    let poll_script = format!(
+        r#"(() => {{
+            const value = window[{result_key}];
+            if (!value || !value.done) return "";
+            delete window[{result_key}];
+            return JSON.stringify({{status: value.status, body: value.body}});
+        }})()"#,
+        result_key = result_key,
+    );
+    let result: BrowserResponse = loop {
+        if tokio::time::Instant::now() >= deadline {
+            return Err(AppError::Source(
+                "浏览器请求超时，请确认认证窗口仍然打开".into(),
+            ));
+        }
+        let raw = eval_browser_script(window, poll_script.clone()).await?;
+        let decoded = serde_json::from_str::<String>(&raw).unwrap_or(raw);
+        if !decoded.is_empty() {
+            break serde_json::from_str(&decoded)
+                .map_err(|error| AppError::Source(format!("浏览器响应解析失败: {error}")))?;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    };
+    if result.status == 0 {
+        return Ok(None);
+    }
+    Ok(Some((result.status, result.body)))
+}
+
+async fn eval_browser_script(window: &WebviewWindow, script: String) -> Result<String, AppError> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let sender = std::sync::Mutex::new(Some(sender));
+    window
+        .eval_with_callback(script, move |value| {
+            if let Ok(mut sender) = sender.lock() {
+                if let Some(sender) = sender.take() {
+                    let _ = sender.send(value);
+                }
+            }
+        })
+        .map_err(|error| AppError::Source(format!("浏览器请求执行失败: {error}")))?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), receiver)
+        .await
+        .map_err(|_| AppError::Source("浏览器脚本回调超时，请确认认证窗口仍然打开".into()))?
+        .map_err(|_| AppError::Source("浏览器脚本回调已失效".into()))
+}
+
+/// Put the protected URL in front of the user when the in-page XHR itself is
+/// still challenged. This gives Cloudflare a real top-level navigation where
+/// its interstitial can run, instead of leaving the user on an already-passed
+/// landing page with no way to solve the new challenge.
+pub(crate) fn navigate_browser_to_challenge(
+    window: &WebviewWindow,
+    spec: &RequestSpec,
+) -> Result<(), AppError> {
+    window
+        .navigate(spec.url.clone())
+        .map_err(|error| AppError::Source(format!("打开浏览器验证页面失败: {error}")))
+}
+
+pub(crate) fn browser_body_looks_like_challenge(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    lower.contains("_cf_chl_opt")
+        || lower.contains("enable javascript and cookies")
+        || lower.contains("just a moment")
+        || lower.contains("cf-chl-")
+        || lower.contains("challenge-platform")
+        || (lower.contains("cloudflare") && lower.contains("verify you are human"))
 }
 
 #[derive(Debug, Serialize)]
@@ -163,6 +458,9 @@ pub struct SourceTestResult {
     pub session_state: String,
     pub request_url: String,
     pub duration_ms: u64,
+    pub has_token: bool,
+    pub has_cookie: bool,
+    pub user_agent: String,
 }
 #[derive(Debug, Serialize)]
 pub struct SourceFailure {
@@ -179,35 +477,86 @@ pub struct SearchResponse {
     pub searched_sources: usize,
 }
 
-async fn search_one_source(
-    source: BookSource,
-    keyword: String,
-    shared: reqwest::Client,
-    proxy: Option<String>,
-    limiter: Arc<tokio::sync::Semaphore>,
-) -> Result<Vec<BookSearchResult>, AppError> {
-    let own = source
-        .proxy_url
-        .as_deref()
-        .is_some_and(|v| !v.trim().is_empty())
-        || proxy.is_some();
-    let client = if own {
-        build_source_client(&source, 15, proxy.as_deref())?
-    } else {
-        shared
-    };
-    let _permit = limiter
-        .acquire_owned()
-        .await
-        .map_err(|_| AppError::Source("搜索并发限制器不可用".into()))?;
-    let request = build_search_request(&source, &keyword)?;
-    let response = send_url_request(&client, &source, &request).await?;
-    if !response.status().is_success() {
-        return Err(AppError::Network(
-            response_error(response, &source.name).await,
-        ));
+impl SearchService {
+    async fn search_one_source(
+        &self,
+        source: BookSource,
+        keyword: String,
+        shared: reqwest::Client,
+        proxy: Option<String>,
+        limiter: Arc<tokio::sync::Semaphore>,
+        browser: Option<WebviewWindow>,
+    ) -> Result<Vec<BookSearchResult>, AppError> {
+        let own = source
+            .proxy_url
+            .as_deref()
+            .is_some_and(|v| !v.trim().is_empty())
+            || proxy.is_some();
+        let client = if own {
+            build_source_client(&source, 15, proxy.as_deref())?
+        } else {
+            shared
+        };
+        let _permit = limiter
+            .acquire_owned()
+            .await
+            .map_err(|_| AppError::Source("搜索并发限制器不可用".into()))?;
+        let request = build_search_request(&source, &keyword)?;
+        let response = send_url_request(&client, &source, &request).await?;
+        let response_headers = response
+            .headers()
+            .iter()
+            .filter_map(|(name, value)| {
+                Some((name.as_str().to_owned(), value.to_str().ok()?.to_owned()))
+            })
+            .collect::<Vec<_>>();
+        if !response.status().is_success() {
+            let reason = response_error(response, &source.name).await;
+            if reason.contains("需要浏览器执行 JavaScript 验证") {
+                if let Some(browser) = browser.as_ref() {
+                    if let Some((status, body)) = browser_request(browser, &request).await? {
+                        if (200..400).contains(&status) {
+                            let text = decode_text_string(body, &request, &source)?;
+                            if !browser_body_looks_like_challenge(&text) {
+                                self.sync_browser_cookies(&source, browser, &request.url)
+                                    .await?;
+                                return parse_search(&source, &text);
+                            }
+                        }
+                    }
+                    let _ = navigate_browser_to_challenge(browser, &request);
+                }
+            }
+            return Err(AppError::Network(reason));
+        }
+        let text = decode_text(response, &request, &source).await?;
+        let cloudflare_challenge = is_challenge_response(
+            response_headers
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.as_str())),
+            &text,
+        ) || browser_body_looks_like_challenge(&text);
+        if cloudflare_challenge {
+            if let Some(browser) = browser.as_ref() {
+                if let Some((status, body)) = browser_request(browser, &request).await? {
+                    if (200..400).contains(&status) {
+                        let browser_text = decode_text_string(body, &request, &source)?;
+                        if !browser_body_looks_like_challenge(&browser_text) {
+                            self.sync_browser_cookies(&source, browser, &request.url)
+                                .await?;
+                            return parse_search(&source, &browser_text);
+                        }
+                    }
+                }
+                let _ = navigate_browser_to_challenge(browser, &request);
+            }
+            return Err(AppError::Network(format!(
+                "{} 需要浏览器执行 JavaScript 验证（Cloudflare challenge），HTTP 客户端无法直接通过",
+                source.name
+            )));
+        }
+        parse_search(&source, &text)
     }
-    parse_search(&source, &decode_text(response, &request, &source).await?)
 }
 
 type SearchRequest = RequestSpec;
@@ -289,5 +638,15 @@ mod tests {
         );
         assert_eq!(request.method, reqwest::Method::GET);
         assert!(request.body.is_none());
+    }
+
+    #[test]
+    fn recognizes_http_200_cloudflare_interstitial_bodies() {
+        assert!(browser_body_looks_like_challenge(
+            "<html><title>Just a moment...</title><script>window._cf_chl_opt={}</script></html>"
+        ));
+        assert!(!browser_body_looks_like_challenge(
+            "<html><div class='newbox'><li><h3>Book</h3></li></div></html>"
+        ));
     }
 }

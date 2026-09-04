@@ -66,6 +66,9 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     session_state: string
     request_url: string
     duration_ms: number
+    has_token: boolean
+    has_cookie: boolean
+    user_agent: string
   }>()
 
   async function refresh() {

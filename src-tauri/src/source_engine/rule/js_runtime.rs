@@ -5,7 +5,7 @@
 //! future WebView-backed implementations can provide another runtime.
 
 use crate::error::AppError;
-use crate::infrastructure::http::request::evaluate_sign_script;
+use crate::infrastructure::http::request::{evaluate_sign_script, user_agent};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use md5::{Digest, Md5};
@@ -575,7 +575,14 @@ fn blocking_http_request_with_options(
         .map_err(AppError::network)?;
     let method = reqwest::Method::from_bytes(options.method.as_bytes())
         .map_err(|error| AppError::InvalidArgument(format!("HTTP method 无效: {error}")))?;
-    let mut request = session.client.request(method, url.clone());
+    // Set per request rather than on the cached client: the client is a
+    // `OnceLock` and would otherwise freeze whatever UA was configured at the
+    // first `java.ajax` call. Source-level and call-level headers below can
+    // still override it.
+    let mut request = session
+        .client
+        .request(method, url.clone())
+        .header(reqwest::header::USER_AGENT, user_agent());
     if let Some(timeout_ms) = options.timeout_ms.filter(|value| *value > 0) {
         request = request.timeout(Duration::from_millis(timeout_ms.min(120_000)));
     }
@@ -643,7 +650,6 @@ fn build_js_http_session(context: JsHttpContext) -> Result<JsHttpSession, AppErr
     let client = CLIENT
         .get_or_init(|| {
             reqwest::blocking::Client::builder()
-                .user_agent("Reader Desktop/0.1")
                 .cookie_store(true)
                 .timeout(Duration::from_secs(15))
                 .build()
