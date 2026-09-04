@@ -51,6 +51,28 @@ impl AppError {
     /// are missing or no longer valid. Keeping this classification on the
     /// error avoids every caller parsing localized error text.
     pub fn requires_authentication(&self) -> bool {
-        matches!(self, Self::Network(message) if message.contains("HTTP 401") || message.contains("HTTP 403"))
+        matches!(self, Self::Network(message)
+            if (message.contains("HTTP 401")
+                || message.contains("HTTP 403"))
+                && !message.contains("Cloudflare challenge")
+                && !message.contains("浏览器执行 JavaScript 验证"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppError;
+
+    #[test]
+    fn cloudflare_challenges_are_not_marked_as_expired_sessions() {
+        let error = AppError::Network(
+            "example 返回 HTTP 403: 需要浏览器执行 JavaScript 验证（Cloudflare challenge）".into(),
+        );
+        assert!(!error.requires_authentication());
+    }
+
+    #[test]
+    fn ordinary_forbidden_responses_still_require_authentication() {
+        assert!(AppError::Network("example 返回 HTTP 403".into()).requires_authentication());
     }
 }

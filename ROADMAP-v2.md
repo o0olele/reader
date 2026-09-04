@@ -676,7 +676,7 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | --- | --- | --- | :---: |
 | v0.1.0 | v1 Step 0 | 本地阅读闭环 + 干净架构 | ✅ |
 | **v0.2.0** | **P0** | 覆盖率仪表盘上线（基线 **31.3%** 已测得）+ `txtTocRule` 移植 + v1 §10.6 三条手工验收 | 🟡 |
-| v0.2.1 | — | WebView 认证闭环在真实 Cloudflare 站点验收通过 | ⬜ |
+| v0.2.1 | — | WebView 认证闭环在真实 Cloudflare 站点验收通过 | 🟡（实现完成，待人工站点验收） |
 | **v0.3.0** | **P1 + P2** | 静态覆盖率 **≥ 90%**（起点 31.3%）· 在线可用率 ≥ 60% · 发现页可用 · 兜底路径已删 · 调试器可用 —— **真正的「Legado 桌面版」起点** | ⬜ |
 | v0.4.0 | P3 | 能用本项目读完一本真实在线书 | ⬜ |
 | v0.5.0 | P4 | 下载 / 缓存 / 导出 | ⬜ |
@@ -745,5 +745,14 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | 6 | JSONPath `..` + `?()`，XPath 按 58 条实例逐条扩展 | 81.8% → 99.1% | §4.3 | 🟡 |
 | 7 | 发现页 + 字段补齐 | `exploreUrl` 67% 的源解锁第二入口 | §4.6 | 🟡（后端链路与前端入口已完成，分页/长尾字段待后续） |
 | 8 | **P3 阅读器第一批**：长章节窗口、分页/滚动、阅读配置、章内搜索、书签 | 阅读正文可持续使用，降低长章节卡顿 | §6 | 🟡（基础能力已落地，验收中的百万字性能与真实在线书仍待实测） |
+
+### v0.2.1 人工验收步骤（实现已具备）
+
+1. 在桌面端导入一个配置了 Cloudflare challenge 的真实书源，并确认其 `base_url` / `login_url` 可访问。
+2. 点击“浏览器认证”，在 `source-auth-*` 窗口完成 Cloudflare/Turnstile 验证。
+3. 点击“读取浏览器会话”，确认书源状态变为“已认证”，且会话 Cookie 已持久化。
+4. 点击“测试”，确认探针不再报告 Cloudflare challenge 并能解析出结果；若站点仍返回 challenge，状态保持可重试且不会误标为“已过期”。
+
+本地无网络回归由 `cargo test --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target` 覆盖：Cloudflare 响应头识别、challenge 与普通 403 的分类、过期会话被浏览器 Cookie 清除等路径。
 
 **第 3、4 项做完就有 81.8%** —— 都是不引入新依赖的局部改动，是整个路线图里投入产出比最高的一段。

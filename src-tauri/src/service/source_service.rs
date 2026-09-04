@@ -193,6 +193,9 @@ impl SourceService {
                 "浏览器中没有可保存的 Cookie".into(),
             ));
         }
+        let session_expires_at = (!source.session_expired())
+            .then(|| source.session_expires_at.clone())
+            .flatten();
         self.sources
             .update_session(
                 source_id,
@@ -201,7 +204,7 @@ impl SourceService {
                 // A 401/403 marks the previous protocol session expired. A
                 // successful browser challenge supersedes that marker; keep
                 // it would make request builders silently omit these cookies.
-                None,
+                session_expires_at.as_deref(),
             )
             .await?;
         Ok(SourceLoginResult {
@@ -209,7 +212,7 @@ impl SourceService {
             authenticated: true,
             has_token: source.access_token.is_some(),
             has_cookie: true,
-            session_expires_at: None,
+            session_expires_at,
         })
     }
 }
@@ -379,6 +382,29 @@ mod tests {
         let saved = service.get(source.id).await.unwrap();
         assert_eq!(saved.session_state(), "authenticated");
         assert_eq!(saved.session_cookie.as_deref(), Some("cf_clearance=ok"));
+    }
+
+    #[tokio::test]
+    async fn browser_cookies_keep_a_live_token_expiry() {
+        let service = SourceService::new(pool().await);
+        service
+            .import_json(
+                r#"[{"bookSourceName":"Browser token","bookSourceUrl":"https://example.com","searchUrl":"https://example.com?q={{key}}","token":"token","tokenExpire":"4102444800","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"}}]"#,
+            )
+            .await
+            .unwrap();
+        let source = service.list().await.unwrap().remove(0);
+        service
+            .sources
+            .update_session(source.id, Some("token"), None, Some("4102444800"))
+            .await
+            .unwrap();
+        service
+            .save_browser_cookies(source.id, "cf_clearance=ok")
+            .await
+            .unwrap();
+        let saved = service.get(source.id).await.unwrap();
+        assert_eq!(saved.session_expires_at.as_deref(), Some("4102444800"));
     }
 
     #[test]

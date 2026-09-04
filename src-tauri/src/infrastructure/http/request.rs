@@ -108,10 +108,26 @@ pub fn evaluate_sign_script(script: &str, url: &str) -> Option<String> {
 
 pub async fn response_error(response: reqwest::Response, source_name: &str) -> String {
     let status = response.status();
+    let cloudflare_headers = if matches!(status.as_u16(), 403 | 503) {
+        response
+            .headers()
+            .get("server")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.to_ascii_lowercase().contains("cloudflare"))
+            || response.headers().contains_key("cf-mitigated")
+            || response.headers().contains_key("cf-ray")
+    } else {
+        false
+    };
     let detail = response.text().await.unwrap_or_default();
     let detail = detail.split_whitespace().collect::<Vec<_>>().join(" ");
     let lower = detail.to_ascii_lowercase();
-    if lower.contains("just a moment") || lower.contains("cf-chl-") || lower.contains("cloudflare")
+    if cloudflare_headers
+        || lower.contains("just a moment")
+        || lower.contains("cf-chl-")
+        || lower.contains("cloudflare")
+        || lower.contains("challenge-platform")
+        || lower.contains("enable javascript and cookies")
     {
         return format!("{source_name} 需要浏览器执行 JavaScript 验证（Cloudflare challenge），HTTP 客户端无法直接通过");
     }
@@ -235,5 +251,33 @@ mod tests {
             .headers()
             .contains_key(reqwest::header::AUTHORIZATION));
         assert!(!request.headers().contains_key(reqwest::header::COOKIE));
+    }
+
+    #[tokio::test]
+    async fn identifies_cloudflare_by_response_headers() {
+        use std::io::Write;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = std::io::Read::read(&mut stream, &mut request);
+            stream
+                .write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nServer: cloudflare\r\nContent-Length: 0\r\n\r\n",
+                )
+                .unwrap();
+        });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}/"))
+            .send()
+            .await
+            .unwrap();
+        let reason = response_error(response, "test").await;
+        server.join().unwrap();
+        assert!(reason.contains("Cloudflare challenge"));
+        assert!(!AppError::Network(reason).requires_authentication());
     }
 }
