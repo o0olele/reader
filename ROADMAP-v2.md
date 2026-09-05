@@ -323,12 +323,13 @@ P7  性能 / 稳定性 / 发布                    2 周
 
 ### 3.4 JS 运行时对齐 + **强制拆分 `js_runtime.rs`**
 
-状态：🟡 已完成上下文别名与宽松求值对齐；运行时按职责拆分仍待完成。
+状态：🟡 已完成上下文别名与宽松求值对齐，并通过 `include!` 将运行时代码分文件；独立模块边界与非测试行 < 250 的要求仍未完成。
 
 - [x] 注入 legado 的上下文变量集（新增 `src`、`title`，既有 `result` `baseUrl` `book` `chapter` `source` `cookie` 保留）
 - [x] 以非严格模式求值以支持 `with` 与重复声明
-- 按 `not a function` 的实际清单补剩余 `java.*`
-- **`js_runtime.rs` 2,080 行必须在本节拆开**：`runtime.rs` + `bindings/{net,codec,rule,ctx,crypto}.rs`
+- 已新增 `java.decodeURI`、`java.toInt`、`java.toBoolean`、`java.isNull`；尚未按真实失败清单逐项验证与 legado 的语义一致性，不能视为剩余 `java.*` 已补齐。
+- 文件已拆到 `js_runtime/runtime.rs` 与 `bindings/{net,rule,ctx,crypto}.rs`；当前仍以 `include!` 共用作用域，`codec.rs` 仅为占位，部分文件仍超过 250 行，需继续按职责拆分。
+- 验证：`cargo test --manifest-path src-tauri/Cargo.toml --lib` 在分文件后通过 200 项；新增四个方法后，`cargo test --manifest-path src-tauri/Cargo.toml --lib source_engine::rule::js_runtime` 通过 19 项既有测试，新增方法的针对性回归测试待补。
 
 ⛔ 不做：`toast` / `longToast`（给空实现）· `getReadBookConfig*` · `queryTTF` / `replaceFont`
 
@@ -563,7 +564,7 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | 3 | ✅ **严格度对齐**：空规则 / 空分支 / 未闭合结构降级为空结果 | 已完成 | §3.1 |
 | 4 | ✅ **Java 正则归一化层** | 已完成 | §3.2 |
 | 5 | ✅ **JSoup 选择器归一化 + `:contains()` / `:eq()`** | 已完成 | §3.3 |
-| 6 | **拆 `js_runtime.rs`（2,080 行）并对齐 JS 语义** | 上下文/宽松求值已完成；文件拆分待完成 | §3.4 |
+| 6 | **拆 `js_runtime.rs`（2,080 行）并对齐 JS 语义** | 已分文件并新增四个 `java.*` 方法；独立模块、行数限制及新增方法语义回归待完成 | §3.4 |
 
 **第 1、2 项必须先做。** 在此之前，第 3–6 项的收益无法度量 —— 而上一轮正是因为在错误口径上排期，
 把七项全做完却只换来 17 个百分点。
