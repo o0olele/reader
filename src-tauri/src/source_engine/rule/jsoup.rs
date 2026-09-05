@@ -155,15 +155,29 @@ fn apply_selection<'a>(
     selection: &Selection,
 ) -> Result<Vec<ElementRef<'a>>, RuleExecutionError> {
     let selector = match &selection.matcher {
-        Matcher::Css(css) => Some(Selector::parse(css).map_err(|error| {
-            RuleExecutionError::UnsupportedJsoup(format!("`{css}` is not a CSS selector: {error}"))
-        })?),
+        Matcher::Css(css) => {
+            let normalized = normalize_css_compat(css);
+            Some(Selector::parse(&normalized).map_err(|error| {
+                RuleExecutionError::UnsupportedJsoup(format!(
+                    "`{css}` is not a CSS selector: {error}"
+                ))
+            })?)
+        }
         _ => None,
     };
     let mut matched = Vec::new();
     for node in nodes {
         let candidates = match (&selection.matcher, &selector) {
-            (Matcher::Css(_), Some(selector)) => node.select(selector).collect(),
+            (Matcher::Css(css), Some(selector)) => {
+                let mut values: Vec<_> = node.select(selector).collect();
+                if let Some(needle) = css_contains(css) {
+                    values.retain(|element| normalized_text(*element).contains(&needle));
+                }
+                if let Some(index) = css_eq(css) {
+                    values = values.into_iter().nth(index).into_iter().collect();
+                }
+                values
+            }
             (Matcher::Text(needle), _) => node
                 .descendants()
                 .filter_map(ElementRef::wrap)
@@ -175,6 +189,35 @@ fn apply_selection<'a>(
         matched.extend(apply_positions(candidates, &selection.positions));
     }
     Ok(matched)
+}
+
+fn normalize_css_compat(css: &str) -> String {
+    let mut out = css.to_owned();
+    let pseudo = regex::Regex::new(r#":(?:contains|eq)\(\s*['"]?.*?['"]?\s*\)"#).unwrap();
+    out = pseudo.replace_all(&out, "").into_owned();
+    // scraper requires quoted attribute values; JSoup accepts these legacy forms.
+    let re = regex::Regex::new(r#"\[([\w:-]+)([~|^$*]?=)([^\]"']+)\]"#).unwrap();
+    out = re
+        .replace_all(&out, |caps: &regex::Captures| {
+            format!("[{}{}'{}']", &caps[1], &caps[2], caps[3].trim())
+        })
+        .into_owned();
+    let re_space = regex::Regex::new(r#"\[([\w:-]+)=([^\]]*\s[^\]]*)\]"#).unwrap();
+    re_space
+        .replace_all(&out, |caps: &regex::Captures| {
+            format!("[{}='{}']", &caps[1], caps[2].trim())
+        })
+        .into_owned()
+}
+
+fn css_contains(css: &str) -> Option<String> {
+    let re = regex::Regex::new(r#":contains\(\s*['"]?(.*?)['"]?\s*\)"#).unwrap();
+    re.captures(css).map(|c| c[1].to_owned())
+}
+
+fn css_eq(css: &str) -> Option<usize> {
+    let re = regex::Regex::new(r#":eq\(\s*(\d+)\s*\)"#).unwrap();
+    re.captures(css).and_then(|c| c[1].parse().ok())
 }
 
 fn collect_terminal(nodes: &[ElementRef<'_>], terminal: Terminal<'_>) -> Vec<String> {

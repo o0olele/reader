@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use hmac::{Hmac, Mac as HmacMac};
 use md5::{Digest, Md5};
-use rquickjs::{CatchResultExt, Context, Ctx, Function, Object, Runtime};
+use rquickjs::{context::EvalOptions, CatchResultExt, Context, Ctx, Function, Object, Runtime};
 use serde_json::Value as JsonValue;
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
@@ -56,6 +56,9 @@ pub struct JsContext {
     pub base_url: Option<String>,
     pub variables: HashMap<String, String>,
     pub http: Option<JsHttpContext>,
+    /// Legado aliases exposed by AnalyzeRule.evalJS.
+    pub title: Option<String>,
+    pub src: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -140,6 +143,8 @@ impl QuickJsRuntime {
                     context.key,
                     context.base_url,
                     context.http,
+                    context.title,
+                    context.src,
                 )
             })
             .and_then(|()| quick_context.with(|ctx| evaluate_script(ctx, script)))?;
@@ -182,6 +187,8 @@ fn install_globals<'js>(
     key: Option<String>,
     base_url: Option<String>,
     http: Option<JsHttpContext>,
+    title: Option<String>,
+    src: Option<String>,
 ) -> Result<(), AppError> {
     let globals = ctx.globals();
     let rule_input = result.clone();
@@ -200,6 +207,12 @@ fn install_globals<'js>(
     // explicitly declare it.  Source exports commonly reference `page`
     // directly while constructing signed API requests.
     globals.set("page", "1").map_err(js_error)?;
+    globals
+        .set("title", title.unwrap_or_default())
+        .map_err(js_error)?;
+    globals
+        .set("src", src.unwrap_or_else(|| rule_input.clone()))
+        .map_err(js_error)?;
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
     let session_state = http
@@ -1300,10 +1313,12 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
 
 fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError> {
     let script = normalize_js_statement_boundaries(script);
+    let mut sloppy = EvalOptions::default();
+    sloppy.strict = false;
     // Most legado rules are expressions (`result.trim()`). Try that first;
     // statement blocks use an explicit `return` and are evaluated second.
     let expression = format!("JSON.stringify(({script}))");
-    let serialized = match ctx.eval::<String, _>(expression.as_str()) {
+    let serialized = match ctx.eval_with_options::<String, _>(expression.as_str(), sloppy) {
         Ok(serialized) => serialized,
         Err(_) => {
             // Expression failure is expected for statement-style rules. A
@@ -1319,7 +1334,11 @@ fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError
             let program = format!(
                 "JSON.stringify((function() {{ return eval({source}); }})()) || JSON.stringify(result)"
             );
-            let direct = ctx.eval::<String, _>(program.as_str()).catch(&ctx);
+            let mut direct_options = EvalOptions::default();
+            direct_options.strict = false;
+            let direct = ctx
+                .eval_with_options::<String, _>(program.as_str(), direct_options)
+                .catch(&ctx);
             match direct {
                 Ok(serialized) => serialized,
                 Err(_direct_error) if has_top_level_return(&script) => {
@@ -1332,7 +1351,9 @@ fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError
                     let block = format!(
                         "JSON.stringify((function() {{ {block_script} }})()) || JSON.stringify(result)"
                     );
-                    ctx.eval::<String, _>(block.as_str())
+                    let mut block_options = EvalOptions::default();
+                    block_options.strict = false;
+                    ctx.eval_with_options::<String, _>(block.as_str(), block_options)
                         .catch(&ctx)
                         .map_err(js_error)?
                 }
@@ -2013,6 +2034,26 @@ if (baseUrl.match(/category/)) {
             .await
             .unwrap();
         assert_eq!(value, JsValue::String("expired:false".into()));
+    }
+
+    #[tokio::test]
+    async fn exposes_legado_src_and_title_aliases() {
+        let value = QuickJsRuntime::default()
+            .execute(
+                "src + '|' + title",
+                JsContext {
+                    result: "body".into(),
+                    src: Some("https://example.test/chapter".into()),
+                    title: Some("第一章".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            value,
+            JsValue::String("https://example.test/chapter|第一章".into())
+        );
     }
 
     #[tokio::test]
