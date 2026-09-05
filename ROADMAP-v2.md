@@ -11,7 +11,9 @@
 > **2026-09-02 修订：** 970 源真实语料已到位（`f3f55c6e-…json`），§0.3 起的所有优先级
 > **已按实测数据重排**，不再是预估。初稿中基于猜测的排序（先 XPath、后 JSoup 细节）被证明是错的。
 
-**一句话现状：架构已达标、规则引擎骨架已通、认证链路已闭环 —— 但真实语料实测覆盖率只有 31.3%，而阅读器本体几乎为零。**
+**一句话现状：架构已达标、规则引擎骨架已通、认证链路已闭环 —— 但静态规则覆盖率为 36.6%，最近一次线上抽样仅 158 / 530（29.8%）源返回结果，阅读器本体仍在可用化过程中。**
+
+> **指标口径必须分开。** 静态覆盖率是在本地对规则做确定性求值；线上可用率还会受到 DNS、超时、站点下线、认证和 Cloudflare challenge 影响。两者不能互相替代。
 
 ---
 
@@ -33,8 +35,8 @@
 > 行数比值会误导：legado 800 个 `ui/` 文件里大量是 Android 特有的 Activity / Fragment / 自定义 View，
 > 不可直接换算成桌面端工作量。真正决定「是不是 Legado 桌面版」的只有三块：
 > **规则引擎、抓取编排（AnalyzeUrl + webBook）、排版引擎**。
-> 第一块行数已超过参考实现，**但实测只能完整执行 31.3% 的真实书源**（§0.3）；第二块缺一半；第三块基本为零。
-> **行数不是进度。** 这张表最有价值的一行是「规则引擎 111%」与「覆盖率 31.3%」的并置。
+> 第一块行数已超过参考实现，**早期 token 近似口径只有 31.3%，当前严格 evaluator 口径为 36.6%**（§0.3）；第二块缺一半；第三块基本为零。
+> **行数不是进度。** 这张表最有价值的一行是「规则引擎 111%」与「覆盖率仍不足四成」的并置。
 
 ### 0.2 能力矩阵
 
@@ -119,11 +121,31 @@
 #### 0.3.1 头条数字
 
 ```
-仅使用当前引擎已支持语法的书源：304 / 970 = 31.3%
+仅使用当前引擎已支持语法的书源（早期 token 近似口径）：304 / 970 = 31.3%
 含至少一个不支持语法的书源：      666 / 970 = 68.7%
 ```
 
 **这是本项目第一个真实的覆盖率数字。** 此前所有「引擎已完成」的表述都缺这个分母。
+
+### 0.4 在线抽样基线（530 源，2026-09-05）
+
+用户提供了一次真实网络环境下的搜索抽样：
+
+```
+返回结果：158 / 530 = 29.8%
+失败：    372 / 530 = 70.2%
+```
+
+这不是静态 harness 的重复测量，而是端到端结果（请求、认证、站点响应、规则求值和结果去重）。当前已确认的失败类型包括：
+
+| 示例 | 现象 | 归因 / 处理 |
+| --- | --- | --- |
+| 中华典藏（优+） | `tr!0||.panel-body > div` 被当成 CSS，`Token "!"` | CSS 兜底已支持 `||`、位置排除和索引；增加回归测试 |
+| 中文万维 / 中文书城多版本 | `$.list` 后续字段得到 `EmptySelector` | JSONPath 直接数组选择现在逐项展开；增加搜索集成测试 |
+| 乐乎文章（优） | `java.androidId is not a function` | QuickJS 增加稳定的 `java.androidId()` 兼容函数，并传入 source base URL |
+| 临高启明 | Cloudflare JavaScript challenge | 不能由 HTTP 客户端直接绕过；保留 WebView 认证链路，待真实站点人工验收 |
+
+其余失败仍需在在线 harness 中按网络、认证、脚本不兼容、解析为空和站点下线细分。**29.8% 不能作为 v0.3.0 的通过标准，只能作为当前线上基线。**
 
 #### 0.3.2 阻塞项排名与边际收益
 
@@ -141,7 +163,7 @@
 | **Rhino JVM 包访问** | 9 | 1% | 100.0% | +0.9 | ⛔ **原理上无法支持**，见 §0.3.5 |
 | WebJs | **0** | **0%** | 100.0% | +0.0 | ⛔ **语料中零出现，降级为不做** |
 
-> **只修前四项（三个 JSoup 细节 + AnalyzeUrl），覆盖率从 31.3% 直接到 81.8%。**
+> **只修前四项（三个 JSoup 细节 + AnalyzeUrl），按早期 token 近似口径可从 31.3% 直接到 81.8%。** 严格 evaluator 的实际增幅需每次重跑 `rule-audit` 确认。
 > 这四项都不需要引入新依赖，也不需要换解析引擎。
 
 #### 0.3.3 语法 token 全频次（按覆盖源数）
@@ -197,11 +219,12 @@
 | `base64Decode` / `Encode` | 13 / 6 | 1% | ✅ |
 | `startBrowser` / `startBrowserAwait` | 8 / 4 | 1% | 🟡 已有 WebView 通道 |
 | `encodeURI` / `connect` | 7 / 7 | 1% | ✅ |
-| **crypto 系**（`createSymmetricCrypto` `aesBase64DecodeToString` `digestHex` `HMacHex` `des*`） | 各 ≤6 | ≤1% | ⬜ 合计约 2% |
+| `digestHex` / `HMacHex` / `HMacBase64` / `randomUUID` | 各 ≤6 | ≤1% | ✅ 已实现常见摘要、HMAC 与 UUID |
+| crypto 系（`createSymmetricCrypto` `aesBase64DecodeToString` `des*`） | 各 ≤6 | ≤1% | ⬜ 合计约 1% |
 | 其余 30+ 方法 | 各 ≤6 | ≤1% | 按需 |
 
-**结论：`java.*` 只需再补 5 个方法（`getString` `md5Encode` `getElements` `getElement` `toNumChapter`）
-即可覆盖 22% 使用 JS 的书源里的绝大多数。** 100 个方法全做是彻底的浪费。
+**结论：先补高频的 5 个方法（`getString` `md5Encode` `getElements` `getElement` `toNumChapter`），
+再补常见摘要/HMAC/UUID，即可覆盖 22% 使用 JS 的书源里的绝大多数。100 个方法全做是彻底的浪费。
 
 #### 0.3.5 无法支持的一类（新发现）
 
@@ -360,7 +383,7 @@ P7  性能 / 稳定性 / 发布                  2 周
 - 语法 token 频次直方图 + 每个 token 的真实支持状态（✅ / `UnsupportedMode` / `UnsupportedJsoup`）
 - JS 脚本里的 `java.xxx` 调用频次（决定 §4.4 顺序）
 - 「若支持 token X，则可多解锁 N 个书源」的边际收益排序
-- **单一头条数字：可完整执行的书源占比**（当前正则近似口径为 31.3%，Rust 口径可能略有出入）
+- **单一头条数字：可完整执行的书源占比**（早期正则近似口径为 31.3%，当前 Rust 严格口径为 36.6%）
 
 > 原型用正则近似判定，会有误差：例如它把所有 `//` 开头当 XPath、把 `!数字` 一律当排除语法。
 > Rust 版必须以引擎的真实返回为准，两者的差值本身就是一个值得看的数字。
@@ -371,6 +394,8 @@ P7  性能 / 稳定性 / 发布                  2 周
 
 每源输出：请求 URL / HTTP 状态 / 解析条数 / 失败阶段 / 失败原因分类（网络 / 认证 / 规则不支持 / 解析为空）。
 落 CSV。这是 v1 §4.4「≥300 源，可搜索 ≥60%」**唯一可能的度量方式**。
+
+> **当前状态（2026-09-05）：`source-audit` binary 尚未落地。** 上面的命令是目标接口，不应当被当作已存在的验收命令；本轮 530 源线上数字来自用户在真实客户端中的抽样，而非仓库内可复现的 harness。P1/P2 必须先补齐该 binary，再把线上数字纳入可重复报告。
 
 ### 3.4 兜底路径的可见化与删除闸门
 
@@ -389,6 +414,7 @@ P7  性能 / 稳定性 / 发布                  2 周
 > P0 进度（本轮）：`READER_STRICT_ENGINE` 已接入规则管线；默认模式保留 CSS 兼容兜底，置为 `1`/`true` 时规则执行错误会以 `AppError::Parse` 返回，不再静默回退。
 > 2026-09-03 用 Rust evaluator 重跑后的严格口径为 **191 / 970 = 19.7%**；31.3% 保留为早期 token 正则近似基线，两者不再混用。
 > 2026-09-03 完成 §4.2 后严格口径升至 **330 / 970 = 34.0%**，相对上一严格基线增加 **139 源 / 14.3pp**。
+> 2026-09-05 完成 JSONPath 数组展开、QuickJS `androidId` 兼容和 CSS fallback 修复后，严格口径升至 **355 / 970 = 36.6%**；对应的线上抽样为 **158 / 530 = 29.8%**，两者仍须分开报告。
 - [ ] 报告能直接回答：「当前 N 个源里，M 个所有规则均可执行；剩余 N−M 个的阻塞 token TOP10 是 …」
 - [x] `txtTocRule.json` 27 条规则移植进 `infrastructure/ebook/txt.rs`，替换手写启发式，附对照测试
 
@@ -403,9 +429,11 @@ P7  性能 / 稳定性 / 发布                  2 周
 
 **顺序已按 §0.3.2 的实测边际收益排定，不再是预估。** 每完成一项重跑 harness，把覆盖率写进 commit message。
 
+> 下表的累计百分比沿用 2026-09-02 的 token 近似模型，用于排序和边际收益比较；发布门槛一律以当前严格 `rule-audit` 报告为准（本轮为 355 / 970 = 36.6%）。
+
 | 序 | 任务 | 影响源数 | 覆盖率目标 | 节 |
 | ---: | --- | ---: | ---: | --- |
-| — | 起点 | — | **31.3%** | — |
+| — | 起点（早期 token 近似） | — | **31.3%** | — |
 | 1 | JSoup 排除 `!n` | 299 | 44.9% | §4.2 |
 | 2 | `AnalyzeUrl` 选项对象 + 六阶段统一 | 277 | **62.9%** | §4.1 |
 | 3 | JSoup 区间 `.a:b` | 146 | 73.4% | §4.2 |
@@ -450,7 +478,7 @@ P7  性能 / 稳定性 / 发布                  2 周
 
 > 2026-09-03 进度：本节完成。统一位置筛选器现支持旧式索引列表 `.0:1:2`、排除 `!0` / `!1:2` / `!-1`、方括号单索引与包含端点区间、缺省端点、负索引、反向范围和负步长；筛选按每个父节点独立应用。`@@` 与 allInOne `:` 前缀已补回归测试，并对齐 `text` 私有匹配、`textNodes`、`ownText`、`all` 的边界行为。真实语料中原有的 range/exclusion `UnsupportedJsoup` 错误已清零。
 
-> 2026-09-05 调试进度：补齐 legado 常见 `:attr(name)` / `::attr(name)` 终端归一化，空 Default 规则按无匹配处理；请求级和书源级 header 现在会清理引号、校验非法名称/值并忽略坏的可选项，避免单个脏 header 令整源失败；URL 选项的 `charset` 会清理导出值尾部引号。QuickJS 增加 `getString` / `getElement(s)` / `toNumChapter`、`source`/`cookie`/`book`/`chapter` 兼容对象与常见 Java 辅助函数，并保留真实 JS 异常消息；多语句脚本支持换行分隔的隐式分号和未声明赋值，`java.ajax` 兼容 Legado 常见的 1/2/3 参数调用。导入器将 legado 私有 `@tag/@class/@id` 链投影到 CSS 兜底，同时保留 `@href/@src/@content` 属性终端；旧数据库缺少 `raw_rules` 时，CSS 兜底也会按同一规则归一化。187 个 Rust 单测通过；同一 970 源语料的保守静态 harness 当前为 **355 / 970（36.6%）**，该数字不等同于在线可用率。剩余线上失败主要是 DNS/超时、Cloudflare 挑战和源脚本/站点本身不兼容，不能仅靠本地规则解析修复。
+> 2026-09-05 调试进度：补齐 legado 常见 `:attr(name)` / `::attr(name)` 终端归一化，空 Default 规则按无匹配处理；请求级和书源级 header 现在会清理引号、校验非法名称/值并忽略坏的可选项，避免单个脏 header 令整源失败；URL 选项的 `charset` 会清理导出值尾部引号。QuickJS 增加 `getString` / `getElement(s)` / `toNumChapter`、`source`/`cookie`/`book`/`chapter` 兼容对象与常见 Java 辅助函数，并保留真实 JS 异常消息；多语句脚本支持换行分隔的隐式分号和未声明赋值，`java.ajax` 兼容 Legado 常见的 1/2/3 参数调用。导入器将 legado 私有 `@tag/@class/@id` 链投影到 CSS 兜底，同时保留 `@href/@src/@content` 属性终端；旧数据库缺少 `raw_rules` 时，CSS 兜底也会按同一规则归一化。193 个 Rust 测试通过；同一 970 源语料的严格静态 harness 当前为 **355 / 970（36.6%）**，该数字不等同于在线可用率。用户同日提供的 530 源线上抽样仅 **158 / 530（29.8%）** 返回结果；剩余线上失败主要是 DNS/超时、Cloudflare 挑战和源脚本/站点本身不兼容，不能仅靠本地规则解析修复。
 
 ### 4.3 JSONPath / XPath（按实测降级）
 
@@ -477,9 +505,12 @@ P7  性能 / 稳定性 / 发布                  2 周
 | `md5Encode` | 23 (2%) | `md-5` 已是依赖 |
 | `getElements` / `getElement` | 17 / 7 (2%) | 同 `getString`，返回节点 |
 | `toNumChapter` | 16 (2%) | 中文数字章节名归一化 |
-| crypto 系（`createSymmetricCrypto` `aesBase64DecodeToString` `digestHex` `HMacHex` `des*`） | 合计 ~2% | 对位 hutool；按需，可延后 |
+| `digestHex` / `HMacHex` / `HMacBase64` | 合计约 1% | ✅ QuickJS 已支持 MD5 / SHA-1 / SHA-256 / SHA-512 |
+| crypto 系（`createSymmetricCrypto` `aesBase64DecodeToString` `des*`） | 合计 ~1% | 对位 hutool；按需，可延后 |
 
 `jsLib` 实测只有 **6 个源（1%）** 使用 —— 从 P1 降级到「按需」。
+
+> 2026-09-05 进度：上述 5 个高频方法已接入 QuickJS（`getString`、`md5Encode`、`getElements`、`getElement`、`toNumChapter`），并补齐 `androidId`、时间格式化、编码和网络辅助函数的回归测试；`digestHex`、`HMacHex`、`HMacBase64` 和 `randomUUID` 也已接入并有向量/格式测试。剩余 `createSymmetricCrypto`、`aes*`、`des*` 仍按需实现；它们不能被静态“方法已注册”误计为可执行，必须用真实输入逐项验收。
 
 ⛔ 不做：`toast` / `longToast`（21 源，Android 专有 —— **给空实现**，避免脚本抛异常）；
 `androidId` / `getReadBookConfig*` / `getThemeConfig*`；`queryTTF` / `replaceFont`（字体反爬）。
@@ -527,7 +558,7 @@ legado 的处理顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `Rep
 ### 4.8 验收（全部可度量，门槛已按实测校准）
 
 - [ ] 静态覆盖率：970 源语料，**引擎可完整执行的源 ≥ 90%**（strict 模式）
-      —— 起点 31.3%；§4.1–§4.3 全做完理论值 99.1%，留 9pp 给正则近似与真实执行的差值
+      —— 早期 token 近似起点 31.3%，当前严格起点 36.6%；§4.1–§4.3 全做完理论值 99.1%，留 9pp 给正则近似与真实执行的差值
 - [ ] 在线可用率：**能搜出结果的源 ≥ 60%**（对齐 v1 §4.4；这一条受站点存活率影响，与静态覆盖率不可混为一谈）
 - [ ] 发现页在 ≥100 个 `exploreUrl` 非空的源上可正常出图书列表
 - [ ] `selector.rs` 兜底已删除；全项目 `Result<_, String>` 为 0
@@ -606,7 +637,7 @@ v1 没有这一层，但它决定「书源体系能不能自转」：
 
 | 项 | legado 对位 | 说明 |
 | --- | --- | --- |
-| **书源批量校验** | `BookSourceCheckService.kt` | 全量跑四阶段，标红失效源，回写 `respondTime` / `lastUpdateTime`。P0 的 `source-audit` bin 是它的雏形，本步是把它搬进 UI |
+| **书源批量校验** | `BookSourceCheckService.kt` | 全量跑四阶段，标红失效源，回写 `respondTime` / `lastUpdateTime`。待实现的 `source-audit` bin 将作为它的雏形，本步是把它搬进 UI |
 | **换源增强** | `ui/book/changesource` | 现在只按书名重搜；补章节对齐、`bookUrlPattern` 匹配、`canReName` |
 | **分组 / 排序 / 权重 / 启停** | `bookSourceGroup` `customOrder` `weight` `enabled` `enabledExplore` | 书源上百个之后没有这些就没法管理 |
 | **Cookie 持久化** | `data/entities/Cookie.kt` + `enabledCookieJar` | 现在 cookie 只活在 reqwest 内存 store，重启即失 |
@@ -646,9 +677,10 @@ npm run lint && npm run format:check && npm run build
 READER_STRICT_ENGINE=1 cargo run --bin rule-audit -- \
   --corpus src-tauri/tests/corpus/ --out docs/coverage/
 
-# P0 新增：在线可用率（需网络，不进 CI）
+# P1 待实现：在线可用率（需网络，不进 CI；当前尚无 source-audit binary）
 READER_STRICT_ENGINE=1 cargo run --bin source-audit -- \
-  --corpus src-tauri/tests/corpus/sources.json --keyword 剑来 --concurrency 8 --out audit.csv
+  --corpus src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json \
+  --keyword 剑来 --concurrency 8 --out audit.csv
 
 # §0.3 数据的产出方式（Node 原型，待移植为上面两个 bin）
 node .scratch/corpus-audit.cjs src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json   # token / java.* / 字段频次
@@ -677,9 +709,9 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | 版本 | 阶段 | 门槛（每条可验证） | 状态 |
 | --- | --- | --- | :---: |
 | v0.1.0 | v1 Step 0 | 本地阅读闭环 + 干净架构 | ✅ |
-| **v0.2.0** | **P0** | 覆盖率仪表盘上线（基线 **31.3%** 已测得）+ `txtTocRule` 移植 + v1 §10.6 三条手工验收 | 🟡 |
-| v0.2.1 | — | WebView 认证闭环在真实 Cloudflare 站点验收通过 | 🟡（实现完成，待人工站点验收） |
-| **v0.3.0** | **P1 + P2** | 静态覆盖率 **≥ 90%**（起点 31.3%）· 在线可用率 ≥ 60% · 发现页可用 · 兜底路径已删 · 调试器可用 —— **真正的「Legado 桌面版」起点** | ⬜ |
+| **v0.2.0** | **P0** | 覆盖率仪表盘上线（早期近似基线 **31.3%**；当前严格基线 **36.6%**）+ `txtTocRule` 移植 + v1 §10.6 三条手工验收 | 🟡 |
+| v0.2.1 | — | WebView 认证闭环在真实 Cloudflare 站点验收通过 | 🟡（认证链路已实现，待人工站点验收；不承诺无头绕过） |
+| **v0.3.0** | **P1 + P2** | 静态覆盖率 **≥ 90%**（当前严格起点 36.6%）· 在线可用率 ≥ 60% · 发现页可用 · 兜底路径已删 · 调试器可用 —— **真正的「Legado 桌面版」起点** | ⬜ |
 | v0.4.0 | P3 | 能用本项目读完一本真实在线书 | ⬜ |
 | v0.5.0 | P4 | 下载 / 缓存 / 导出 | ⬜ |
 | v0.6.0 | P5 | 发现页 + 批量校验 + 书源管理 | ⬜ |
@@ -697,7 +729,8 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | --- | --- | --- |
 | ~~引擎覆盖率无法自测~~ | — | **已关闭（2026-09-02）** —— 970 源语料到位，基线测得 31.3%，边际收益排序见 §0.3.2 |
 | ~~真实语料规模不足~~ | — | **已关闭（2026-09-02）** —— 970 源 / 22,220 条规则串，超门槛 3 倍 |
-| **实测覆盖率仅 31.3%** | 「引擎已接入真实管线」的实际含金量远低于此前表述 | **新增** —— 这是 v1 §10 系列「名不副实项」的最后一条，也是最大的一条。P1 的全部排期为它服务 |
+| **静态规则覆盖率仅 36.6%** | 「引擎已接入真实管线」的实际含金量远低于此前表述 | **新增** —— 早期 31.3% 是 token 正则近似；当前严格 evaluator 口径为 355 / 970。P1 的全部排期为它服务 |
+| **线上可用率仅 29.8%** | 端到端搜索仍有 70.2% 源失败 | **新增（2026-09-05）** —— 530 源抽样得到 158 个结果；失败混合了网络、站点存活、Cloudflare、脚本和解析问题，必须由待实现的 `source-audit` 分层统计，不能用静态覆盖率替代 |
 | **Rhino JVM 包访问无法支持** | 9 源（1%）永久不可用 | **新增（§0.3.5）** —— 选 QuickJS 必须付的账。明确标注，不静默失败 |
 | **`AnalyzeUrl` 缺失** | 规则解析正确但请求发错，失败原因无法归因 | **v2 新增，已被实测证实**（277 源 / +17.9pp，全部阻塞项中边际收益最高） |
 | **按字段表想当然排期** | 初稿为 0% 使用率的 `WebJs` 单列一节、为 6% 的 XPath 提议换引擎 | **新增** —— 教训：legado 有某字段 ≠ 真实书源在用。**任何新排期项必须先查语料填充率** |
@@ -740,13 +773,14 @@ grep -n 'java.set(' -A1 src-tauri/src/source_engine/rule/js_runtime.rs | grep -o
 | ---: | --- | --- | --- | :---: |
 | 0 | **把语料挪进 `src-tauri/tests/corpus/` 并加 `.gitignore`** | 避免 5MB JSON 误入 git 历史 | §3.1 | ✅ |
 | 1 | **加 `READER_STRICT_ENGINE` 开关**，让 `pipeline.rs` 停止吞掉引擎错误 | 覆盖率可测的前提 | §3.4 | ✅
-| 2 | **`rule-audit` bin**：把 Node 原型移植成 Rust，用真实 `split_rule`/evaluator 判定 | 31.3% 这个数字有了权威口径 | §3.2 | ✅
-| 3 | **提取 `source_engine/url/`**，`build_search_request` 搬过去并推广到六阶段 | 31.3% → 62.9% | §4.1 | 🟡（现有五阶段已接入，Explore 待 §4.6） |
-| 4 | **JSoup 三项：`!n` / `.a:b` / `@@`** | 62.9% → **81.8%** | §4.2 | ✅ |
-| 5 | **移植 `txtTocRule.json` 27 条规则**替换手写启发式（可与 3/4 并行） | TXT 目录识别对齐 legado | §3.5 | ✅ |
-| 6 | JSONPath `..` + `?()`，XPath 按 58 条实例逐条扩展 | 81.8% → 99.1% | §4.3 | 🟡 |
-| 7 | 发现页 + 字段补齐 | `exploreUrl` 67% 的源解锁第二入口 | §4.6 | 🟡（后端链路与前端入口已完成，分页/长尾字段待后续） |
-| 8 | **P3 阅读器第一批**：长章节窗口、分页/滚动、阅读配置、章内搜索、书签 | 阅读正文可持续使用，降低长章节卡顿 | §6 | 🟡（基础能力已落地，验收中的百万字性能与真实在线书仍待实测） |
+| 2 | **`rule-audit` bin**：把 Node 原型移植成 Rust，用真实 `split_rule`/evaluator 判定 | 36.6% 严格口径有了权威报告 | §3.2 | ✅
+| 3 | **`source-audit` 在线 harness**：记录 URL / HTTP / 阶段 / 失败分类并落 CSV | 线上 530 源结果可复现 | §3.3 | ⬜（用户已提供 158 / 530 抽样，binary 尚未落地） |
+| 4 | **提取 `source_engine/url/`**，`build_search_request` 搬过去并推广到六阶段 | 31.3% → 62.9% | §4.1 | 🟡（现有五阶段已接入，Explore 待 §4.6） |
+| 5 | **JSoup 三项：`!n` / `.a:b` / `@@`** | 62.9% → **81.8%** | §4.2 | ✅ |
+| 6 | **移植 `txtTocRule.json` 27 条规则**替换手写启发式（可与 3/4 并行） | TXT 目录识别对齐 legado | §3.5 | ✅ |
+| 7 | JSONPath `..` + `?()`，XPath 按 58 条实例逐条扩展 | 81.8% → 99.1% | §4.3 | 🟡 |
+| 8 | 发现页 + 字段补齐 | `exploreUrl` 67% 的源解锁第二入口 | §4.6 | 🟡（后端链路与前端入口已完成，分页/长尾字段待后续） |
+| 9 | **P3 阅读器第一批**：长章节窗口、分页/滚动、阅读配置、章内搜索、书签 | 阅读正文可持续使用，降低长章节卡顿 | §6 | 🟡（基础能力已落地，验收中的百万字性能与真实在线书仍待实测） |
 
 ### v0.2.1 人工验收步骤（实现已具备）
 

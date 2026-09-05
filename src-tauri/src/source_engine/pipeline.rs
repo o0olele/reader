@@ -113,7 +113,19 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
             }
         }
     }
-    selector::parse_search(source, html).map_err(AppError::parse)
+    match selector::parse_search(source, html) {
+        Ok(results) => Ok(results),
+        // A raw legado rule is authoritative. Its flat projection may be a
+        // JSONPath/private expression that cannot be compiled by scraper (for
+        // example `$.list` or `tr!0`). If the engine produced no items, do not
+        // turn that expected no-match into a misleading CSS parse failure.
+        Err(error) if !source.raw_rules.is_empty() && error.starts_with("搜索结果选择器无效:") =>
+        {
+            tracing::debug!(target: "source", source = %source.name, error, "ignoring invalid CSS projection after raw rule no-match");
+            Ok(Vec::new())
+        }
+        Err(error) => Err(AppError::parse(error)),
+    }
 }
 
 pub fn parse_explore(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {

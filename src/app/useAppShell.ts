@@ -10,7 +10,7 @@ import { useSourceDebug } from '../features/source/useSourceDebug'
 import { useSources } from '../features/source/useSources'
 import { on as onAppEvent } from '../services/events'
 
-export type ShellView = 'bookshelf' | 'search' | 'sources' | 'settings'
+export type ShellView = 'bookshelf' | 'search' | 'explore' | 'sources' | 'settings'
 
 /**
  * Composes the feature composables and owns only what is genuinely shared:
@@ -20,7 +20,9 @@ export function useAppShell() {
   const route = useRoute()
   const router = useRouter()
   const view = computed<ShellView>(() => {
-    if (route.name === 'search' || route.name === 'sources' || route.name === 'settings') return route.name
+    if (route.name === 'search' || route.name === 'explore' || route.name === 'sources' || route.name === 'settings') {
+      return route.name
+    }
     return 'bookshelf'
   })
   const status = ref('检查中...')

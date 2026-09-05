@@ -11,10 +11,15 @@
 
 ## 用途
 
-`ROADMAP-v2.md` §0.3 的全部覆盖率数据出自这里。目前由两个 Node 原型脚本消费，
-待移植为 `src-tauri/src/bin/rule-audit.rs`（§3.2）与 `source-audit.rs`（§3.3）：
+`ROADMAP-v2.md` §0.3 的全部静态覆盖率数据出自这里。当前可运行的审计器是
+`src-tauri/src/bin/rule-audit.rs`（§3.2）；端到端在线审计器 `source-audit.rs`（§3.3）
+尚未落地，路线图中的在线命令只是目标接口：
 
 ```bash
+READER_STRICT_ENGINE=1 cargo run --manifest-path src-tauri/Cargo.toml \
+  --bin rule-audit -- --corpus src-tauri/tests/corpus/<file>.json --out docs/coverage/
+
+# 历史 Node 原型（仅用于复核旧口径）
 node .scratch/corpus-audit.cjs src-tauri/tests/corpus/<file>.json   # token / java.* / 字段频次
 node .scratch/coverage.cjs     src-tauri/tests/corpus/<file>.json   # 覆盖率基线 + 边际收益
 ```

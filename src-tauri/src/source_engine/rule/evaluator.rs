@@ -45,6 +45,7 @@ pub fn execute_js(
     let runtime = QuickJsRuntime::default();
     let js_context = JsContext {
         result: input.to_owned(),
+        base_url: context.http.as_ref().map(|http| http.base_url.clone()),
         variables: context.snapshot(),
         http: context.http.clone(),
         ..Default::default()
@@ -58,10 +59,21 @@ pub fn execute_js(
         JsValue::Number(value) => vec![value.to_string()],
         JsValue::Boolean(value) => vec![value.to_string()],
         JsValue::Null => Vec::new(),
-        JsValue::Json(value) => vec![value.to_string()],
+        // Legado's JS rules commonly return an array of objects for
+        // `bookList`/`chapterList`.  Preserve each element as its own input
+        // node so the following per-item rules (`$.name`, `$.id`, …) see the
+        // object rather than one giant JSON array string.
+        JsValue::Json(value) => json_values(value),
     };
     apply_postprocess(rule, &mut values);
     Ok(values)
+}
+
+fn json_values(value: serde_json::Value) -> Vec<String> {
+    match value {
+        serde_json::Value::Array(values) => values.into_iter().flat_map(json_values).collect(),
+        value => vec![value.to_string()],
+    }
 }
 
 /// Executes one Regex-mode rule against text.
@@ -186,6 +198,15 @@ mod tests {
             )
             .unwrap(),
             vec!["Two"]
+        );
+    }
+
+    #[test]
+    fn expands_arrays_returned_by_javascript_rules() {
+        let rule = regex_rule("@js:[{name:'一'},{name:'二'}]");
+        assert_eq!(
+            execute_js(&rule, "", &mut RuleContext::default()).unwrap(),
+            vec![r#"{"name":"一"}"#, r#"{"name":"二"}"#]
         );
     }
 }

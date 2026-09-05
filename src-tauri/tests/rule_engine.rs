@@ -152,6 +152,32 @@ fn a_source_without_raw_rules_still_uses_the_css_projection() {
 }
 
 #[test]
+fn json_book_lists_are_expanded_into_individual_search_results() {
+    let mut source = source_c();
+    source.search_rule = SearchRule {
+        item: "$.list".into(),
+        title: "$.name".into(),
+        author: Some("$.author".into()),
+        cover: None,
+        url: "https://legado.example/book/{{$.id}}".into(),
+    };
+    source.raw_rules.search = Some(
+        r#"{"bookList":"$.list","name":"$.name","author":"$.author","bookUrl":"https://legado.example/book/{{$.id}}"}"#.into(),
+    );
+    let results = parse_search(
+        &source,
+        r#"{"list":[{"id":"1201","name":"星海归途","author":"陈九"},{"id":"1202","name":"寂静山脉","author":"林七"}]}"#,
+    )
+    .unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].title, "星海归途");
+    assert_eq!(results[1].url, "https://legado.example/book/1202");
+
+    let empty = parse_search(&source, r#"{"list":[]}"#).unwrap();
+    assert!(empty.is_empty());
+}
+
+#[test]
 fn an_unexecutable_rule_falls_back_instead_of_failing() {
     let mut source = source_c();
     // A JS rule the engine deliberately refuses; the projection must take over.

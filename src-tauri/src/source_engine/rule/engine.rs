@@ -207,6 +207,7 @@ fn evaluate_inline_expression(
             expression,
             JsContext {
                 result: input.to_owned(),
+                base_url: context.http.as_ref().map(|http| http.base_url.clone()),
                 variables: context.snapshot(),
                 http: context.http.clone(),
                 ..Default::default()

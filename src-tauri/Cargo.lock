@@ -3324,6 +3324,7 @@ dependencies = [
  "encoding_rs",
  "fancy-regex",
  "futures",
+ "hmac",
  "md-5",
  "quick-xml 0.38.4",
  "regex",
@@ -3332,6 +3333,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "sha1",
  "sha2",
  "sqlx",
  "tauri",
@@ -3342,6 +3344,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "urlencoding",
+ "uuid",
  "zip",
 ]
 

@@ -3,6 +3,7 @@
 import { provide, ref } from 'vue'
 import BookshelfPage from '../features/bookshelf/BookshelfPage.vue'
 import ReaderPane from '../features/reader/ReaderPane.vue'
+import ExplorePage from '../features/search/ExplorePage.vue'
 import SearchPage from '../features/search/SearchPage.vue'
 import SettingsPage from '../features/settings/SettingsPage.vue'
 import SourceDebugPage from '../features/source/SourceDebugPage.vue'
@@ -64,6 +65,7 @@ const chooseFile = () => fileInput.value?.click()
           </a>
           <a href="#" @click.prevent="bookshelf.addGroup()">+ 新建分组</a>
           <a :class="{ active: view === 'search' }" href="#" @click.prevent="show('search')">在线搜索</a>
+          <a :class="{ active: view === 'explore' }" href="#" @click.prevent="show('explore')">发现</a>
           <a :class="{ active: view === 'sources' }" href="#" @click.prevent="show('sources')">书源调试</a>
           <a :class="{ active: view === 'settings' }" href="#" @click.prevent="show('settings')">设置</a>
         </nav>
@@ -154,6 +156,13 @@ const chooseFile = () => fileInput.value?.click()
           </form>
         </div>
 
+        <div v-else-if="view === 'explore'" class="content-heading">
+          <div>
+            <p class="eyebrow">在线书源</p>
+            <h1>发现</h1>
+          </div>
+        </div>
+
         <div v-else class="content-heading">
           <div>
             <p class="eyebrow">我的阅读空间</p>
@@ -192,6 +201,7 @@ const chooseFile = () => fileInput.value?.click()
         <SettingsPage v-else-if="view === 'settings'" />
         <SourceDebugPage v-else-if="view === 'sources'" />
         <SearchPage v-else-if="view === 'search'" />
+        <ExplorePage v-else-if="view === 'explore'" />
         <BookshelfPage
           v-else
           :books="bookshelf.visibleBooks"

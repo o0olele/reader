@@ -14,10 +14,17 @@ pub fn execute_json(rule: &SourceRule, input: &str) -> Result<Vec<String>, RuleE
     }
     let root: Value =
         serde_json::from_str(input).map_err(|e| RuleExecutionError::InvalidJson(e.to_string()))?;
-    let mut values = select(&root, rule.rule.trim())?
-        .into_iter()
-        .filter_map(to_string)
-        .collect();
+    // Legado treats a selected JSON array as a collection of values.  This is
+    // especially important for book-list rules such as `$.list` and chapter
+    // rules such as `$.bookChapters`: returning the array as one JSON string
+    // leaves the subsequent per-item rule with an array instead of an object.
+    // Wildcard paths already yield individual values, so flattening here is
+    // idempotent for those spellings and brings direct array selections in line
+    // with Legado's `getAll()` semantics.
+    let mut values = Vec::new();
+    for value in select(&root, rule.rule.trim())? {
+        push_json_values(value, &mut values);
+    }
     apply_postprocess(rule, &mut values);
     Ok(values)
 }
@@ -103,6 +110,16 @@ fn to_string(value: &Value) -> Option<String> {
     }
 }
 
+fn push_json_values(value: &Value, out: &mut Vec<String>) {
+    if let Value::Array(values) = value {
+        for value in values {
+            push_json_values(value, out);
+        }
+    } else if let Some(value) = to_string(value) {
+        out.push(value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,5 +143,14 @@ mod tests {
         assert_eq!(execute_json(&r, r#"["a","b"]"#).unwrap(), vec!["a", "b"]);
         let r = rule("@Json:$.items[-1]");
         assert_eq!(execute_json(&r, r#"{"items":[1,2,3]}"#).unwrap(), vec!["3"]);
+    }
+
+    #[test]
+    fn direct_array_selection_expands_each_value() {
+        let r = rule("$.list");
+        assert_eq!(
+            execute_json(&r, r#"{"list":[{"name":"一"},{"name":"二"}]}"#).unwrap(),
+            vec![r#"{"name":"一"}"#.to_owned(), r#"{"name":"二"}"#.to_owned()]
+        );
     }
 }

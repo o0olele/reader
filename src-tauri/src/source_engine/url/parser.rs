@@ -60,7 +60,8 @@ pub fn build_with_base(
     let charset = options
         .get("charset")
         .and_then(value_string)
-        .map(|value| value.to_ascii_lowercase());
+        .map(|value| normalize_charset(&value))
+        .filter(|value| !value.is_empty());
     let headers = options
         .get("headers")
         .map(parse_headers)
@@ -98,6 +99,14 @@ pub fn build_with_base(
         response_type,
         body_js,
     })
+}
+
+fn normalize_charset(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches(|character| matches!(character, '\'' | '"' | '`'))
+        .trim()
+        .to_ascii_lowercase()
 }
 
 fn replace_templates(
@@ -297,6 +306,33 @@ mod tests {
     }
 
     #[test]
+    fn evaluates_legado_newline_separated_signed_search_script() {
+        let spec = build(
+            &source(),
+            r#"@js:
+sign_key='secret'
+headers={'x-app':'reader'}
+params={'page':page,'wd':key}
+var urlEncode = function (values) {
+  return Object.keys(values).map(k=>k+'='+encodeURIComponent(values[k])).join('&')
+};
+paramSign=String(java.md5Encode(urlEncode(params)+sign_key))
+params['sign']=paramSign
+body=urlEncode(params)
+"/api/search?"+body+","+java.put("headers",JSON.stringify({"headers":headers}))"#,
+            Some("斗破苍穹"),
+            "搜索 URL",
+        )
+        .unwrap();
+        assert_eq!(spec.url.path(), "/api/search");
+        assert!(spec
+            .url
+            .query()
+            .is_some_and(|query| query.contains("page=1")));
+        assert_eq!(spec.headers, vec![("x-app".into(), "reader".into())]);
+    }
+
+    #[test]
     fn evaluates_cover_rule_data_url_template() {
         let spec = build(
             &source(),
@@ -362,6 +398,18 @@ mod tests {
             spec.url.as_str(),
             "https://example.com/books/search?q=%B6%B7%C6%C6"
         );
+    }
+
+    #[test]
+    fn trims_quotes_from_exported_charset_values() {
+        let spec = build(
+            &source(),
+            r#"search?q={{key}},{'charset':'utf-8\"'}"#,
+            Some("斗破"),
+            "搜索 URL",
+        )
+        .unwrap();
+        assert_eq!(spec.charset.as_deref(), Some("utf-8"));
     }
 
     #[test]

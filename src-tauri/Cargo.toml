@@ -36,6 +36,9 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures = "0.3"
 async-trait = "0.1"
 rquickjs = { version = "0.9", features = ["macro"] }
+hmac = "0.12"
+sha1 = "0.10"
+uuid = { version = "1", features = ["v4"] }
 urlencoding = "2"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
 tracing = "0.1"

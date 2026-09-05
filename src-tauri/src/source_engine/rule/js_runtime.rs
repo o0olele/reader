@@ -9,14 +9,18 @@ use crate::error::AppError;
 use crate::infrastructure::http::request::{evaluate_sign_script, user_agent};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use hmac::{Hmac, Mac as HmacMac};
 use md5::{Digest, Md5};
 use rquickjs::{CatchResultExt, Context, Ctx, Function, Object, Runtime};
 use serde_json::Value as JsonValue;
+use sha1::Sha1;
+use sha2::{Sha256, Sha512};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
+use uuid::Uuid;
 
 /// Credentials and request defaults exposed to a source's JavaScript rules.
 /// Network access is deliberately only available through these injected
@@ -223,6 +227,18 @@ fn install_globals<'js>(
         Function::new(ctx.clone(), move || state_for_js.clone()),
     )
     .map_err(js_error)?;
+    // A number of legacy sources use the Android-only device identifier when
+    // constructing request headers.  Desktop has no Android ID, but exposing
+    // a stable, non-empty identifier keeps those scripts executable and gives
+    // remote APIs the same per-installation shape they expect.  Derive it from
+    // the source base URL so different sources do not accidentally share a
+    // credential-like value while remaining deterministic across requests.
+    let android_id = stable_android_id(&base_url_value);
+    java.set(
+        "androidId",
+        Function::new(ctx.clone(), move || android_id.clone()),
+    )
+    .map_err(js_error)?;
     let get_values = Arc::clone(variables);
     let http_session = http
         .clone()
@@ -374,6 +390,44 @@ fn install_globals<'js>(
     )
     .map_err(js_error)?;
     java.set(
+        "digestHex",
+        Function::new(ctx.clone(), |data: String, algorithm: String| {
+            digest_bytes(&algorithm, data.as_bytes())
+                .map(|bytes| bytes_to_hex(&bytes))
+                .map_err(|error| rquickjs::Error::new_from_js_message("Digest", "String", error))
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "HMacHex",
+        Function::new(
+            ctx.clone(),
+            |data: String, algorithm: String, key: String| {
+                hmac_bytes(&algorithm, key.as_bytes(), data.as_bytes())
+                    .map(|bytes| bytes_to_hex(&bytes))
+                    .map_err(|error| rquickjs::Error::new_from_js_message("HMac", "String", error))
+            },
+        ),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "HMacBase64",
+        Function::new(
+            ctx.clone(),
+            |data: String, algorithm: String, key: String| {
+                hmac_bytes(&algorithm, key.as_bytes(), data.as_bytes())
+                    .map(|bytes| STANDARD.encode(bytes))
+                    .map_err(|error| rquickjs::Error::new_from_js_message("HMac", "String", error))
+            },
+        ),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "randomUUID",
+        Function::new(ctx.clone(), || Uuid::new_v4().to_string()),
+    )
+    .map_err(js_error)?;
+    java.set(
         "strToBytes",
         Function::new(ctx.clone(), |value: String| {
             value
@@ -405,10 +459,21 @@ fn install_globals<'js>(
     )
     .map_err(js_error)?;
     java.set(
-        "timeFormat",
-        Function::new(ctx.clone(), |epoch: i64, pattern: String| {
-            format_epoch(epoch, &pattern)
+        "timeFormatRaw",
+        Function::new(ctx.clone(), |epoch: f64, pattern: String| {
+            format_epoch(epoch as i64, &pattern)
         }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "timeFormatUtcRaw",
+        Function::new(
+            ctx.clone(),
+            |epoch: f64, pattern: String, offset_hours: i32| {
+                let offset_ms = i64::from(offset_hours) * 3_600 * 1_000;
+                format_epoch(epoch as i64 + offset_ms, &pattern)
+            },
+        ),
     )
     .map_err(js_error)?;
     java.set(
@@ -469,6 +534,28 @@ fn install_globals<'js>(
     if let Some(session) = http_session {
         install_http_functions(ctx.clone(), &java, session)?;
     }
+    // Legado overloads these helpers (one, two, or three arguments). Native
+    // QuickJS functions are fixed-arity, so expose small JS shims that coerce
+    // omitted/string arguments before calling the typed bridge.
+    ctx.eval::<(), _>(
+        r#"
+        java.timeFormat = function(epoch, pattern) {
+            epoch = Number(epoch);
+            if (!isFinite(epoch)) epoch = 0;
+            pattern = pattern == null ? 'yyyy-MM-dd HH:mm:ss' : String(pattern);
+            return java.timeFormatRaw(epoch, pattern);
+        };
+        java.timeFormatUTC = function(epoch, pattern, offset) {
+            epoch = Number(epoch);
+            if (!isFinite(epoch)) epoch = 0;
+            pattern = pattern == null ? 'yyyy-MM-dd HH:mm:ss' : String(pattern);
+            offset = offset == null ? 0 : Number(offset);
+            if (!isFinite(offset)) offset = 0;
+            return java.timeFormatUtcRaw(epoch, pattern, offset);
+        };
+        "#,
+    )
+    .map_err(js_error)?;
     globals.set("java", java).map_err(js_error)
 }
 
@@ -708,6 +795,66 @@ fn nested_rule_values(
 
 fn rule_js_error(error: String) -> rquickjs::Error {
     rquickjs::Error::new_from_js_message("Rule", "String", error)
+}
+
+fn stable_android_id(base_url: &str) -> String {
+    let mut digest = Md5::new();
+    digest.update(b"reader-desktop/android-id/");
+    digest.update(base_url.as_bytes());
+    format!("{:x}", digest.finalize())[..16].to_owned()
+}
+
+fn canonical_algorithm(algorithm: &str) -> String {
+    algorithm
+        .trim()
+        .to_ascii_uppercase()
+        .replace(['-', '_', '/'], "")
+}
+
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn digest_bytes(algorithm: &str, data: &[u8]) -> Result<Vec<u8>, String> {
+    match canonical_algorithm(algorithm).as_str() {
+        "MD5" => Ok(Md5::digest(data).to_vec()),
+        "SHA1" => Ok(Sha1::digest(data).to_vec()),
+        "SHA256" => Ok(Sha256::digest(data).to_vec()),
+        "SHA512" => Ok(Sha512::digest(data).to_vec()),
+        other => Err(format!("unsupported digest algorithm: {other}")),
+    }
+}
+
+fn hmac_bytes(algorithm: &str, key: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
+    let normalized = canonical_algorithm(algorithm);
+    let digest_name = normalized.strip_prefix("HMAC").unwrap_or(&normalized);
+    match digest_name {
+        "MD5" => {
+            let mut mac = Hmac::<Md5>::new_from_slice(key)
+                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+            mac.update(data);
+            Ok(mac.finalize().into_bytes().to_vec())
+        }
+        "SHA1" => {
+            let mut mac = Hmac::<Sha1>::new_from_slice(key)
+                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+            mac.update(data);
+            Ok(mac.finalize().into_bytes().to_vec())
+        }
+        "SHA256" => {
+            let mut mac = Hmac::<Sha256>::new_from_slice(key)
+                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+            mac.update(data);
+            Ok(mac.finalize().into_bytes().to_vec())
+        }
+        "SHA512" => {
+            let mut mac = Hmac::<Sha512>::new_from_slice(key)
+                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+            mac.update(data);
+            Ok(mac.finalize().into_bytes().to_vec())
+        }
+        other => Err(format!("unsupported HMAC algorithm: {other}")),
+    }
 }
 
 fn normalize_chapter_numbers(value: &str) -> String {
@@ -1719,6 +1866,45 @@ if (baseUrl.match(/category/)) {
                 "4869|Hi|5d41402abc4b2a76b9719d911017c592|72,105|Hi|1970-01-01 00:00:00".into()
             )
         );
+        assert_eq!(
+            QuickJsRuntime::default()
+                .execute("java.timeFormat(0)", JsContext::default())
+                .await
+                .unwrap(),
+            JsValue::String("1970-01-01 00:00:00".into())
+        );
+        assert_eq!(
+            QuickJsRuntime::default()
+                .execute(
+                    "java.timeFormatUTC(0, 'yyyy-MM-dd HH:mm:ss', 8)",
+                    JsContext::default()
+                )
+                .await
+                .unwrap(),
+            JsValue::String("1970-01-01 08:00:00".into())
+        );
+    }
+
+    #[tokio::test]
+    async fn exposes_digest_hmac_and_uuid_helpers() {
+        let value = QuickJsRuntime::default()
+            .execute(
+                "java.digestHex('hello', 'SHA-256') + '|' + java.HMacHex('hello', 'HmacSHA256', 'key') + '|' + java.HMacBase64('hello', 'HmacSHA1', 'key') + '|' + java.randomUUID()",
+                JsContext::default(),
+            )
+            .await
+            .unwrap();
+        let JsValue::String(value) = value else {
+            panic!("expected string result")
+        };
+        let pieces = value.split('|').collect::<Vec<_>>();
+        assert_eq!(
+            pieces[0],
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+        assert_eq!(pieces[1].len(), 64);
+        assert_eq!(pieces[2].len(), 28);
+        assert!(Uuid::parse_str(pieces[3]).is_ok());
     }
 
     #[tokio::test]
@@ -1780,6 +1966,33 @@ if (baseUrl.match(/category/)) {
             .await
             .unwrap();
         assert_eq!(value, JsValue::String("authenticated:true".into()));
+    }
+
+    #[tokio::test]
+    async fn exposes_a_stable_desktop_android_id_compatibility_helper() {
+        let runtime = QuickJsRuntime::default();
+        let first = runtime
+            .execute(
+                "java.androidId()",
+                JsContext {
+                    base_url: Some("https://example.test".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let second = runtime
+            .execute(
+                "java.androidId()",
+                JsContext {
+                    base_url: Some("https://example.test".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(first, second);
+        assert!(matches!(first, JsValue::String(value) if value.len() == 16));
     }
 
     #[tokio::test]
