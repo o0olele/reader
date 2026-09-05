@@ -197,6 +197,7 @@ impl SearchService {
                             if !browser_body_looks_like_challenge(&browser_text) {
                                 self.sync_browser_cookies(&source, browser, &request.url)
                                     .await?;
+                                let source = self.sources.get(source_id).await?.unwrap_or(source);
                                 let parsed = parse_search(&source, &browser_text)?;
                                 let source_name = source.name.clone();
                                 let session_state = source.session_state().to_owned();
@@ -222,8 +223,11 @@ impl SearchService {
                     }
                     let _ = navigate_browser_to_challenge(browser, &request);
                 }
+                (Vec::<BookSearchResult>::new(), false, true)
+            } else {
+                let results = parse_search(&source, &text)?;
+                (results, false, false)
             }
-            (Vec::<BookSearchResult>::new(), false, cloudflare_challenge)
         } else {
             let status_code = response.status();
             let reason = response_error(response, &source.name).await;
@@ -238,6 +242,7 @@ impl SearchService {
                             if !browser_body_looks_like_challenge(&text) {
                                 self.sync_browser_cookies(&source, browser, &request.url)
                                     .await?;
+                                let source = self.sources.get(source_id).await?.unwrap_or(source);
                                 let parsed = parse_search(&source, &text)?;
                                 let source_name = source.name.clone();
                                 let session_state = source.session_state().to_owned();

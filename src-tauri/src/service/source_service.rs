@@ -330,19 +330,22 @@ fn cookie_max_age(cookie: &str) -> Option<u64> {
 /// through untouched.
 fn cloudflare_challenge_unsolved(cookies: &str) -> bool {
     let mut saw_marker = false;
-    for name in cookies
+    let mut has_clearance = false;
+    for (name, value) in cookies
         .split(';')
         .filter_map(|pair| pair.trim().split_once('='))
-        .map(|(name, _)| name.trim())
     {
+        let name = name.trim();
         if name.eq_ignore_ascii_case("cf_clearance") {
-            return false;
+            // An empty or deleted clearance does not prove verification.
+            saw_marker = true;
+            has_clearance = !value.trim().is_empty();
         }
         saw_marker |= name.eq_ignore_ascii_case("__cf_bm")
             || name.to_ascii_lowercase().starts_with("cf_chl")
             || name.to_ascii_lowercase().starts_with("_cf_chl");
     }
-    saw_marker
+    saw_marker && !has_clearance
 }
 
 fn merge_cookies(values: Option<&str>, extra: Option<&str>) -> Option<String> {
@@ -492,6 +495,12 @@ mod tests {
         assert!(!cloudflare_challenge_unsolved(
             "__cf_bm=abc; cf_clearance=ok"
         ));
+    }
+
+    #[test]
+    fn empty_clearance_is_not_treated_as_verified() {
+        assert!(cloudflare_challenge_unsolved("__cf_bm=abc; cf_clearance="));
+        assert!(cloudflare_challenge_unsolved("cf_clearance="));
     }
 
     /// Sources behind an ordinary login have no Cloudflare cookies at all and

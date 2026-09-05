@@ -38,15 +38,15 @@ const chooseFile = () => fileInput.value?.click()
 <template>
   <main class="shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">R</span><span>Reader</span></div>
-      <div class="topbar-actions">
-        <span class="version">v{{ appVersion }}</span>
-      </div>
+      <div class="brand"><span class="brand-mark">R</span><div><strong>Reader</strong><small>桌面阅读工作台</small></div></div>
+      <div class="global-search" @click="show('search')"><span>⌕</span><span>搜索书名、作者或书源</span><kbd>⌘ K</kbd></div>
+      <div class="topbar-actions"><span class="sync-pill"><i class="dot" />{{ status }}</span><span class="version">v{{ appVersion }}</span><button class="avatar">R</button></div>
     </header>
 
     <section class="workspace">
       <aside class="sidebar">
         <nav aria-label="主导航">
+          <p class="nav-label">阅读空间</p>
           <a
             :class="{ active: view === 'bookshelf' && bookshelf.activeGroup === null && !reader.selectedBook }"
             href="#"
@@ -63,16 +63,19 @@ const chooseFile = () => fileInput.value?.click()
           >
             {{ group.name }} <small>{{ group.book_count }}</small>
           </a>
-          <a href="#" @click.prevent="bookshelf.addGroup()">+ 新建分组</a>
+          <a href="#" class="subtle-link" @click.prevent="bookshelf.addGroup()">＋ 新建分组</a>
+          <p class="nav-label nav-label-spaced">书源中心</p>
           <a :class="{ active: view === 'search' }" href="#" @click.prevent="show('search')">在线搜索</a>
           <a :class="{ active: view === 'explore' }" href="#" @click.prevent="show('explore')">发现</a>
           <a :class="{ active: view === 'sources' }" href="#" @click.prevent="show('sources')">书源调试</a>
-          <a :class="{ active: view === 'settings' }" href="#" @click.prevent="show('settings')">设置</a>
+          <p class="nav-label nav-label-spaced">系统</p>
+          <a :class="{ active: view === 'settings' }" href="#" @click.prevent="show('settings')">⚙ 设置</a>
         </nav>
         <div class="sidebar-footer"><span class="dot" />{{ status }}</div>
       </aside>
 
       <section class="content">
+        <div v-if="!reader.selectedBook && view === 'bookshelf'" class="welcome-strip"><div><span class="eyebrow">今日阅读</span><h2>继续你的阅读旅程</h2><p>在书架中打开一本书，或从发现页添加新书。</p></div><span class="welcome-mark">✦</span></div>
         <div v-if="reader.selectedBook" class="content-heading">
           <div>
             <button type="button" class="back-button" @click="reader.closeBook()">返回书架</button>
