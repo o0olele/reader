@@ -1,30 +1,65 @@
-﻿fn nested_rule_values(
-    rule: &str,
-    input: &str,
-    want: Extraction,
-    variables: &Arc<Mutex<HashMap<String, String>>>,
-    http: Option<JsHttpContext>,
-) -> Result<Vec<String>, String> {
-    let snapshot = variables
-        .lock()
-        .map(|values| values.clone())
-        .unwrap_or_default();
-    let mut context = RuleContext::new(snapshot);
-    if let Some(http) = http {
-        context.with_http(http);
-    }
-    let values = evaluate(rule, input, want, &mut context).map_err(|error| error.to_string())?;
-    if let Ok(mut shared) = variables.lock() {
-        shared.extend(context.snapshot());
-    }
-    Ok(values)
+use crate::error::AppError;
+use rquickjs::{Ctx, Function, Object};
+use super::super::js_error;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use hmac::{Hmac, Mac};
+use md5::{Digest, Md5};
+use sha1::Sha1;
+use sha2::{Sha256, Sha512};
+use uuid::Uuid;
+
+pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>) -> Result<(), AppError> {
+    java.set(
+        "md5Encode",
+        Function::new(ctx.clone(), |value: String| {
+            let mut digest = Md5::new();
+            digest.update(value.as_bytes());
+            format!("{:x}", digest.finalize())
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "digestHex",
+        Function::new(ctx.clone(), |data: String, algorithm: String| {
+            digest_bytes(&algorithm, data.as_bytes())
+                .map(|bytes| bytes_to_hex(&bytes))
+                .map_err(|error| rquickjs::Error::new_from_js_message("Digest", "String", error))
+        }),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "HMacHex",
+        Function::new(
+            ctx.clone(),
+            |data: String, algorithm: String, key: String| {
+                hmac_bytes(&algorithm, key.as_bytes(), data.as_bytes())
+                    .map(|bytes| bytes_to_hex(&bytes))
+                    .map_err(|error| rquickjs::Error::new_from_js_message("HMac", "String", error))
+            },
+        ),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "HMacBase64",
+        Function::new(
+            ctx.clone(),
+            |data: String, algorithm: String, key: String| {
+                hmac_bytes(&algorithm, key.as_bytes(), data.as_bytes())
+                    .map(|bytes| STANDARD.encode(bytes))
+                    .map_err(|error| rquickjs::Error::new_from_js_message("HMac", "String", error))
+            },
+        ),
+    )
+    .map_err(js_error)?;
+    java.set(
+        "randomUUID",
+        Function::new(ctx.clone(), || Uuid::new_v4().to_string()),
+    )
+    .map_err(js_error)?;
+    Ok(())
 }
 
-fn rule_js_error(error: String) -> rquickjs::Error {
-    rquickjs::Error::new_from_js_message("Rule", "String", error)
-}
-
-fn stable_android_id(base_url: &str) -> String {
+pub(super) fn stable_android_id(base_url: &str) -> String {
     let mut digest = Md5::new();
     digest.update(b"reader-desktop/android-id/");
     digest.update(base_url.as_bytes());
@@ -83,86 +118,3 @@ fn hmac_bytes(algorithm: &str, key: &[u8], data: &[u8]) -> Result<Vec<u8>, Strin
         other => Err(format!("unsupported HMAC algorithm: {other}")),
     }
 }
-
-fn normalize_chapter_numbers(value: &str) -> String {
-    let mut output = String::with_capacity(value.len());
-    let mut chinese = String::new();
-    let flush = |output: &mut String, chinese: &mut String| {
-        if chinese.is_empty() {
-            return;
-        }
-        if let Some(number) = chinese_number(chinese) {
-            output.push_str(&number.to_string());
-        } else {
-            output.push_str(chinese);
-        }
-        chinese.clear();
-    };
-    for character in value.chars() {
-        if chinese_digit(character).is_some() || chinese_unit(character).is_some() {
-            chinese.push(character);
-        } else {
-            flush(&mut output, &mut chinese);
-            output.push(character);
-        }
-    }
-    flush(&mut output, &mut chinese);
-    output
-}
-
-fn chinese_number(value: &str) -> Option<u64> {
-    let has_unit = value
-        .chars()
-        .any(|character| chinese_unit(character).is_some());
-    if !has_unit {
-        return value.chars().try_fold(0_u64, |number, character| {
-            Some(number * 10 + chinese_digit(character)?)
-        });
-    }
-    let mut total = 0_u64;
-    let mut section = 0_u64;
-    let mut digit = 0_u64;
-    for character in value.chars() {
-        if let Some(value) = chinese_digit(character) {
-            digit = value;
-            continue;
-        }
-        let unit = chinese_unit(character)?;
-        if unit == 10_000 {
-            section = (section + digit) * unit;
-            total += section;
-            section = 0;
-        } else {
-            section += digit.max(1) * unit;
-        }
-        digit = 0;
-    }
-    Some(total + section + digit)
-}
-
-fn chinese_digit(character: char) -> Option<u64> {
-    match character {
-        '零' | '〇' => Some(0),
-        '一' => Some(1),
-        '二' | '两' => Some(2),
-        '三' => Some(3),
-        '四' => Some(4),
-        '五' => Some(5),
-        '六' => Some(6),
-        '七' => Some(7),
-        '八' => Some(8),
-        '九' => Some(9),
-        _ => None,
-    }
-}
-
-fn chinese_unit(character: char) -> Option<u64> {
-    match character {
-        '十' => Some(10),
-        '百' => Some(100),
-        '千' => Some(1_000),
-        '万' => Some(10_000),
-        _ => None,
-    }
-}
-
