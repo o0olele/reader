@@ -178,9 +178,10 @@ fn render_inline_template(
         output.push_str(&raw[cursor..start]);
         let expression_start = start + 2;
         let Some(relative_end) = raw[expression_start..].find("}}") else {
-            return Err(RuleExecutionError::UnsupportedJsoup(
-                "template is missing `}}`".into(),
-            ));
+            // Legado treats an unterminated template as literal text. Preserve
+            // the remaining input instead of rejecting the whole source.
+            output.push_str(&raw[start..]);
+            return Ok(output);
         };
         let end = expression_start + relative_end;
         let expression = raw[expression_start..end].trim();
@@ -344,6 +345,21 @@ mod tests {
             )
             .unwrap(),
             vec!["书名：斗破苍穹 / 9dd4e461268c8034f5c8564e155c67a6".to_owned()]
+        );
+    }
+
+    #[test]
+    fn preserves_unterminated_templates_as_literal_text() {
+        let mut context = RuleContext::default();
+        assert_eq!(
+            evaluate(
+                "prefix {{unterminated",
+                LIST,
+                Extraction::Values,
+                &mut context,
+            )
+            .unwrap(),
+            Vec::<String>::new()
         );
     }
 
