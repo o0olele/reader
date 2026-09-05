@@ -3,7 +3,7 @@ mod app;
 mod command_api;
 pub mod domain;
 mod error;
-mod infrastructure;
+pub mod infrastructure;
 mod repository;
 mod service;
 pub mod source_engine;

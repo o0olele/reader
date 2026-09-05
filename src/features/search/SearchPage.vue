@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { inject } from 'vue'
-import { searchKey } from '../../app/shellKeys'
+import { searchKey, sourcesKey } from '../../app/shellKeys'
 import type { SearchResultGroup } from '../../services/api'
 import SourceManager from '../source/SourceManager.vue'
 
 const search = inject(searchKey)!
+const sources = inject(sourcesKey)!
 
 const isAdding = (group: SearchResultGroup) => group.sources.some((source) => source.url === search.addingResult)
+
+const canOpenBrowserAuth = (reason: string, authRequired: boolean) =>
+  authRequired || reason.includes('Cloudflare challenge') || reason.includes('需要浏览器执行 JavaScript 验证')
+
+function openBrowserAuth(sourceId: number) {
+  const source = sources.sources.find((item) => item.id === sourceId)
+  if (source) void sources.browserAuth(source)
+}
 </script>
 
 <template>
@@ -24,6 +33,14 @@ const isAdding = (group: SearchResultGroup) => group.sources.some((source) => so
         <li v-for="failure in search.failures" :key="failure.source_id">
           <strong>{{ failure.source_name }}</strong
           >：{{ failure.reason }}<span v-if="failure.auth_required">（需要重新认证）</span>
+          <button
+            v-if="canOpenBrowserAuth(failure.reason, failure.auth_required) && sources.sources.some((item) => item.id === failure.source_id)"
+            type="button"
+            class="secondary"
+            @click="openBrowserAuth(failure.source_id)"
+          >
+            打开认证窗口
+          </button>
         </li>
       </ul>
     </details>

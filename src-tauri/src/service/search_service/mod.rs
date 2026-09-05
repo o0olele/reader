@@ -119,13 +119,21 @@ impl SearchService {
                 Err(error) => {
                     tracing::warn!(target: "source", source = %name, error = %error, "source search failed");
                     let auth_required = error.requires_authentication();
+                    let reason = if error.requires_browser_challenge() {
+                        format!(
+                            "{} 需要浏览器执行 JavaScript 验证（Cloudflare challenge），HTTP 客户端无法直接通过",
+                            name
+                        )
+                    } else {
+                        error.to_string()
+                    };
                     if auth_required {
                         self.sources.mark_session_expired(id).await?;
                     }
                     failures.push(SourceFailure {
                         source_id: id,
                         source_name: name,
-                        reason: error.to_string(),
+                        reason,
                         auth_required,
                     });
                 }
@@ -217,9 +225,10 @@ impl SearchService {
             }
             (Vec::<BookSearchResult>::new(), false, cloudflare_challenge)
         } else {
+            let status_code = response.status();
             let reason = response_error(response, &source.name).await;
             let cloudflare_challenge = reason.contains("需要浏览器执行 JavaScript 验证");
-            if cloudflare_challenge {
+            if should_try_browser_fallback(status_code, &reason) {
                 if let Some(browser) = browser.as_ref() {
                     if let Some((browser_status, browser_body)) =
                         browser_request(browser, &request).await?
@@ -252,7 +261,9 @@ impl SearchService {
                             }
                         }
                     }
-                    let _ = navigate_browser_to_challenge(browser, &request);
+                    if cloudflare_challenge {
+                        let _ = navigate_browser_to_challenge(browser, &request);
+                    }
                 }
             }
             let auth_required = matches!(status, 401) || (status == 403 && !cloudflare_challenge);
@@ -532,8 +543,15 @@ impl SearchService {
             })
             .collect::<Vec<_>>();
         if !response.status().is_success() {
+            let status = response.status();
             let reason = response_error(response, &source.name).await;
-            if reason.contains("需要浏览器执行 JavaScript 验证") {
+            // A source can require a normal login without presenting a
+            // Cloudflare interstitial. If its authenticated WebView is open,
+            // give that session one chance before reporting 401/403. This is
+            // especially important for imported legado sources whose login
+            // flow is browser-only and therefore has no login_url/token_path
+            // that the reqwest client can replay on its own.
+            if should_try_browser_fallback(status, &reason) {
                 if let Some(browser) = browser.as_ref() {
                     if let Some((status, body)) = browser_request(browser, &request).await? {
                         if (200..400).contains(&status) {
@@ -545,7 +563,9 @@ impl SearchService {
                             }
                         }
                     }
-                    let _ = navigate_browser_to_challenge(browser, &request);
+                    if reason.contains("需要浏览器执行 JavaScript 验证") {
+                        let _ = navigate_browser_to_challenge(browser, &request);
+                    }
                 }
             }
             return Err(AppError::Network(reason));
@@ -578,6 +598,15 @@ impl SearchService {
         }
         parse_search(&source, &text)
     }
+}
+
+/// Retry an HTTP authentication failure in the source's authenticated
+/// WebView. Cloudflare responses are included because their clearance cookie
+/// is also browser-bound; other statuses (404/451/429) are not auth retries.
+fn should_try_browser_fallback(status: reqwest::StatusCode, reason: &str) -> bool {
+    status == reqwest::StatusCode::UNAUTHORIZED
+        || status == reqwest::StatusCode::FORBIDDEN
+        || reason.contains("需要浏览器执行 JavaScript 验证")
 }
 
 type SearchRequest = RequestSpec;
@@ -693,5 +722,29 @@ mod tests {
             MAX_SEARCH_CONCURRENCY
         );
         assert_eq!(search_concurrency_from_env(Some(" 16 ")), 16);
+    }
+
+    #[test]
+    fn browser_fallback_is_limited_to_authentication_responses() {
+        assert!(should_try_browser_fallback(
+            reqwest::StatusCode::UNAUTHORIZED,
+            "source 返回 HTTP 401"
+        ));
+        assert!(should_try_browser_fallback(
+            reqwest::StatusCode::FORBIDDEN,
+            "source 返回 HTTP 403"
+        ));
+        assert!(should_try_browser_fallback(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            "source 需要浏览器执行 JavaScript 验证（Cloudflare challenge）"
+        ));
+        assert!(!should_try_browser_fallback(
+            reqwest::StatusCode::NOT_FOUND,
+            "source 返回 HTTP 404"
+        ));
+        assert!(!should_try_browser_fallback(
+            reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
+            "source 返回 HTTP 451"
+        ));
     }
 }
