@@ -1,4 +1,5 @@
-﻿fn install_globals<'js>(
+﻿#[allow(clippy::too_many_arguments)]
+fn install_globals<'js>(
     ctx: Ctx<'js>,
     variables: &Arc<Mutex<HashMap<String, String>>>,
     result: String,

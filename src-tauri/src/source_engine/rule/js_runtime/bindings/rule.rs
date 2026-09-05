@@ -66,7 +66,11 @@
 /// new declaration/assignment clearly starts, leaving multiline expressions,
 /// control headers, and object/function bodies untouched.
 fn normalize_js_statement_boundaries(script: &str) -> String {
-    let script = declare_implicit_assignments(script);
+    // Rhino permits redeclaring `let`/`const` in separately evaluated source
+    // fragments. QuickJS rejects those lexical redeclarations even in sloppy
+    // mode, so use function-scoped `var` for legado compatibility.
+    let script = relax_lexical_declarations(script);
+    let script = declare_implicit_assignments(&script);
     let mut lines: Vec<String> = script.lines().map(declare_implicit_assignment).collect();
     if lines.len() < 2 {
         return script;
@@ -80,6 +84,38 @@ fn normalize_js_statement_boundaries(script: &str) -> String {
         }
     }
     lines.join("\n")
+}
+
+fn relax_lexical_declarations(script: &str) -> String {
+    let mut output = String::with_capacity(script.len());
+    let mut cursor = 0;
+    for (index, _) in script.match_indices(|c: char| c.is_ascii_alphabetic()) {
+        if index < cursor {
+            continue;
+        }
+        output.push_str(&script[cursor..index]);
+        let rest = &script[index..];
+        let replacement = if rest.starts_with("let")
+            && rest[3..].chars().next().is_some_and(|c| c.is_ascii_whitespace())
+        {
+            Some(("var", 3))
+        } else if rest.starts_with("const")
+            && rest[5..].chars().next().is_some_and(|c| c.is_ascii_whitespace())
+        {
+            Some(("var", 5))
+        } else {
+            None
+        };
+        if let Some((word, length)) = replacement {
+            output.push_str(word);
+            cursor = index + length;
+        } else {
+            output.push_str(&script[index..index + 1]);
+            cursor = index + 1;
+        }
+    }
+    output.push_str(&script[cursor..]);
+    output
 }
 
 fn declare_implicit_assignments(script: &str) -> String {
@@ -757,6 +793,15 @@ if (baseUrl.match(/category/)) {
             .await
             .unwrap();
         assert!(matches!(value, JsValue::String(value) if value.starts_with("body|body|https://example.test|36")));
+    }
+
+    #[tokio::test]
+    async fn tolerates_redeclared_lexical_variables() {
+        let value = QuickJsRuntime::default()
+            .execute("let value = 1; let value = 2; const value2 = 3; const value2 = 4; value + value2", JsContext::default())
+            .await
+            .unwrap();
+        assert_eq!(value, JsValue::Number(6.0));
     }
 
     #[tokio::test]
