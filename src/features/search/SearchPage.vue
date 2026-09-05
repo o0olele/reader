@@ -34,7 +34,10 @@ function openBrowserAuth(sourceId: number) {
           <strong>{{ failure.source_name }}</strong
           >：{{ failure.reason }}<span v-if="failure.auth_required">（需要重新认证）</span>
           <button
-            v-if="canOpenBrowserAuth(failure.reason, failure.auth_required) && sources.sources.some((item) => item.id === failure.source_id)"
+            v-if="
+              canOpenBrowserAuth(failure.reason, failure.auth_required) &&
+              sources.sources.some((item) => item.id === failure.source_id)
+            "
             type="button"
             class="secondary"
             @click="openBrowserAuth(failure.source_id)"

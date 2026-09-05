@@ -176,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let class = if stage == "ok" { "" } else { stage };
         rows.push(format!(
             "{},{},{},{},{},{},{},{}",
-            i64::from(s.id),
+            s.id,
             csv(&s.name),
             csv(&url),
             stage,

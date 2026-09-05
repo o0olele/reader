@@ -4,7 +4,7 @@ import tseslint from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
 
 export default [
-  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/target/**'] },
+  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/target/**', '.scratch/**'] },
   { languageOptions: { globals: { window: 'readonly', Window: 'readonly' } } },
   eslint.configs.recommended,
   ...vue.configs['flat/essential'],

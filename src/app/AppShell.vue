@@ -38,9 +38,18 @@ const chooseFile = () => fileInput.value?.click()
 <template>
   <main class="shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">R</span><div><strong>Reader</strong><small>桌面阅读工作台</small></div></div>
-      <div class="global-search" @click="show('search')"><span>⌕</span><span>搜索书名、作者或书源</span><kbd>⌘ K</kbd></div>
-      <div class="topbar-actions"><span class="sync-pill"><i class="dot" />{{ status }}</span><span class="version">v{{ appVersion }}</span><button class="avatar">R</button></div>
+      <div class="brand">
+        <span class="brand-mark">R</span>
+        <div><strong>Reader</strong><small>桌面阅读工作台</small></div>
+      </div>
+      <div class="global-search" @click="show('search')">
+        <span>⌕</span><span>搜索书名、作者或书源</span><kbd>⌘ K</kbd>
+      </div>
+      <div class="topbar-actions">
+        <span class="sync-pill"><i class="dot" />{{ status }}</span
+        ><span class="version">v{{ appVersion }}</span
+        ><button class="avatar">R</button>
+      </div>
     </header>
 
     <section class="workspace">
@@ -75,7 +84,14 @@ const chooseFile = () => fileInput.value?.click()
       </aside>
 
       <section class="content">
-        <div v-if="!reader.selectedBook && view === 'bookshelf'" class="welcome-strip"><div><span class="eyebrow">今日阅读</span><h2>继续你的阅读旅程</h2><p>在书架中打开一本书，或从发现页添加新书。</p></div><span class="welcome-mark">✦</span></div>
+        <div v-if="!reader.selectedBook && view === 'bookshelf'" class="welcome-strip">
+          <div>
+            <span class="eyebrow">今日阅读</span>
+            <h2>继续你的阅读旅程</h2>
+            <p>在书架中打开一本书，或从发现页添加新书。</p>
+          </div>
+          <span class="welcome-mark">✦</span>
+        </div>
         <div v-if="reader.selectedBook" class="content-heading">
           <div>
             <button type="button" class="back-button" @click="reader.closeBook()">返回书架</button>

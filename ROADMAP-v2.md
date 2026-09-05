@@ -327,7 +327,7 @@ P7  性能 / 稳定性 / 发布                    2 周
 
 - [x] 注入 legado 的上下文变量集（新增 `src`、`title`，既有 `result` `baseUrl` `book` `chapter` `source` `cookie` 保留）
 - [x] 以非严格模式求值以支持 `with` 与重复声明
-- 已新增 `java.decodeURI`、`java.toInt`、`java.toBoolean`、`java.isNull`；尚未按真实失败清单逐项验证与 legado 的语义一致性，不能视为剩余 `java.*` 已补齐。
+- 已新增 `java.decodeURI`、`java.toInt`、`java.toBoolean`、`java.isNull`，并补齐常见 Rhino 顶层别名 `org` / `run` / `time` / `getUrl` / `uuid`；重复 `let` / `const` 声明已按 Rhino 宽松语义归一化。`JavaImporter` / JVM 包访问仍明确不支持。
 - 文件已拆到 `js_runtime/runtime.rs` 与 `bindings/{net,rule,ctx,crypto}.rs`；当前仍以 `include!` 共用作用域，`codec.rs` 仅为占位，部分文件仍超过 250 行，需继续按职责拆分。
 - 验证：`cargo test --manifest-path src-tauri/Cargo.toml --lib` 在分文件后通过 200 项；新增四个方法后，`cargo test --manifest-path src-tauri/Cargo.toml --lib source_engine::rule::js_runtime` 通过 19 项既有测试，新增方法的针对性回归测试待补。
 
