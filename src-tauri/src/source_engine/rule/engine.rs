@@ -24,7 +24,21 @@ pub fn evaluate(
     want: Extraction,
     context: &mut RuleContext,
 ) -> Result<Vec<String>, RuleExecutionError> {
-    let alternatives = split_rule(raw)?;
+    let alternatives = match split_rule(raw) {
+        Ok(value) => value,
+        Err(error) => {
+            // legado treats malformed/empty branches as a non-matching rule;
+            // one broken spelling must not block an entire source.
+            match error {
+                super::model::RuleParseError::Unclosed(_)
+                | super::model::RuleParseError::EmptyBranch(_) => {
+                    tracing::debug!(rule = raw, error = %error, "ignoring malformed rule");
+                    return Ok(Vec::new());
+                }
+                other => return Err(other.into()),
+            }
+        }
+    };
     execute_alternatives(&alternatives, input, want, context)
 }
 

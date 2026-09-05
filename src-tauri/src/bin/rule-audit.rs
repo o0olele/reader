@@ -60,6 +60,41 @@ struct Audit {
     token_hits: BTreeMap<String, (usize, BTreeSet<usize>)>,
     errors: BTreeMap<String, usize>,
     java_methods: BTreeMap<String, BTreeSet<usize>>,
+    blocked_by: BTreeMap<String, BTreeSet<usize>>,
+}
+
+fn source_is_json(source: &Value, rules: &[(String, String)]) -> bool {
+    if rules.iter().any(|(_, raw)| {
+        let l = raw.to_ascii_lowercase();
+        l.starts_with("@json:") || raw.contains("$.") || raw.contains("$[")
+    }) {
+        return true;
+    }
+    serde_json::to_string(source)
+        .map(|s| {
+            let l = s.to_ascii_lowercase();
+            l.contains("@json:") || l.contains("/api/") || l.contains("json")
+        })
+        .unwrap_or(false)
+}
+
+fn error_category(error: &str) -> &'static str {
+    let l = error.to_ascii_lowercase();
+    if l.contains("rule is empty") {
+        "empty rule"
+    } else if l.contains("unclosed quote") {
+        "unclosed quote"
+    } else if l.contains("empty branch") || l.contains("unclosed balanced") {
+        "empty branch"
+    } else if l.contains("regex") || l.contains("escape sequence") {
+        "regex compatibility"
+    } else if l.contains("template") {
+        "template delimiter"
+    } else if l.contains("xpath") || l.contains("jsonpath") {
+        "path parser"
+    } else {
+        "other"
+    }
 }
 
 fn walk(value: &Value, path: &str, out: &mut Vec<(String, String)>) {
@@ -131,6 +166,7 @@ fn run(input: &str) -> Result<Audit, String> {
     let java_pattern = Regex::new(r"java\.([A-Za-z0-9_]+)").expect("java method regex");
     for (source_id, source) in sources.iter().enumerate() {
         let rules = source_rules(source);
+        let json_source = source_is_json(source, &rules);
         let mut source_clean = true;
         for (path, raw) in rules {
             report.rules += 1;
@@ -151,14 +187,10 @@ fn run(input: &str) -> Result<Audit, String> {
             // URL templates, headers and JS libraries are metadata rather than
             // evaluator rules; only actual rule fields are dry-run here.
             if path.starts_with("rule") {
-                let normalized = raw.trim_start_matches('-').trim_start();
-                let dummy_input = if normalized.starts_with("$.")
-                    || normalized.starts_with("$[")
-                    || normalized.to_ascii_lowercase().starts_with("@json:")
-                {
-                    "{}"
+                let dummy_input = if json_source {
+                    r#"{"data":{"list":[{"id":"1","title":"audit","content":"audit"}],"score":1},"list":[{"id":"1","title":"audit","content":"audit"}],"id":"1","title":"audit","content":"audit","score":1}"#
                 } else {
-                    "<html><body>audit</body></html>"
+                    "<html><body><div class=\"item\"><a class=\"name\">audit</a></div></body></html>"
                 };
                 if let Err(error) = evaluate(
                     &raw,
@@ -168,6 +200,11 @@ fn run(input: &str) -> Result<Audit, String> {
                 ) {
                     source_clean = false;
                     *report.errors.entry(error.to_string()).or_default() += 1;
+                    report
+                        .blocked_by
+                        .entry(error_category(&error.to_string()).to_owned())
+                        .or_default()
+                        .insert(source_id);
                 }
             }
         }
@@ -211,6 +248,14 @@ fn markdown(report: &Audit) -> String {
     for (method, sources) in methods {
         out.push_str(&format!("| `java.{method}` | {} |\n", sources.len()));
     }
+    out.push_str(
+        "\n## Blocked sources by category\n\n| Category | Blocked sources |\n| --- | ---: |\n",
+    );
+    let mut blocked: Vec<_> = report.blocked_by.iter().collect();
+    blocked.sort_by_key(|(_, sources)| std::cmp::Reverse(sources.len()));
+    for (category, sources) in blocked {
+        out.push_str(&format!("| {category} | {} |\n", sources.len()));
+    }
     out
 }
 
@@ -246,10 +291,10 @@ mod tests {
     }
 
     #[test]
-    fn malformed_rule_is_counted_as_blocking_error() {
+    fn malformed_rule_is_ignored_like_legado() {
         let report = run(r#"[{"ruleContent":"||"}]"#).unwrap();
-        assert_eq!(report.clean, 0);
-        assert!(!report.errors.is_empty());
+        assert_eq!(report.clean, 1);
+        assert!(report.errors.is_empty());
     }
 
     #[test]

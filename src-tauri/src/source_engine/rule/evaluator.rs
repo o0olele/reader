@@ -86,7 +86,8 @@ pub fn execute_regex(rule: &SourceRule, input: &str) -> Result<Vec<String>, Rule
         return Err(RuleExecutionError::UnsupportedMode(mode_name(rule.mode)));
     }
     if rule.rule.trim().is_empty() {
-        return Err(RuleExecutionError::EmptyRule);
+        tracing::debug!("ignoring empty regex rule");
+        return Ok(Vec::new());
     }
     let regex = regex::Regex::new(&rule.rule)
         .map_err(|error| RuleExecutionError::InvalidRegex(error.to_string()))?;

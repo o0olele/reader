@@ -3,6 +3,47 @@ use super::scanner::find_ignore_ascii_case;
 use regex::Regex;
 use std::collections::HashMap;
 
+fn normalize_java_regex(pattern: &str) -> String {
+    let mut out = String::with_capacity(pattern.len());
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            let next = chars[i + 1];
+            if !matches!(
+                next,
+                'd' | 'D'
+                    | 's'
+                    | 'S'
+                    | 'w'
+                    | 'W'
+                    | 'b'
+                    | 'B'
+                    | 'A'
+                    | 'Z'
+                    | 'z'
+                    | 'Q'
+                    | 'E'
+                    | 'p'
+                    | 'P'
+                    | 'k'
+                    | 'G'
+                    | 'R'
+                    | 'x'
+                    | 'u'
+                    | '0'..='9' | 't' | 'n' | 'r' | 'f'
+            ) {
+                out.push(next);
+                i += 2;
+                continue;
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out
+}
+
 pub(super) fn extract_replacement(
     raw: &str,
 ) -> Result<(String, Option<RuleReplacement>), RuleParseError> {
@@ -18,8 +59,10 @@ pub(super) fn extract_replacement(
     } else {
         replacement.to_owned()
     };
-    let pattern =
-        Regex::new(pattern).map_err(|error| RuleParseError::InvalidRegex(error.to_string()))?;
+    let normalized = normalize_java_regex(pattern);
+    let pattern = Regex::new(&normalized)
+        .or_else(|_| Regex::new(&regex::escape(pattern)))
+        .map_err(|error| RuleParseError::InvalidRegex(error.to_string()))?;
     Ok((
         selector.to_owned(),
         Some(RuleReplacement {
