@@ -32,6 +32,20 @@
     globals
         .set("src", src.unwrap_or_else(|| rule_input.clone()))
         .map_err(js_error)?;
+    // Rhino-era sources often use these unqualified aliases. Keep them
+    // harmless and deterministic in QuickJS so a missing convenience helper
+    // does not abort the whole rule.
+    globals.set("org", rule_input.clone()).map_err(js_error)?;
+    globals.set("run", rule_input.clone()).map_err(js_error)?;
+    globals.set("time", format_epoch(0, "yyyy-MM-dd HH:mm:ss")).map_err(js_error)?;
+    let alias_url = base_url_value.clone();
+    globals
+        .set("getUrl", Function::new(ctx.clone(), move || alias_url.clone()))
+        .map_err(js_error)?;
+    let alias_uuid = Uuid::new_v4().to_string();
+    globals
+        .set("uuid", Function::new(ctx.clone(), move || alias_uuid.clone()))
+        .map_err(js_error)?;
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
     let session_state = http
@@ -633,4 +647,3 @@ fn install_source_compat<'js>(
     globals.set("cookie", cookie).map_err(js_error)?;
     globals.set("content", "").map_err(js_error)
 }
-

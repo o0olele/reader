@@ -744,6 +744,22 @@ if (baseUrl.match(/category/)) {
     }
 
     #[tokio::test]
+    async fn exposes_common_rhino_global_aliases() {
+        let value = QuickJsRuntime::default()
+            .execute(
+                "org + '|' + run + '|' + getUrl() + '|' + uuid().length",
+                JsContext {
+                    result: "body".into(),
+                    base_url: Some("https://example.test".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(value, JsValue::String(value) if value.starts_with("body|body|https://example.test|36")));
+    }
+
+    #[tokio::test]
     async fn request_options_and_response_metadata_are_available_to_scripts() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let address = listener.local_addr().unwrap();
