@@ -1,5 +1,3 @@
-
-
 pub(super) fn format_epoch(epoch: i64, pattern: &str) -> String {
     // Keep this dependency-free and deterministic. These are the tokens used
     // by the common legado timeFormat calls; unknown tokens are preserved.

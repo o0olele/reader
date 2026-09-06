@@ -11,9 +11,9 @@ mod time;
 mod transport;
 mod types;
 
+use crate::error::AppError;
 pub use runtime::QuickJsRuntime;
 pub use types::{JsContext, JsHttpContext, JsRuntime, JsValue};
-use crate::error::AppError;
 
 fn js_error(error: impl std::fmt::Display) -> AppError {
     AppError::Source(format!("JavaScript 执行失败: {error}"))

@@ -1,7 +1,14 @@
-use crate::{error::AppError, infrastructure::http::request::{evaluate_sign_script, user_agent}};
+use super::{request_options::JsHttpRequestOptions, JsHttpContext};
+use crate::{
+    error::AppError,
+    infrastructure::http::request::{evaluate_sign_script, user_agent},
+};
 use serde_json::Value as JsonValue;
-use std::{collections::HashMap, sync::{Arc, Mutex, OnceLock}, time::Duration};
-use super::{JsHttpContext, request_options::JsHttpRequestOptions};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, OnceLock},
+    time::Duration,
+};
 
 pub(super) struct JsHttpSession {
     pub(super) client: reqwest::blocking::Client,

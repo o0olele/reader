@@ -1,11 +1,20 @@
-use crate::error::AppError;
-use rquickjs::{Ctx, Function, Object};
 use super::super::js_error;
-use std::{collections::HashMap, sync::{Arc, Mutex}};
 use super::super::JsHttpContext;
+use crate::error::AppError;
 use crate::source_engine::rule::{engine::evaluate, jsoup::Extraction, model::RuleContext};
+use rquickjs::{Ctx, Function, Object};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>, variables: &Arc<Mutex<HashMap<String, String>>>, rule_input: String, http: Option<JsHttpContext>) -> Result<(), AppError> {
+pub(super) fn install<'js>(
+    ctx: Ctx<'js>,
+    java: &Object<'js>,
+    variables: &Arc<Mutex<HashMap<String, String>>>,
+    rule_input: String,
+    http: Option<JsHttpContext>,
+) -> Result<(), AppError> {
     let get_string_values = Arc::clone(variables);
     let get_string_http = http.clone();
     let get_string_input = rule_input.clone();
@@ -60,10 +69,20 @@ pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>, variables: &Arc<Mu
     )
     .map_err(js_error)?;
     let list_values = Arc::clone(variables);
-    java.set("getStringList", Function::new(ctx.clone(), move |rule: String| {
-        nested_rule_values(&rule, &rule_input, Extraction::Values, &list_values, http.clone())
+    java.set(
+        "getStringList",
+        Function::new(ctx.clone(), move |rule: String| {
+            nested_rule_values(
+                &rule,
+                &rule_input,
+                Extraction::Values,
+                &list_values,
+                http.clone(),
+            )
             .map_err(rule_js_error)
-    })).map_err(js_error)?;
+        }),
+    )
+    .map_err(js_error)?;
     Ok(())
 }
 

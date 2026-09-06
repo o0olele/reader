@@ -1,10 +1,21 @@
+use super::super::js_error;
+use super::super::{
+    request_options::JsHttpRequestOptions,
+    transport::{blocking_http_request_with_options, JsHttpSession},
+};
 use crate::error::AppError;
 use rquickjs::{Ctx, Function, Object};
-use super::super::js_error;
-use std::{collections::HashMap, sync::{Arc, Mutex}};
-use super::super::{transport::{JsHttpSession, blocking_http_request_with_options}, request_options::JsHttpRequestOptions};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>, variables: &Arc<Mutex<HashMap<String, String>>>, http_session: Option<Arc<JsHttpSession>>) -> Result<(), AppError> {
+pub(super) fn install<'js>(
+    ctx: Ctx<'js>,
+    java: &Object<'js>,
+    variables: &Arc<Mutex<HashMap<String, String>>>,
+    http_session: Option<Arc<JsHttpSession>>,
+) -> Result<(), AppError> {
     let get_values = Arc::clone(variables);
     let get_session = http_session.clone();
     java.set(

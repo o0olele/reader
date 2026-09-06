@@ -402,7 +402,10 @@ mod tests {
     fn normalizes_legacy_escaped_pipe_selector_union() {
         assert_eq!(normalize_css_compat(r#"src\|class.red"#), "src,class.red");
         assert_eq!(normalize_css_compat("src|class.red"), "src,class.red");
-        assert_eq!(normalize_css_compat(r#"[src\|class='x']"#), r#"[src\|class='x']"#);
+        assert_eq!(
+            normalize_css_compat(r#"[src\|class='x']"#),
+            r#"[src\|class='x']"#
+        );
     }
 
     #[test]

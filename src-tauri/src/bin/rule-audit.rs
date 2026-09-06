@@ -158,7 +158,11 @@ fn source_rules(source: &Value) -> Vec<(String, String)> {
 }
 
 fn is_metadata_url(path: &str, raw: &str) -> bool {
-    let key = path.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
+    let key = path
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     (key.ends_with("url") || key == "url")
         && (raw.trim_start().starts_with("http://") || raw.trim_start().starts_with("https://"))
         && !raw.contains("@js:")
@@ -183,10 +187,22 @@ fn is_literal_fragment(raw: &str) -> bool {
 
 fn is_json_field_path(raw: &str) -> bool {
     let value = raw.trim();
-    value.contains("[*]")
-        && !value.contains('@')
-        && !value.contains(' ')
-        && !value.contains(':')
+    value.contains("[*]") && !value.contains('@') && !value.contains(' ') && !value.contains(':')
+}
+
+/// A number of legado JSON sources omit the `$.` prefix in field selectors
+/// (for example `data[*].title` or `book_tag_list[*].title`).  The rule
+/// analyzer quite correctly treats those strings as CSS in isolation, but
+/// within a JSON source they are JSONPath expressions.  Normalize only this
+/// deliberately narrow, metadata-free spelling before the dry run so the
+/// audit measures the engine rather than CSS parser noise.
+fn normalized_json_rule(raw: &str, json_source: bool) -> Option<String> {
+    if !json_source || !is_json_field_path(raw) {
+        return None;
+    }
+    let path = raw.trim();
+    let path = path.strip_prefix("$.").unwrap_or(path);
+    Some(format!("@Json:$.{path}"))
 }
 
 fn corpus_file(path: &Path) -> Result<PathBuf, String> {
@@ -247,8 +263,9 @@ fn run(input: &str) -> Result<Audit, String> {
                 } else {
                     "<html><body><div class=\"item\"><a class=\"name\">audit</a></div></body></html>"
                 };
+                let executable = normalized_json_rule(&raw, json_source).unwrap_or(raw.clone());
                 if let Err(error) = evaluate(
-                    &raw,
+                    &executable,
                     dummy_input,
                     Extraction::Values,
                     &mut RuleContext::default(),
@@ -301,7 +318,9 @@ fn markdown(report: &Audit) -> String {
     for (error, count) in &report.errors {
         *category_counts.entry(error_category(error)).or_default() += count;
     }
-    out.push_str("\n## Execution errors by category\n\n| Category | Rule count |\n| --- | ---: |\n");
+    out.push_str(
+        "\n## Execution errors by category\n\n| Category | Rule count |\n| --- | ---: |\n",
+    );
     let mut categories: Vec<_> = category_counts.into_iter().collect();
     categories.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     for (category, count) in categories {
@@ -376,7 +395,9 @@ mod tests {
             "js runtime"
         );
         assert_eq!(
-            error_category("default-mode rule is not supported: `a.` is not a CSS selector: EmptySelector"),
+            error_category(
+                "default-mode rule is not supported: `a.` is not a CSS selector: EmptySelector"
+            ),
             "css compatibility"
         );
         assert_eq!(
@@ -415,6 +436,16 @@ mod tests {
         assert!(is_json_field_path("data[*]"));
         assert!(!is_json_field_path("li:nth-child(2)"));
         assert!(!is_json_field_path("$.data[*].title@text"));
+    }
+
+    #[test]
+    fn normalizes_unprefixed_json_wildcard_paths_for_json_sources() {
+        assert_eq!(
+            normalized_json_rule("data[*].title", true).as_deref(),
+            Some("@Json:$.data[*].title")
+        );
+        assert!(normalized_json_rule("data[*].title", false).is_none());
+        assert!(normalized_json_rule("li:nth-child(2)", true).is_none());
     }
 
     #[test]

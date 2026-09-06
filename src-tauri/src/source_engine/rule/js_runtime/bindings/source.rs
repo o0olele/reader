@@ -1,11 +1,14 @@
-use crate::error::AppError;
-use rquickjs::{Ctx, Function, Object};
 use super::super::js_error;
-use std::{collections::HashMap, sync::{Arc, Mutex}};
 use super::super::JsHttpContext;
-use serde_json::Value as JsonValue;
-use crate::source_engine::rule::jsoup::Extraction;
 use super::rule::{nested_rule_values, rule_js_error};
+use crate::error::AppError;
+use crate::source_engine::rule::jsoup::Extraction;
+use rquickjs::{Ctx, Function, Object};
+use serde_json::Value as JsonValue;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 pub(super) fn install_source_compat<'js>(
     ctx: Ctx<'js>,

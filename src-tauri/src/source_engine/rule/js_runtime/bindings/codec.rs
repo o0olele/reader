@@ -1,7 +1,7 @@
-use crate::error::AppError;
-use rquickjs::{Ctx, Function, Object};
 use super::super::js_error;
+use crate::error::AppError;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use rquickjs::{Ctx, Function, Object};
 
 pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>) -> Result<(), AppError> {
     java.set(
@@ -101,7 +101,10 @@ pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>) -> Result<(), AppE
     java.set(
         "toBoolean",
         Function::new(ctx.clone(), |value: String| {
-            matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes")
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "true" | "1" | "yes"
+            )
         }),
     )
     .map_err(js_error)?;

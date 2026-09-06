@@ -134,9 +134,7 @@ body=urlEncode(params)
         )
         .await
         .unwrap();
-    assert!(
-        matches!(value, JsValue::String(value) if value.starts_with("/api/v5/search/words?"))
-    );
+    assert!(matches!(value, JsValue::String(value) if value.starts_with("/api/v5/search/words?")));
 }
 
 #[tokio::test]
@@ -420,13 +418,18 @@ async fn exposes_common_rhino_global_aliases() {
         )
         .await
         .unwrap();
-    assert!(matches!(value, JsValue::String(value) if value.starts_with("body|body|https://example.test|36")));
+    assert!(
+        matches!(value, JsValue::String(value) if value.starts_with("body|body|https://example.test|36"))
+    );
 }
 
 #[tokio::test]
 async fn tolerates_redeclared_lexical_variables() {
     let value = QuickJsRuntime::default()
-        .execute("let value = 1; let value = 2; const value2 = 3; const value2 = 4; value + value2", JsContext::default())
+        .execute(
+            "let value = 1; let value = 2; const value2 = 3; const value2 = 4; value + value2",
+            JsContext::default(),
+        )
         .await
         .unwrap();
     assert_eq!(value, JsValue::Number(6.0));

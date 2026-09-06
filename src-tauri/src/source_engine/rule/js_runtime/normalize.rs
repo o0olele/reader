@@ -37,11 +37,17 @@ fn relax_lexical_declarations(script: &str) -> String {
         output.push_str(&script[cursor..index]);
         let rest = &script[index..];
         let replacement = if rest.starts_with("let")
-            && rest[3..].chars().next().is_some_and(|c| c.is_ascii_whitespace())
+            && rest[3..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_whitespace())
         {
             Some(("var", 3))
         } else if rest.starts_with("const")
-            && rest[5..].chars().next().is_some_and(|c| c.is_ascii_whitespace())
+            && rest[5..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_whitespace())
         {
             Some(("var", 5))
         } else {

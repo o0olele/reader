@@ -1,8 +1,12 @@
+use super::{bindings::install_globals, script::evaluate_script, JsContext, JsRuntime, JsValue};
 use crate::error::AppError;
 use async_trait::async_trait;
 use rquickjs::{Context, Runtime};
-use std::{collections::HashMap, sync::{Arc, Mutex}, time::{Duration, Instant}};
-use super::{bindings::install_globals, script::evaluate_script, JsContext, JsRuntime, JsValue};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 #[derive(Clone, Debug)]
 pub struct QuickJsRuntime {

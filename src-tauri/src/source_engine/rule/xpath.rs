@@ -20,6 +20,10 @@ pub fn execute_xpath(
         return Err(RuleExecutionError::UnsupportedMode("non-XPath"));
     }
     let (selector_text, terminal) = split_terminal(rule.rule.trim());
+    if selector_text.trim().is_empty() || selector_text.trim() == "//" {
+        tracing::debug!("empty XPath selector treated as no match");
+        return Ok(Vec::new());
+    }
     let query = to_query(selector_text)?;
     let selector = Selector::parse(&query.css)
         .map_err(|error| RuleExecutionError::InvalidXPath(error.to_string()))?;
@@ -274,6 +278,16 @@ mod tests {
             to_query("//"),
             Err(RuleExecutionError::InvalidXPath(_))
         ));
+    }
+
+    #[test]
+    fn treats_empty_xpath_as_no_match() {
+        let rule = xpath_rule("@XPath://");
+        assert!(
+            execute_xpath(&rule, "<main>text</main>", Extraction::Values)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

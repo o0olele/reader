@@ -9,7 +9,9 @@ pub(super) struct JsHttpRequestOptions {
     pub(super) timeout_ms: Option<u64>,
 }
 
-pub(super) fn parse_request_options<'js>(options: Object<'js>) -> Result<JsHttpRequestOptions, String> {
+pub(super) fn parse_request_options<'js>(
+    options: Object<'js>,
+) -> Result<JsHttpRequestOptions, String> {
     let method = options
         .get::<_, Option<String>>("method")
         .map_err(|error| error.to_string())?

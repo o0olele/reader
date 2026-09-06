@@ -1,5 +1,3 @@
-
-
 pub(super) fn declare_implicit_assignments(script: &str) -> String {
     let mut names = Vec::new();
     let bytes = script.as_bytes();

@@ -1,5 +1,3 @@
-
-
 pub(super) fn normalize_chapter_numbers(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
     let mut chinese = String::new();

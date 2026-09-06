@@ -1,8 +1,11 @@
+use super::super::js_error;
+use super::super::{
+    request_options::{parse_request_options, JsHttpRequestOptions},
+    transport::{blocking_http_request_with_options, JsHttpSession},
+};
 use crate::error::AppError;
 use rquickjs::{Ctx, Function, Object};
-use super::super::js_error;
 use std::sync::Arc;
-use super::super::{transport::{JsHttpSession, blocking_http_request_with_options}, request_options::{JsHttpRequestOptions, parse_request_options}};
 
 pub(super) fn install_http_functions<'js>(
     ctx: Ctx<'js>,

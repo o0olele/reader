@@ -1,5 +1,3 @@
-
-
 pub(super) fn split_last_statement(script: &str) -> Option<(&str, &str)> {
     let mut quote = None;
     let mut escaped = false;

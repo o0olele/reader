@@ -1,7 +1,7 @@
-use crate::error::AppError;
-use rquickjs::{Ctx, Function, Object};
 use super::super::js_error;
 use super::super::{chapter_numbers::normalize_chapter_numbers, time::format_epoch};
+use crate::error::AppError;
+use rquickjs::{Ctx, Function, Object};
 
 pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>) -> Result<(), AppError> {
     java.set(

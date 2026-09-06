@@ -1,11 +1,14 @@
+use super::super::js_error;
+use super::super::JsHttpContext;
+use super::super::{time::format_epoch, transport::build_js_http_session};
+use super::crypto::stable_android_id;
 use crate::error::AppError;
 use rquickjs::{Ctx, Function, Object};
-use super::super::js_error;
-use std::{collections::HashMap, sync::{Arc, Mutex}};
-use super::super::JsHttpContext;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use uuid::Uuid;
-use super::{crypto::stable_android_id};
-use super::super::{time::format_epoch, transport::build_js_http_session};
 
 #[allow(clippy::too_many_arguments)]
 pub(in super::super) fn install_globals<'js>(
@@ -47,14 +50,22 @@ pub(in super::super) fn install_globals<'js>(
     // does not abort the whole rule.
     globals.set("org", rule_input.clone()).map_err(js_error)?;
     globals.set("run", rule_input.clone()).map_err(js_error)?;
-    globals.set("time", format_epoch(0, "yyyy-MM-dd HH:mm:ss")).map_err(js_error)?;
+    globals
+        .set("time", format_epoch(0, "yyyy-MM-dd HH:mm:ss"))
+        .map_err(js_error)?;
     let alias_url = base_url_value.clone();
     globals
-        .set("getUrl", Function::new(ctx.clone(), move || alias_url.clone()))
+        .set(
+            "getUrl",
+            Function::new(ctx.clone(), move || alias_url.clone()),
+        )
         .map_err(js_error)?;
     let alias_uuid = Uuid::new_v4().to_string();
     globals
-        .set("uuid", Function::new(ctx.clone(), move || alias_uuid.clone()))
+        .set(
+            "uuid",
+            Function::new(ctx.clone(), move || alias_uuid.clone()),
+        )
         .map_err(js_error)?;
 
     let java = Object::new(ctx.clone()).map_err(js_error)?;
@@ -95,7 +106,11 @@ pub(in super::super) fn install_globals<'js>(
         Function::new(ctx.clone(), move || android_id.clone()),
     )
     .map_err(js_error)?;
-    let http_session = http.clone().map(build_js_http_session).transpose()?.map(Arc::new);
+    let http_session = http
+        .clone()
+        .map(build_js_http_session)
+        .transpose()?
+        .map(Arc::new);
     super::context::install(ctx.clone(), &java, variables, http_session.clone())?;
     super::rule::install(ctx.clone(), &java, variables, rule_input, http.clone())?;
     super::codec::install(ctx.clone(), &java)?;

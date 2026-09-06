@@ -1,7 +1,12 @@
+use super::{
+    js_error,
+    normalize::normalize_js_statement_boundaries,
+    statements::{has_top_level_return, split_last_statement},
+    JsValue,
+};
 use crate::error::AppError;
 use rquickjs::{context::EvalOptions, CatchResultExt, Ctx};
 use serde_json::Value as JsonValue;
-use super::{js_error, JsValue, normalize::normalize_js_statement_boundaries, statements::{has_top_level_return, split_last_statement}};
 
 pub(super) fn evaluate_script<'js>(ctx: Ctx<'js>, script: &str) -> Result<JsValue, AppError> {
     let script = normalize_js_statement_boundaries(script);

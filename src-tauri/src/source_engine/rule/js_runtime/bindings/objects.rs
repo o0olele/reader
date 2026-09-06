@@ -1,10 +1,18 @@
+use super::super::js_error;
+use super::super::JsHttpContext;
 use crate::error::AppError;
 use rquickjs::{Ctx, Function, Object};
-use super::super::js_error;
-use std::{collections::HashMap, sync::{Arc, Mutex}};
-use super::super::JsHttpContext;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-pub(super) fn install<'js>(ctx: Ctx<'js>, globals: &Object<'js>, variables: &Arc<Mutex<HashMap<String, String>>>, http: Option<JsHttpContext>) -> Result<(), AppError> {
+pub(super) fn install<'js>(
+    ctx: Ctx<'js>,
+    globals: &Object<'js>,
+    variables: &Arc<Mutex<HashMap<String, String>>>,
+    http: Option<JsHttpContext>,
+) -> Result<(), AppError> {
     let book = Object::new(ctx.clone()).map_err(js_error)?;
     let chapter = Object::new(ctx.clone()).map_err(js_error)?;
     for object in [&book, &chapter] {
