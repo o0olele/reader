@@ -441,8 +441,8 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 
 - **精确分页排版** —— 页宽/页高计算，改字号后重排进度不丢（当前为近似还原）
 - **书签落库** —— ✅ 已新增 SQLite `bookmarks` 表、IPC/API 与前端 composable；兼容迁移旧 `localStorage` 书签，重启后保留
-- **主题** —— Light / Dark / Sepia / Green / Black，Design Tokens 驱动（`plan.md` §8：不写死颜色）
-- **阅读时长** —— 对位 `readRecord`
+- **主题** —— ✅ Light / Dark / Sepia / Green / Black 五种主题，阅读器选择器与样式已接通
+- **阅读时长** —— ✅ 已新增 `reading_records` 持久化表、IPC 累计接口与阅读器可见时长采集（15 秒 flush，切书/关闭 flush）
 - **接入 §3.8 的净化替换规则**
 
 不做：仿真翻页动画、竖排、字体反爬、图片/漫画渲染。

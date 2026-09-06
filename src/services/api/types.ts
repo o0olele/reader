@@ -30,6 +30,11 @@ export interface ReadingProgress {
   offset: number
 }
 
+export interface ReadingRecord {
+  book_id: number
+  duration_seconds: number
+}
+
 export interface BookshelfGroup {
   id: number
   name: string

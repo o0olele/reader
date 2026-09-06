@@ -14,6 +14,7 @@ pub mod bookmark;
 pub mod bookshelf;
 pub mod chapter;
 pub mod progress;
+pub mod reading_record;
 pub mod source;
 
 pub trait BookRepository: Send + Sync {

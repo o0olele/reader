@@ -334,6 +334,18 @@
   .reader-content.theme-dark p {
     @apply text-slate-100;
   }
+  .reader-content.theme-green {
+    @apply bg-[#edf5e8];
+  }
+  .reader-content.theme-green p {
+    @apply text-[#38523b];
+  }
+  .reader-content.theme-black {
+    @apply bg-black text-slate-100;
+  }
+  .reader-content.theme-black p {
+    @apply text-slate-100;
+  }
   .reader-loading {
     @apply font-sans text-sm text-slate-400;
   }

@@ -1,7 +1,9 @@
-/* global HTMLElement, localStorage, setTimeout, clearTimeout */
+/* global HTMLElement, localStorage, setTimeout, clearTimeout, setInterval, clearInterval, document */
 import { nextTick, reactive, ref, watch } from 'vue'
 import {
   fetchOnlineContent,
+  addReadingTime,
+  getReadingRecord,
   fetchBookInfo,
   getReadingProgress,
   listChapters,
@@ -14,12 +16,14 @@ import {
 } from '../../services/api'
 
 const PROGRESS_DEBOUNCE_MS = 350
+const READING_TIME_TICK_MS = 15_000
 
 /** Owns the open book: its catalog, the current chapter and reading progress. */
 export function useReader(report: (cause: unknown) => void) {
   const selectedBook = ref<Book>()
   const chapters = ref<Chapter[]>([])
   const selectedChapter = ref<Chapter>()
+  const readingSeconds = ref(0)
   const loadingChapter = ref(false)
   const refreshingCatalog = ref(false)
   const switchingSource = ref(false)
@@ -31,6 +35,40 @@ export function useReader(report: (cause: unknown) => void) {
   const readerMode = ref<'scroll' | 'paged'>((localStorage.getItem('reader-mode') as 'scroll' | 'paged') ?? 'scroll')
 
   let saveTimer: ReturnType<typeof setTimeout> | undefined
+  let readingTimer: ReturnType<typeof setInterval> | undefined
+  let readingTickAt = 0
+
+  async function flushReadingTime() {
+    const book = selectedBook.value
+    if (!book || !readingTickAt) return
+    if (document.visibilityState !== 'visible') {
+      readingTickAt = Date.now()
+      return
+    }
+    const elapsed = Math.floor((Date.now() - readingTickAt) / 1000)
+    if (elapsed <= 0) return
+    readingTickAt += elapsed * 1000
+    try {
+      await addReadingTime(book.id, elapsed)
+      readingSeconds.value += elapsed
+    } catch (cause) {
+      readingTickAt -= elapsed * 1000
+      report(cause)
+    }
+  }
+
+  function startReadingTimer() {
+    if (readingTimer) clearInterval(readingTimer)
+    readingTickAt = Date.now()
+    readingTimer = setInterval(() => void flushReadingTime(), READING_TIME_TICK_MS)
+  }
+
+  async function stopReadingTimer() {
+    if (readingTimer) clearInterval(readingTimer)
+    readingTimer = undefined
+    await flushReadingTime()
+    readingTickAt = 0
+  }
 
   watch(fontSize, (value) => localStorage.setItem('reader-font-size', String(value)))
   watch(theme, (value) => localStorage.setItem('reader-theme', value))
@@ -41,8 +79,11 @@ export function useReader(report: (cause: unknown) => void) {
   const isOnline = (book: Book) => book.source_id !== undefined && book.source_id !== null
 
   async function openBook(book: Book) {
+    await stopReadingTimer()
     selectedBook.value = book
+    startReadingTimer()
     try {
+      readingSeconds.value = (await getReadingRecord(book.id).catch(() => null))?.duration_seconds ?? 0
       if (isOnline(book) && !book.intro && !book.cover_data) {
         selectedBook.value = await fetchBookInfo(book.id).catch(() => book)
       }
@@ -150,9 +191,11 @@ export function useReader(report: (cause: unknown) => void) {
 
   async function closeBook() {
     scheduleProgressSave()
+    await stopReadingTimer()
     // Let the debounced write land before the refs it reads are cleared.
     if (saveTimer) await new Promise<void>((resolve) => setTimeout(resolve, PROGRESS_DEBOUNCE_MS + 30))
     selectedBook.value = undefined
+    readingSeconds.value = 0
     selectedChapter.value = undefined
     chapters.value = []
   }
@@ -161,6 +204,7 @@ export function useReader(report: (cause: unknown) => void) {
     selectedBook,
     chapters,
     selectedChapter,
+    readingSeconds,
     loadingChapter,
     refreshingCatalog,
     switchingSource,
@@ -177,5 +221,6 @@ export function useReader(report: (cause: unknown) => void) {
     selectChapter,
     closeBook,
     scheduleProgressSave,
+    flushReadingTime,
   })
 }

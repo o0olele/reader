@@ -1,13 +1,14 @@
 //! Chapter catalog, online content and reading-progress workflows.
 
 use crate::{
-    domain::{Chapter, ReadingProgress},
+    domain::{Chapter, ReadingProgress, ReadingRecord},
     error::AppError,
     infrastructure::http::{client::build_source_client, request::response_error},
     repository::{
         book::SqliteBookRepository, chapter::SqliteChapterRepository,
-        progress::SqliteProgressRepository, source::SqliteSourceRepository, BookRepository,
-        ChapterRepository, ProgressRepository, SourceRepository,
+        progress::SqliteProgressRepository, reading_record::SqliteReadingRecordRepository,
+        source::SqliteSourceRepository, BookRepository, ChapterRepository, ProgressRepository,
+        SourceRepository,
     },
     service::settings_service::SettingsService,
     source_engine::pipeline::{parse_catalog_page, parse_content_page},
@@ -55,6 +56,7 @@ fn memory_cache() -> &'static Mutex<MemoryChapterCache> {
 pub struct ReaderService {
     chapters: SqliteChapterRepository,
     progress: SqliteProgressRepository,
+    reading_records: SqliteReadingRecordRepository,
     books: SqliteBookRepository,
     sources: SqliteSourceRepository,
     settings: SettingsService,
@@ -65,6 +67,7 @@ impl ReaderService {
         Self {
             chapters: SqliteChapterRepository::new(pool.clone()),
             progress: SqliteProgressRepository::new(pool.clone()),
+            reading_records: SqliteReadingRecordRepository::new(pool.clone()),
             books: SqliteBookRepository::new(pool.clone()),
             sources: SqliteSourceRepository::new(pool.clone()),
             settings: SettingsService::new(pool),
@@ -219,6 +222,23 @@ impl ReaderService {
                 chapter_id,
                 offset,
             })
+            .await
+    }
+
+    pub async fn reading_record(&self, book_id: i64) -> Result<Option<ReadingRecord>, AppError> {
+        self.reading_records.get(book_id).await
+    }
+
+    pub async fn add_reading_time(
+        &self,
+        book_id: i64,
+        duration_seconds: i64,
+    ) -> Result<(), AppError> {
+        if duration_seconds < 0 {
+            return Err(AppError::InvalidArgument("阅读时长不能为负数".into()));
+        }
+        self.reading_records
+            .add_seconds(book_id, duration_seconds)
             .await
     }
 }

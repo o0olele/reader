@@ -2,7 +2,9 @@
 
 pub mod book;
 pub mod reader;
+pub mod reading_record;
 pub mod source;
 
 pub use book::{Book, BookshelfGroup};
 pub use reader::{Chapter, ReadingProgress};
+pub use reading_record::ReadingRecord;

@@ -52,6 +52,8 @@ pub fn run() {
             command_api::reader::refresh_catalog_cmd,
             command_api::reader::get_reading_progress_cmd,
             command_api::reader::save_reading_progress_cmd,
+            command_api::reader::get_reading_record_cmd,
+            command_api::reader::add_reading_time_cmd,
             command_api::book::delete_book_cmd,
             command_api::bookshelf::list_groups_cmd,
             command_api::bookshelf::create_group_cmd,

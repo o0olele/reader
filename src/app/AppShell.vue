@@ -105,6 +105,7 @@ const chooseFile = () => fileInput.value?.click()
               <span v-if="reader.selectedBook.kind"> · {{ reader.selectedBook.kind }}</span>
               <span v-if="reader.selectedBook.latest_chapter"> · 最新：{{ reader.selectedBook.latest_chapter }}</span>
             </p>
+            <p class="book-summary">累计阅读：{{ Math.floor(reader.readingSeconds / 60) }} 分钟</p>
           </div>
           <button
             v-if="reader.selectedBook.source_id"
@@ -131,6 +132,8 @@ const chooseFile = () => fileInput.value?.click()
                 <option value="light">浅色</option>
                 <option value="sepia">护眼</option>
                 <option value="dark">深色</option>
+                <option value="green">豆青</option>
+                <option value="black">纯黑</option>
               </select>
             </label>
             <label>

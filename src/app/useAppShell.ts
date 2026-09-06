@@ -40,7 +40,7 @@ export function useAppShell() {
 
   function show(next: ShellView) {
     message.value = ''
-    if (next !== 'bookshelf') reader.selectedBook = undefined
+    if (next !== 'bookshelf' && reader.selectedBook) void reader.closeBook()
     if (next === 'bookshelf') bookshelf.activeGroup = null
     void router.push({ name: next })
   }
@@ -76,7 +76,7 @@ export function useAppShell() {
   // A pending debounced progress write would otherwise be lost on teardown.
   onBeforeUnmount(() => {
     stopCatalogUpdates?.()
-    reader.scheduleProgressSave()
+    void reader.closeBook()
   })
 
   return {
