@@ -3,6 +3,7 @@ import { inject } from 'vue'
 import { searchKey, sourcesKey } from '../../app/shellKeys'
 import type { SearchResultGroup } from '../../services/api'
 import SourceManager from '../source/SourceManager.vue'
+import { Search } from 'lucide-vue-next'
 
 const search = inject(searchKey)!
 const sources = inject(sourcesKey)!
@@ -20,6 +21,15 @@ function openBrowserAuth(sourceId: number) {
 
 <template>
   <div class="search-results">
+    <form class="search-page-form" @submit.prevent="search.run()">
+      <div class="search-page-input">
+        <Search :size="17" /><input
+          v-model="search.query"
+          placeholder="搜索书名、作者或关键词"
+          aria-label="搜索书籍"
+        /><button type="submit" :disabled="search.searching">{{ search.searching ? '搜索中' : '搜索' }}</button>
+      </div>
+    </form>
     <SourceManager :query="search.query" />
 
     <details v-if="search.failures.length" class="source-failures">

@@ -9,5 +9,9 @@ export const router = createRouter({
     { path: '/explore', name: 'explore', component: AppShell },
     { path: '/sources', name: 'sources', component: AppShell },
     { path: '/settings', name: 'settings', component: AppShell },
+    { path: '/downloads', name: 'downloads', component: AppShell },
+    { path: '/rss', name: 'rss', component: AppShell },
+    { path: '/history', name: 'history', component: AppShell },
+    { path: '/bookmarks', name: 'bookmarks', component: AppShell },
   ],
 })

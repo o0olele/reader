@@ -2,6 +2,7 @@
 import type { Chapter } from '../../services/api'
 import { useBookmark } from './useBookmark'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Bookmark, List } from 'lucide-vue-next'
 
 const props = defineProps<{
   chapters: Chapter[]
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const contentRef = ref<HTMLElement | null>(null)
+const activeTab = ref<'catalog' | 'bookmarks'>('catalog')
 const searchQuery = ref('')
 const {
   bookmark,
@@ -142,16 +144,30 @@ onBeforeUnmount(() => {
 <template>
   <div class="reader-layout">
     <aside class="chapter-list">
-      <h2>目录</h2>
-      <button
-        v-for="chapter in chapters"
-        :key="chapter.id"
-        type="button"
-        :class="['chapter-button', { selected: selectedChapter?.id === chapter.id }]"
-        @click="emit('selectChapter', chapter)"
-      >
-        {{ chapter.title }}
-      </button>
+      <div class="reader-side-tabs">
+        <button :class="{ active: activeTab === 'catalog' }" type="button" @click="activeTab = 'catalog'">
+          <List :size="15" />目录</button
+        ><button :class="{ active: activeTab === 'bookmarks' }" type="button" @click="activeTab = 'bookmarks'">
+          <Bookmark :size="15" />书签
+        </button>
+      </div>
+      <template v-if="activeTab === 'catalog'">
+        <button
+          v-for="chapter in chapters"
+          :key="chapter.id"
+          type="button"
+          :class="['chapter-button', { selected: selectedChapter?.id === chapter.id }]"
+          @click="emit('selectChapter', chapter)"
+        >
+          {{ chapter.title }}
+        </button>
+      </template>
+      <div v-else class="bookmark-panel">
+        <button v-if="bookmark" type="button" class="bookmark-item" @click="jumpToBookmark">
+          <Bookmark :size="16" />{{ selectedChapter?.title }}<span>跳转</span>
+        </button>
+        <p v-else class="bookmark-empty">当前章节还没有书签。</p>
+      </div>
     </aside>
     <article
       v-if="selectedChapter"

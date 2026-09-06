@@ -10,7 +10,8 @@ import { useSourceDebug } from '../features/source/useSourceDebug'
 import { useSources } from '../features/source/useSources'
 import { on as onAppEvent } from '../services/events'
 
-export type ShellView = 'bookshelf' | 'search' | 'explore' | 'sources' | 'settings'
+export type ShellView =
+  'bookshelf' | 'search' | 'explore' | 'sources' | 'settings' | 'downloads' | 'rss' | 'history' | 'bookmarks'
 
 /**
  * Composes the feature composables and owns only what is genuinely shared:
@@ -20,7 +21,16 @@ export function useAppShell() {
   const route = useRoute()
   const router = useRouter()
   const view = computed<ShellView>(() => {
-    if (route.name === 'search' || route.name === 'explore' || route.name === 'sources' || route.name === 'settings') {
+    if (
+      route.name === 'search' ||
+      route.name === 'explore' ||
+      route.name === 'sources' ||
+      route.name === 'settings' ||
+      route.name === 'downloads' ||
+      route.name === 'rss' ||
+      route.name === 'history' ||
+      route.name === 'bookmarks'
+    ) {
       return route.name
     }
     return 'bookshelf'
