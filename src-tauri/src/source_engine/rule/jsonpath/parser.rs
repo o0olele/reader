@@ -11,8 +11,12 @@ pub(super) enum Token {
 }
 pub(super) fn parse_path(path: &str) -> Result<Vec<Token>, RuleExecutionError> {
     let path = path.trim();
-    if !path.starts_with('$') {
-        return Err(invalid("path must start with `$`"));
+    let normalized;
+    let path = if path.starts_with('$') {
+        path
+    } else {
+        normalized = if path.starts_with('[') { format!("${path}") } else { format!("$.{path}") };
+        normalized.as_str()
     };
     let mut out = Vec::new();
     let mut i = 1;
@@ -59,7 +63,20 @@ pub(super) fn parse_path(path: &str) -> Result<Vec<Token>, RuleExecutionError> {
             });
             i = n;
         } else {
-            return Err(invalid(format!("unexpected character at {i}")));
+            // Legado accepts a compact spelling after an array index, e.g.
+            // `$.data.list[-1]title`; treat the immediately following token
+            // as an object key for compatibility with those sources.
+            let s = i;
+            if i == 0 || path.as_bytes()[i - 1] != b']' {
+                return Err(invalid(format!("unexpected character at {i}")));
+            }
+            while i < path.len() && path.as_bytes()[i] != b'.' && path.as_bytes()[i] != b'[' {
+                i += 1;
+            }
+            if s == i || path[s..i].chars().any(|c| !(c.is_alphanumeric() || c == '_' || c == '-')) {
+                return Err(invalid(format!("unexpected character at {i}")));
+            }
+            out.push(Token::Key(path[s..i].to_owned()));
         }
     }
     Ok(out)

@@ -5,6 +5,10 @@ use super::scanner::{
 };
 
 pub fn split_rule(raw: &str) -> Result<RuleAlternatives, RuleParseError> {
+    split_rule_for_input(raw, false)
+}
+
+pub(super) fn split_rule_for_input(raw: &str, json_input: bool) -> Result<RuleAlternatives, RuleParseError> {
     if raw.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -22,7 +26,7 @@ pub fn split_rule(raw: &str) -> Result<RuleAlternatives, RuleParseError> {
         alternatives
             .last_mut()
             .unwrap()
-            .extend(parse_embedded_rules(piece.trim(), next_join)?);
+            .extend(parse_embedded_rules(piece.trim(), next_join, json_input)?);
         match separator {
             Some(separator) if separator.is_alternative() => {
                 alternatives.push(Vec::new());
@@ -59,6 +63,7 @@ pub fn expand_template(raw: &str, context: &RuleContext) -> String {
 fn parse_embedded_rules(
     raw: &str,
     first_join: RuleJoin,
+    json_input: bool,
 ) -> Result<Vec<SourceRule>, RuleParseError> {
     let mut rules = Vec::new();
     let mut cursor = 0;
@@ -72,11 +77,11 @@ fn parse_embedded_rules(
         .flatten()
         .min();
         let Some(next) = next else {
-            push_rule(&mut rules, &raw[cursor..], join)?;
+            push_rule(&mut rules, &raw[cursor..], join, json_input)?;
             break;
         };
         if next > cursor {
-            push_rule(&mut rules, &raw[cursor..next], join)?;
+            push_rule(&mut rules, &raw[cursor..next], join, json_input)?;
             join = RuleJoin::Chain;
         }
         if starts_ignore_ascii_case(raw, next, "<js>") {
@@ -112,13 +117,14 @@ fn push_rule(
     output: &mut Vec<SourceRule>,
     raw: &str,
     join: RuleJoin,
+    json_input: bool,
 ) -> Result<(), RuleParseError> {
     let raw = raw.trim();
     if raw.is_empty() {
         return Ok(());
     }
     let reverse = raw.starts_with('-');
-    let (mode, cleaned) = detect_mode(raw);
+    let (mode, cleaned) = detect_mode(raw, json_input);
     push_typed_rule(output, cleaned, join, mode, reverse)
 }
 
@@ -150,7 +156,7 @@ fn push_typed_rule(
     Ok(())
 }
 
-fn detect_mode(raw: &str) -> (RuleMode, &str) {
+fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
     let candidate = raw.strip_prefix('-').map(str::trim_start).unwrap_or(raw);
     for (prefix, mode) in [
         ("@xpath:", RuleMode::XPath),
@@ -168,13 +174,23 @@ fn detect_mode(raw: &str) -> (RuleMode, &str) {
             RuleMode::Regex,
             candidate.strip_prefix(':').unwrap_or(candidate),
         )
-    } else if candidate.starts_with("$.") || candidate.starts_with("$[") {
+    } else if candidate.starts_with("$.") || candidate.starts_with("$[")
+        || (json_input && looks_like_legacy_json_path(candidate))
+    {
         (RuleMode::Json, candidate)
     } else if candidate.starts_with('/') {
         (RuleMode::XPath, candidate)
     } else {
         (RuleMode::Default, candidate)
     }
+}
+
+fn looks_like_legacy_json_path(value: &str) -> bool {
+    let value = value.trim();
+    !value.is_empty() && !value.contains("{{") && !value.contains('@')
+        && !value.contains(' ') && !value.contains(':')
+        && (value.contains("[*]") || value.contains("[-") || value.split('.').count() >= 2)
+        && value.chars().all(|c| c.is_alphanumeric() || ".[]*_-'\"".contains(c))
 }
 
 fn find_tail_js(raw: &str, from: usize) -> Option<usize> {

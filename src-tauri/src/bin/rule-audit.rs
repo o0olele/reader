@@ -5,6 +5,17 @@
 //! deterministic dummy document; it never performs network requests.
 
 use reader_desktop_lib::source_engine::rule::{evaluate, Extraction, RuleContext};
+#[path = "rule_audit/input.rs"]
+mod input;
+#[path = "rule_audit/report.rs"]
+mod report;
+#[path = "rule_audit/dummy.rs"]
+mod dummy;
+#[cfg(test)]
+#[path = "rule_audit/tests.rs"]
+mod tests;
+use input::{error_category, is_metadata_url, source_is_json, source_rules, TOKENS};
+use report::markdown;
 use regex::Regex;
 use serde_json::Value;
 use std::{
@@ -13,196 +24,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const RULE_OBJECTS: &[&str] = &[
-    "ruleSearch",
-    "ruleBookInfo",
-    "ruleToc",
-    "ruleContent",
-    "ruleExplore",
-];
-const RULE_STRINGS: &[&str] = &[
-    "searchUrl",
-    "exploreUrl",
-    "loginUrl",
-    "loginCheckJs",
-    "coverDecodeJs",
-    "jsLib",
-    "header",
-];
-const TOKENS: &[(&str, &str)] = &[
-    ("exclude !n", r"![0-9]"),
-    ("range .a:b", r"\.-?[0-9]+:-?[0-9]+"),
-    ("@@ force JSoup", r"@@"),
-    ("JSONPath recursive ..", r"\$\.\."),
-    ("JSONPath filter ?()", r"\?\("),
-    ("XPath", r"(^|\|\||&&|%%)\s*//"),
-    (
-        "url option ,{...}",
-        r#",\s*\{[\s\S]*["'](method|body|charset|headers|webView|js|type|retry|origin|bodyJs|webJs)["']"#,
-    ),
-    ("java.* call", r"java\.[A-Za-z0-9_]+"),
-    ("@js:", r"@js:"),
-    ("<js>", r"<js>"),
-    ("{{ template }}", r"\{\{"),
-    ("@get:", r"@get:"),
-    ("@put:", r"@put:"),
-    ("## replace", r"##"),
-    ("|| alternative", r"\|\|"),
-    ("&& chain", r"&&"),
-    ("%% cross-merge", r"%%"),
-];
-
 #[derive(Default)]
 struct Audit {
     sources: usize,
     rules: usize,
     clean: usize,
+    executed: usize,
     token_hits: BTreeMap<String, (usize, BTreeSet<usize>)>,
     errors: BTreeMap<String, usize>,
     java_methods: BTreeMap<String, BTreeSet<usize>>,
     blocked_by: BTreeMap<String, BTreeSet<usize>>,
-}
-
-fn source_is_json(source: &Value, rules: &[(String, String)]) -> bool {
-    if rules.iter().any(|(_, raw)| {
-        let l = raw.to_ascii_lowercase();
-        l.starts_with("@json:") || raw.contains("$.") || raw.contains("$[")
-    }) {
-        return true;
-    }
-    serde_json::to_string(source)
-        .map(|s| {
-            let l = s.to_ascii_lowercase();
-            l.contains("@json:") || l.contains("/api/") || l.contains("json")
-        })
-        .unwrap_or(false)
-}
-
-fn error_category(error: &str) -> &'static str {
-    let l = error.to_ascii_lowercase();
-    if l.contains("rule is empty") {
-        "empty rule"
-    } else if l.contains("unclosed quote") {
-        "unclosed quote"
-    } else if l.contains("empty branch") || l.contains("unclosed balanced") {
-        "empty branch"
-    } else if l.contains("regex") || l.contains("escape sequence") {
-        "regex compatibility"
-    } else if l.contains("template") {
-        "template delimiter"
-    } else if l.contains("xpath") || l.contains("jsonpath") {
-        "path parser"
-    } else if l.contains("javaimporter")
-        || l.contains("java.lang")
-        || l.contains("java.util")
-        || l.contains("java.io")
-        || l.contains("java.security")
-    {
-        "unsupported JVM access"
-    } else if l.contains("source error") || l.contains("javascript") || l.contains("quickjs") {
-        "js runtime"
-    } else if l.contains("default-mode rule is not supported")
-        && (l.contains("not a css selector") || l.contains("emptyselector"))
-    {
-        "css compatibility"
-    } else if l.contains("cannot read property")
-        || l.contains("cannot read properties")
-        || l.contains("is not defined")
-    {
-        "harness input"
-    } else {
-        "other"
-    }
-}
-
-fn walk(value: &Value, path: &str, out: &mut Vec<(String, String)>) {
-    match value {
-        Value::String(text) if !text.trim().is_empty() => {
-            out.push((path.to_owned(), text.to_owned()))
-        }
-        Value::Object(map) => {
-            for (key, child) in map {
-                walk(child, &format!("{path}.{key}"), out);
-            }
-        }
-        Value::Array(items) => {
-            for (index, child) in items.iter().enumerate() {
-                walk(child, &format!("{path}[{index}]"), out);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn source_rules(source: &Value) -> Vec<(String, String)> {
-    let mut rules = Vec::new();
-    for key in RULE_OBJECTS {
-        if let Some(value) = source.get(*key) {
-            if let Value::String(raw) = value {
-                if let Ok(parsed) = serde_json::from_str(raw) {
-                    walk(&parsed, key, &mut rules);
-                } else {
-                    walk(value, key, &mut rules);
-                }
-            } else {
-                walk(value, key, &mut rules);
-            }
-        }
-    }
-    for key in RULE_STRINGS {
-        if let Some(value) = source.get(*key) {
-            walk(value, key, &mut rules);
-        }
-    }
-    rules
-}
-
-fn is_metadata_url(path: &str, raw: &str) -> bool {
-    let key = path
-        .rsplit('.')
-        .next()
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    (key.ends_with("url") || key == "url")
-        && (raw.trim_start().starts_with("http://") || raw.trim_start().starts_with("https://"))
-        && !raw.contains("@js:")
-        && !raw.contains("@json:")
-        && !raw.contains("@xpath:")
-}
-
-fn is_template_text(raw: &str) -> bool {
-    let value = raw.trim();
-    (value.contains("{$.") || value.contains("{$"))
-        && !value.contains("@js:")
-        && !value.contains("@json:")
-        && !value.contains("@xpath:")
-        && !value.contains("||")
-        && !value.contains("&&")
-        && !value.contains("##")
-}
-
-fn is_literal_fragment(raw: &str) -> bool {
-    matches!(raw.trim(), "+" | "-" | "*" | ",")
-}
-
-fn is_json_field_path(raw: &str) -> bool {
-    let value = raw.trim();
-    value.contains("[*]") && !value.contains('@') && !value.contains(' ') && !value.contains(':')
-}
-
-/// A number of legado JSON sources omit the `$.` prefix in field selectors
-/// (for example `data[*].title` or `book_tag_list[*].title`).  The rule
-/// analyzer quite correctly treats those strings as CSS in isolation, but
-/// within a JSON source they are JSONPath expressions.  Normalize only this
-/// deliberately narrow, metadata-free spelling before the dry run so the
-/// audit measures the engine rather than CSS parser noise.
-fn normalized_json_rule(raw: &str, json_source: bool) -> Option<String> {
-    if !json_source || !is_json_field_path(raw) {
-        return None;
-    }
-    let path = raw.trim();
-    let path = path.strip_prefix("$.").unwrap_or(path);
-    Some(format!("@Json:$.{path}"))
+    failed_rules: BTreeMap<String, BTreeSet<String>>,
 }
 
 fn corpus_file(path: &Path) -> Result<PathBuf, String> {
@@ -254,24 +86,22 @@ fn run(input: &str) -> Result<Audit, String> {
             // evaluator rules; only actual rule fields are dry-run here.
             if path.starts_with("rule")
                 && !is_metadata_url(&path, &raw)
-                && !is_template_text(&raw)
-                && !is_json_field_path(&raw)
-                && !is_literal_fragment(&raw)
             {
-                let dummy_input = if json_source {
-                    r#"{"data":{"list":[{"id":"1","title":"audit","content":"audit"}],"score":1},"list":[{"id":"1","title":"audit","content":"audit"}],"id":"1","title":"audit","content":"audit","score":1}"#
-                } else {
-                    "<html><body><div class=\"item\"><a class=\"name\">audit</a></div></body></html>"
-                };
-                let executable = normalized_json_rule(&raw, json_source).unwrap_or(raw.clone());
+                report.executed += 1;
+                let dummy_input = dummy::input_for(&raw, json_source);
                 if let Err(error) = evaluate(
-                    &executable,
+                    &raw,
                     dummy_input,
                     Extraction::Values,
                     &mut RuleContext::default(),
                 ) {
                     source_clean = false;
                     *report.errors.entry(error.to_string()).or_default() += 1;
+                    report
+                        .failed_rules
+                        .entry(error.to_string())
+                        .or_default()
+                        .insert(format!("source[{source_id}].{path} = {raw}"));
                     report
                         .blocked_by
                         .entry(error_category(&error.to_string()).to_owned())
@@ -285,62 +115,6 @@ fn run(input: &str) -> Result<Audit, String> {
         }
     }
     Ok(report)
-}
-
-fn markdown(report: &Audit) -> String {
-    let percentage = |n: usize, d: usize| {
-        if d == 0 {
-            0.0
-        } else {
-            n as f64 * 100.0 / d as f64
-        }
-    };
-    let mut out = format!("# Rule coverage audit\n\n- Sources: **{}**\n- Rule strings: **{}**\n- Fully executable: **{} / {} ({:.1}%)**\n- Blocked sources: **{}**\n\n", report.sources, report.rules, report.clean, report.sources, percentage(report.clean, report.sources), report.sources.saturating_sub(report.clean));
-    out.push_str("## Syntax tokens\n\n| Token | Rule hits | Sources | % sources |\n| --- | ---: | ---: | ---: |\n");
-    let mut tokens: Vec<_> = report.token_hits.iter().collect();
-    tokens.sort_by_key(|(_, (_, sources))| std::cmp::Reverse(sources.len()));
-    for (name, (hits, sources)) in tokens {
-        out.push_str(&format!(
-            "| `{name}` | {hits} | {} | {:.1}% |\n",
-            sources.len(),
-            percentage(sources.len(), report.sources)
-        ));
-    }
-    out.push_str("\n## Execution errors\n\n| Error | Rule count |\n| --- | ---: |\n");
-    for (error, count) in &report.errors {
-        out.push_str(&format!(
-            "| `{}` | {} |\n",
-            error.replace('|', "\\|"),
-            count
-        ));
-    }
-    let mut category_counts: BTreeMap<&str, usize> = BTreeMap::new();
-    for (error, count) in &report.errors {
-        *category_counts.entry(error_category(error)).or_default() += count;
-    }
-    out.push_str(
-        "\n## Execution errors by category\n\n| Category | Rule count |\n| --- | ---: |\n",
-    );
-    let mut categories: Vec<_> = category_counts.into_iter().collect();
-    categories.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
-    for (category, count) in categories {
-        out.push_str(&format!("| {category} | {count} |\n"));
-    }
-    out.push_str("\n## java.* methods\n\n| Method | Sources |\n| --- | ---: |\n");
-    let mut methods: Vec<_> = report.java_methods.iter().collect();
-    methods.sort_by_key(|(_, sources)| std::cmp::Reverse(sources.len()));
-    for (method, sources) in methods {
-        out.push_str(&format!("| `java.{method}` | {} |\n", sources.len()));
-    }
-    out.push_str(
-        "\n## Blocked sources by category\n\n| Category | Blocked sources |\n| --- | ---: |\n",
-    );
-    let mut blocked: Vec<_> = report.blocked_by.iter().collect();
-    blocked.sort_by_key(|(_, sources)| std::cmp::Reverse(sources.len()));
-    for (category, sources) in blocked {
-        out.push_str(&format!("| {category} | {} |\n", sources.len()));
-    }
-    out
 }
 
 fn main() -> Result<(), String> {
@@ -360,98 +134,4 @@ fn main() -> Result<(), String> {
     fs::write(&output, markdown(&report)).map_err(|e| format!("cannot write report: {e}"))?;
     println!("{}", output.display());
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn audits_nested_rule_objects_and_reports_real_execution() {
-        let report = run(r#"[{"name":"demo","ruleSearch":"{\"bookList\":\"div.item\",\"name\":\".name\"}","searchUrl":"https://example.test?q={{key}}"}]"#).unwrap();
-        assert_eq!(report.sources, 1);
-        assert_eq!(report.rules, 3);
-        assert_eq!(report.clean, 1);
-        assert!(report.token_hits.contains_key("{{ template }}"));
-    }
-
-    #[test]
-    fn malformed_rule_is_ignored_like_legado() {
-        let report = run(r#"[{"ruleContent":"||"}]"#).unwrap();
-        assert_eq!(report.clean, 1);
-        assert!(report.errors.is_empty());
-    }
-
-    #[test]
-    fn json_rules_are_audited_against_json_input() {
-        let report = run(r#"[{"ruleContent":{"content":"$..content"}}]"#).unwrap();
-        assert_eq!(report.clean, 1);
-        assert!(report.errors.is_empty());
-    }
-
-    #[test]
-    fn classifies_execution_errors_for_actionable_follow_up() {
-        assert_eq!(
-            error_category("source error: JavaScript 执行失败: not a function"),
-            "js runtime"
-        );
-        assert_eq!(
-            error_category(
-                "default-mode rule is not supported: `a.` is not a CSS selector: EmptySelector"
-            ),
-            "css compatibility"
-        );
-        assert_eq!(
-            error_category("source error: JavaScript 执行失败: cannot read property of null"),
-            "js runtime"
-        );
-        assert_eq!(
-            error_category("source error: JavaImporter is not defined"),
-            "unsupported JVM access"
-        );
-    }
-
-    #[test]
-    fn skips_literal_url_metadata_from_rule_execution() {
-        assert!(is_metadata_url(
-            "ruleSearch.bookUrl",
-            "https://example.test/book/1"
-        ));
-        assert!(!is_metadata_url(
-            "ruleSearch.bookUrl",
-            "$.id@js:'https://example.test/book/' + result"
-        ));
-    }
-
-    #[test]
-    fn skips_json_template_display_text_from_css_execution() {
-        assert!(is_template_text("{$.grade}分"));
-        assert!(is_template_text("{$.type_name},{$.catalog_name}"));
-        assert!(!is_template_text("$.grade"));
-        assert!(!is_template_text("$.id@js:result"));
-    }
-
-    #[test]
-    fn recognizes_legacy_json_wildcard_paths() {
-        assert!(is_json_field_path("book_tag_list[*].title"));
-        assert!(is_json_field_path("data[*]"));
-        assert!(!is_json_field_path("li:nth-child(2)"));
-        assert!(!is_json_field_path("$.data[*].title@text"));
-    }
-
-    #[test]
-    fn normalizes_unprefixed_json_wildcard_paths_for_json_sources() {
-        assert_eq!(
-            normalized_json_rule("data[*].title", true).as_deref(),
-            Some("@Json:$.data[*].title")
-        );
-        assert!(normalized_json_rule("data[*].title", false).is_none());
-        assert!(normalized_json_rule("li:nth-child(2)", true).is_none());
-    }
-
-    #[test]
-    fn skips_standalone_display_fragments() {
-        assert!(is_literal_fragment("+"));
-        assert!(is_literal_fragment("-"));
-        assert!(!is_literal_fragment(".book + .book"));
-    }
 }

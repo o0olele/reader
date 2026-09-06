@@ -1,6 +1,7 @@
 //! JSONPath evaluation for the subset used by real legado book sources.
 mod filter;
 mod parser;
+mod template;
 
 use super::evaluator::apply_postprocess;
 use super::model::{RuleExecutionError, RuleMode, SourceRule};
@@ -22,6 +23,11 @@ pub fn execute_json(rule: &SourceRule, input: &str) -> Result<Vec<String>, RuleE
     // idempotent for those spellings and brings direct array selections in line
     // with Legado's `getAll()` semantics.
     let mut values = Vec::new();
+    if let Some(value) = template::render(&root, rule.rule.trim())? {
+        values.push(value);
+        apply_postprocess(rule, &mut values);
+        return Ok(values);
+    }
     for value in select(&root, rule.rule.trim())? {
         push_json_values(value, &mut values);
     }
@@ -152,5 +158,31 @@ mod tests {
             execute_json(&r, r#"{"list":[{"name":"一"},{"name":"二"}]}"#).unwrap(),
             vec![r#"{"name":"一"}"#.to_owned(), r#"{"name":"二"}"#.to_owned()]
         );
+    }
+
+    #[test]
+    fn accepts_compact_and_unprefixed_paths_from_real_sources() {
+        let input = r#"{"data":{"list":[{"title":"first"},{"title":"last"}],"page":[{"image":"a"},{"image":"b"}]}}"#;
+        for (path, expected) in [
+            ("@Json:$.data.list[-1]title", vec!["last"]),
+            ("@Json:$.data.page[*]image", vec!["a", "b"]),
+            ("@Json:data.list[*].title", vec!["first", "last"]),
+        ] {
+            assert_eq!(execute_json(&rule(path), input).unwrap(), expected);
+        }
+        assert!(execute_json(&rule("@Json:$.data.list[0] title"), input).is_err());
+    }
+
+    #[test]
+    fn renders_json_path_templates_without_reinterpreting_values() {
+        let input = r#"{"FolderName":"novel","score":9,"names":["A","B"],"key}":"{$.score}"}"#;
+        for (path, expected) in [
+            ("@Json:/b/{$.FolderName}", "/b/novel"),
+            ("@Json:{$.score}分/{$.missing}", "9分/"),
+            ("@Json:{$.names}", "A\nB"),
+            ("@Json:{$.['key}']}", "{$.score}"),
+        ] {
+            assert_eq!(execute_json(&rule(path), input).unwrap(), vec![expected]);
+        }
     }
 }

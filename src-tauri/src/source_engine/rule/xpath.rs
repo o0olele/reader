@@ -118,6 +118,9 @@ fn to_query(raw: &str) -> Result<XPathQuery, RuleExecutionError> {
     css = not_attribute
         .replace_all(&css, ":not([$1='$3'])")
         .into_owned();
+    let attribute_exists = regex::Regex::new(r#"\[\s*@([\w:-]+)\s*\]"#)
+        .expect("static xpath attribute existence regex");
+    css = attribute_exists.replace_all(&css, "[$1]").into_owned();
     let text_equals = regex::Regex::new(r#"\[\s*text\(\)\s*=\s*(['"])(.*?)['"]\s*\]"#)
         .expect("static xpath text equality regex");
     if let Some(captures) = text_equals.captures(&css) {
@@ -224,6 +227,7 @@ fn xpath_path_to_css(value: &str) -> String {
                 // the second slash to the normal child-axis branch produces a
                 // dangling combinator for paths such as `//*[@id]//tr`.
                 i += 2;
+                continue;
             } else {
                 css.push_str(" > ");
             }
@@ -360,5 +364,18 @@ mod tests {
             to_query("//*[not(@class='blue')]").unwrap().css,
             "*:not([class='blue'])"
         );
+    }
+
+    #[test]
+    fn descendant_axis_preserves_the_first_selector_character() {
+        let html = "<div id='bookcon'><section><a href='/one'>one</a><strong>two</strong></section></div>";
+        for (path, expected) in [
+            ("//*[@id='bookcon']//a/text()", vec!["one"]),
+            ("//*[@id='bookcon']//strong/text()", vec!["two"]),
+            ("//*[@id='bookcon']//*[@href]/@href", vec!["/one"]),
+        ] {
+            let rule = xpath_rule(path);
+            assert_eq!(execute_xpath(&rule, html, Extraction::Values).unwrap(), expected);
+        }
     }
 }

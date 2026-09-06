@@ -15,7 +15,7 @@ use super::jsoup::Extraction;
 use super::model::{
     RuleAlternatives, RuleContext, RuleExecutionError, RuleJoin, RuleMode, SourceRule,
 };
-use super::{expand_template, split_rule, JsContext, JsValue, QuickJsRuntime};
+use super::{expand_template, JsContext, JsValue, QuickJsRuntime};
 
 /// Parses `raw` and executes it against `input`.
 pub fn evaluate(
@@ -24,7 +24,9 @@ pub fn evaluate(
     want: Extraction,
     context: &mut RuleContext,
 ) -> Result<Vec<String>, RuleExecutionError> {
-    let alternatives = match split_rule(raw) {
+    let json_input = matches!(input.trim_start().chars().next(), Some('{' | '['))
+        && serde_json::from_str::<serde_json::Value>(input).is_ok();
+    let alternatives = match super::analyzer::split_rule_for_input(raw, json_input) {
         Ok(value) => value,
         Err(error) => {
             // legado treats malformed/empty branches as a non-matching rule;
@@ -414,5 +416,16 @@ mod tests {
             &mut RuleContext::default(),
         );
         assert!(matches!(error, Err(RuleExecutionError::InvalidJson(_))));
+    }
+    #[test]
+    fn chooses_json_mode_from_content_and_respects_explicit_css() {
+        let input = r#"{"data":[{"title":"one"},{"title":"two"}],"score":9}"#;
+        let mut context = RuleContext::default();
+        assert_eq!(evaluate("data[*].title", input, Extraction::Values, &mut context).unwrap(), vec!["one", "two"]);
+        for css in ["@CSS:data[*].title", "@@data[*].title"] {
+            assert!(evaluate(css, input, Extraction::Values, &mut context).is_err());
+        }
+        assert_eq!(evaluate("@Json:data[*].title", input, Extraction::Nodes, &mut context).unwrap(), vec!["one", "two"]);
+        assert_eq!(evaluate("div@text", "<div>html</div>", Extraction::Values, &mut context).unwrap(), vec!["html"]);
     }
 }
