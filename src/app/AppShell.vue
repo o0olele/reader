@@ -14,6 +14,7 @@ import {
   Download,
   List,
   Minus,
+  Moon,
   MoreHorizontal,
   Plus,
   Rss,
@@ -45,6 +46,11 @@ const headerQuery = ref('')
 const autoBrightness = ref(false)
 const fullScreen = ref(false)
 const showStatusBar = ref(true)
+const appTheme = ref<'light' | 'dark'>((localStorage.getItem('app-theme') as 'light' | 'dark') ?? 'light')
+const readerSettingsOpen = ref(true)
+const chapterListOpen = ref(true)
+const fontMenuOpen = ref(false)
+const fontSizeMenuOpen = ref(false)
 const chooseFile = () => fileInput.value?.click()
 const win = getCurrentWindow()
 const windowAction = async (action: 'minimize' | 'maximize' | 'close') => {
@@ -56,12 +62,41 @@ const windowAction = async (action: 'minimize' | 'maximize' | 'close') => {
     /* browser preview */
   }
 }
-const dragWindow = async () => {
+const dragWindow = async (event?: MouseEvent) => {
+  if (event && (event.button !== 0 || (event.target as HTMLElement).closest('button, input, form, select'))) return
   try {
     await win.startDragging()
   } catch {
     /* browser preview */
   }
+}
+const toggleAppTheme = () => {
+  appTheme.value = appTheme.value === 'light' ? 'dark' : 'light'
+  localStorage.setItem('app-theme', appTheme.value)
+}
+const chapterIndex = computed(() => reader.chapters.findIndex((chapter) => chapter.id === reader.selectedChapter?.id))
+const selectRelativeChapter = (offset: number) => {
+  const chapter = reader.chapters[chapterIndex.value + offset]
+  if (chapter) void reader.selectChapter(chapter)
+}
+const toggleReaderTheme = () => {
+  reader.theme = reader.theme === 'light' ? 'dark' : 'light'
+}
+const toggleFontMenu = () => {
+  fontMenuOpen.value = !fontMenuOpen.value
+  fontSizeMenuOpen.value = false
+}
+const toggleFontSizeMenu = () => {
+  fontSizeMenuOpen.value = !fontSizeMenuOpen.value
+  fontMenuOpen.value = false
+}
+const setFontFamily = (family: string) => {
+  reader.fontFamily = family
+  fontMenuOpen.value = false
+}
+const setFontSize = (size: number) => {
+  reader.fontSize = size
+  fontSizeMenuOpen.value = false
 }
 const submitSearch = () => {
   const query = headerQuery.value.trim()
@@ -98,6 +133,7 @@ const pageTitle = computed(
 )
 const resetReaderSettings = () => {
   reader.theme = 'light'
+  reader.fontFamily = '思源宋体'
   reader.fontSize = 17
   reader.lineHeight = 1.8
   reader.pageMargin = 32
@@ -106,9 +142,9 @@ const resetReaderSettings = () => {
 </script>
 
 <template>
-  <main class="reader-app">
-    <header class="appbar" @dblclick="windowAction('maximize')">
-      <div class="appbar-brand" data-tauri-drag-region @mousedown="dragWindow">
+  <main :class="['reader-app', { 'app-theme-dark': appTheme === 'dark' }]">
+    <header class="appbar" data-tauri-drag-region @mousedown="dragWindow" @dblclick="windowAction('maximize')">
+      <div class="appbar-brand" data-tauri-drag-region>
         <span class="brand-mark"><BookOpen :size="20" stroke-width="2.5" /></span><strong>阅读</strong>
       </div>
       <form class="app-search" @submit.prevent="submitSearch">
@@ -119,7 +155,13 @@ const resetReaderSettings = () => {
         />
       </form>
       <div class="appbar-tools">
-        <button aria-label="亮色模式" title="亮色模式"><Sun :size="18" /></button
+        <button
+          type="button"
+          aria-label="切换主题"
+          :title="appTheme === 'light' ? '切换深色主题' : '切换浅色主题'"
+          @click.stop="toggleAppTheme"
+        >
+          <Moon v-if="appTheme === 'dark'" :size="18" /><Sun v-else :size="18" /></button
         ><button aria-label="云同步" title="云同步"><Cloud :size="18" /></button
         ><button aria-label="设置" title="设置" @click.stop="show('settings')"><Settings :size="18" /></button><i></i
         ><button aria-label="最小化" @click.stop="windowAction('minimize')"><Minus :size="18" /></button
@@ -172,18 +214,69 @@ const resetReaderSettings = () => {
         <template v-if="reader.selectedBook">
           <div class="reader-topbar">
             <div class="reader-nav-actions">
-              <button aria-label="返回书架" @click="reader.closeBook"><ArrowLeft :size="18" /></button
-              ><button aria-label="前进" disabled><ArrowRight :size="18" /></button>
+              <button aria-label="上一章" :disabled="chapterIndex <= 0" @click="selectRelativeChapter(-1)">
+                <ArrowLeft :size="18" /></button
+              ><button
+                aria-label="下一章"
+                :disabled="chapterIndex < 0 || chapterIndex >= reader.chapters.length - 1"
+                @click="selectRelativeChapter(1)"
+              >
+                <ArrowRight :size="18" /></button
+              ><button aria-label="关闭阅读" title="关闭阅读" @click="reader.closeBook"><X :size="17" /></button>
             </div>
             <strong
               >第{{ reader.chapters.findIndex((c) => c.id === reader.selectedChapter?.id) + 1 || 1 }}章
               {{ reader.selectedChapter?.title || '' }}</strong
             >
             <div class="reader-top-tools">
-              <button @click="reader.fontSize = Math.max(14, reader.fontSize - 1)">Aa</button
-              ><ChevronDown :size="14" /><button @click="reader.fontSize++">{{ reader.fontSize }}</button
-              ><ChevronDown :size="14" /><i></i><button><Sun :size="17" /></button><button><List :size="18" /></button
-              ><button><MoreHorizontal :size="18" /></button>
+              <div class="reader-dropdown">
+                <button aria-haspopup="menu" :aria-expanded="fontMenuOpen" @click="toggleFontMenu">Aa</button>
+                <button class="reader-dropdown-chevron" aria-label="选择字体" @click="toggleFontMenu">
+                  <ChevronDown :size="14" />
+                </button>
+                <div v-if="fontMenuOpen" class="reader-menu" role="menu">
+                  <button
+                    v-for="family in ['思源宋体', '霞鹜文楷', '系统默认']"
+                    :key="family"
+                    role="menuitem"
+                    :class="{ selected: reader.fontFamily === family }"
+                    @click="setFontFamily(family)"
+                  >
+                    {{ family }}
+                  </button>
+                </div>
+              </div>
+              <div class="reader-dropdown">
+                <button aria-haspopup="menu" :aria-expanded="fontSizeMenuOpen" @click="toggleFontSizeMenu">
+                  {{ reader.fontSize }}
+                </button>
+                <button class="reader-dropdown-chevron" aria-label="选择字号" @click="toggleFontSizeMenu">
+                  <ChevronDown :size="14" />
+                </button>
+                <div v-if="fontSizeMenuOpen" class="reader-menu reader-size-menu" role="menu">
+                  <button
+                    v-for="size in [14, 16, 17, 18, 20, 22, 24]"
+                    :key="size"
+                    role="menuitem"
+                    :class="{ selected: reader.fontSize === size }"
+                    @click="setFontSize(size)"
+                  >
+                    {{ size }} px
+                  </button>
+                </div>
+              </div>
+              <i></i
+              ><button aria-label="切换阅读主题" title="切换阅读主题" @click="toggleReaderTheme">
+                <Sun :size="17" /></button
+              ><button aria-label="显示或隐藏目录" title="显示或隐藏目录" @click="chapterListOpen = !chapterListOpen">
+                <List :size="18" /></button
+              ><button
+                aria-label="显示或隐藏阅读设置"
+                title="显示或隐藏阅读设置"
+                @click="readerSettingsOpen = !readerSettingsOpen"
+              >
+                <MoreHorizontal :size="18" />
+              </button>
             </div>
           </div>
           <div class="reader-workspace">
@@ -192,9 +285,11 @@ const resetReaderSettings = () => {
               :selected-chapter="reader.selectedChapter"
               :theme="reader.theme"
               :font-size="reader.fontSize"
+              :font-family="reader.fontFamily"
               :line-height="reader.lineHeight"
               :page-margin="reader.pageMargin"
               :reader-mode="reader.readerMode"
+              :chapter-list-open="chapterListOpen"
               :loading="reader.loadingChapter"
               :book="reader.selectedBook"
               @select-chapter="reader.selectChapter"
@@ -202,9 +297,12 @@ const resetReaderSettings = () => {
               @reader-content="reader.readerContent = $event"
               @reader-mode="reader.readerMode = $event"
             />
-            <aside class="settings-panel">
+            <aside v-if="readerSettingsOpen" class="settings-panel">
               <div class="settings-head">
-                <strong>阅读设置</strong><button @click="reader.closeBook"><X :size="18" /></button>
+                <strong>阅读设置</strong
+                ><button aria-label="关闭阅读设置" title="关闭阅读设置" @click="readerSettingsOpen = false">
+                  <X :size="18" />
+                </button>
               </div>
               <label class="setting-label">主题</label>
               <div class="theme-grid">
@@ -223,9 +321,10 @@ const resetReaderSettings = () => {
                 </button>
               </div>
               <label class="setting-label">字体</label
-              ><select v-model="reader.fontSize" class="setting-select">
-                <option :value="17">思源宋体</option>
-                <option :value="18">霞鹜文楷</option></select
+              ><select v-model="reader.fontFamily" class="setting-select">
+                <option value="思源宋体">思源宋体</option>
+                <option value="霞鹜文楷">霞鹜文楷</option>
+                <option value="系统默认">系统默认</option></select
               ><label class="setting-label">字号</label>
               <div class="font-step">
                 <button @click="reader.fontSize = Math.max(14, reader.fontSize - 1)">A-</button

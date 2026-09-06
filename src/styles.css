@@ -65,10 +65,13 @@
     @apply flex h-10 items-center gap-3 rounded-lg border-0 bg-transparent px-4 text-left text-[14px] text-[#233552] hover:bg-[#edf3ff];
   }
   .nav-item span {
-    @apply w-5 text-center text-[21px] text-[#60708a];
+    @apply min-w-0 whitespace-nowrap text-left text-[14px] text-[#60708a];
   }
   .nav-item.active {
     @apply bg-[#e6efff] font-semibold text-[#2877f7];
+  }
+  .nav-item > svg {
+    @apply shrink-0;
   }
   .my-books {
     @apply mt-7 min-h-0 flex-1 overflow-hidden;
@@ -125,8 +128,64 @@
   .reader-top-tools {
     @apply ml-auto flex items-center gap-4 text-[13px];
   }
+  .reader-dropdown {
+    @apply relative flex items-center;
+  }
+  .reader-dropdown > button:first-child {
+    @apply max-w-[104px] overflow-hidden text-ellipsis whitespace-nowrap;
+  }
+  .reader-dropdown .reader-dropdown-chevron {
+    @apply p-0;
+  }
+  .reader-menu {
+    @apply absolute right-0 top-[calc(100%+8px)] z-30 min-w-[136px] rounded-lg border border-[#dfe7f2] bg-white p-1.5 shadow-[0_12px_30px_rgba(38,62,94,0.16)];
+  }
+  .reader-menu button {
+    @apply flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-[#53647d] hover:bg-[#edf4ff] hover:text-[#2678f5];
+  }
+  .reader-menu button.selected {
+    @apply bg-[#eaf2ff] font-semibold text-[#2678f5];
+  }
+  .reader-size-menu {
+    @apply min-w-[92px];
+  }
   .reader-workspace {
     @apply flex h-[calc(100vh-124px)] min-h-0;
+  }
+  .app-theme-dark .appbar,
+  .app-theme-dark .left-nav,
+  .app-theme-dark .main-area,
+  .app-theme-dark .settings-panel,
+  .app-theme-dark .chapter-list {
+    @apply border-[#29364a] bg-[#182231] text-[#d7e2f2];
+  }
+  .app-theme-dark .app-search,
+  .app-theme-dark .search-page-input,
+  .app-theme-dark .library-hero,
+  .app-theme-dark .library-book,
+  .app-theme-dark .source-editor,
+  .app-theme-dark .search-result,
+  .app-theme-dark .debug-rules,
+  .app-theme-dark .debug-output {
+    @apply border-[#304158] bg-[#202d40];
+  }
+  .app-theme-dark .nav-item,
+  .app-theme-dark .settings-link,
+  .app-theme-dark .mini-book,
+  .app-theme-dark .page-heading h1,
+  .app-theme-dark .library-hero h1,
+  .app-theme-dark .search-result-meta h2,
+  .app-theme-dark .source-editor h2,
+  .app-theme-dark .debug-output h2,
+  .app-theme-dark .debug-rules h2 {
+    @apply text-[#d7e2f2];
+  }
+  .app-theme-dark .app-search input,
+  .app-theme-dark .search-page-input input,
+  .app-theme-dark .source-editor input,
+  .app-theme-dark .source-editor textarea,
+  .app-theme-dark .source-editor select {
+    @apply bg-transparent text-[#d7e2f2];
   }
   .reader-layout {
     @apply flex min-w-0 flex-1;
@@ -147,7 +206,8 @@
     @apply min-w-0 flex-1 overflow-y-auto px-[46px] pb-20 pt-12 outline-none;
   }
   .reader-content p {
-    @apply mb-5 whitespace-pre-wrap font-reader text-[var(--reader-font-size,17px)] leading-[var(--reader-line-height,1.8)] text-[#34445e] indent-[2em];
+    @apply mb-5 whitespace-pre-wrap text-[var(--reader-font-size,17px)] leading-[var(--reader-line-height,1.8)] text-[#34445e] indent-[2em];
+    font-family: var(--reader-font-family, var(--font-reader));
   }
   .reader-content h2 {
     @apply mb-8 indent-0 text-[32px];

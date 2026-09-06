@@ -9,9 +9,11 @@ const props = defineProps<{
   selectedChapter?: Chapter
   theme: string
   fontSize: number
+  fontFamily: string
   lineHeight: number
   pageMargin: number
   readerMode: 'scroll' | 'paged'
+  chapterListOpen: boolean
   loading: boolean
   book?: { id?: number; intro?: string; kind?: string; latest_chapter?: string; cover_data?: string }
 }>()
@@ -143,7 +145,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="reader-layout">
-    <aside class="chapter-list">
+    <aside v-if="chapterListOpen" class="chapter-list">
       <div class="reader-side-tabs">
         <button :class="{ active: activeTab === 'catalog' }" type="button" @click="activeTab = 'catalog'">
           <List :size="15" />目录</button
@@ -175,6 +177,7 @@ onBeforeUnmount(() => {
       :class="['reader-content', `theme-${theme}`, `mode-${readerMode}`]"
       :style="{
         '--reader-font-size': `${fontSize}px`,
+        '--reader-font-family': fontFamily,
         '--reader-line-height': lineHeight,
         '--reader-margin': `${pageMargin}px`,
       }"

@@ -29,6 +29,7 @@ export function useReader(report: (cause: unknown) => void) {
   const switchingSource = ref(false)
   const readerContent = ref<HTMLElement | null>(null)
   const fontSize = ref(Number(localStorage.getItem('reader-font-size') ?? '17'))
+  const fontFamily = ref(localStorage.getItem('reader-font-family') ?? '思源宋体')
   const theme = ref(localStorage.getItem('reader-theme') ?? 'light')
   const lineHeight = ref(Number(localStorage.getItem('reader-line-height') ?? '1.8'))
   const pageMargin = ref(Number(localStorage.getItem('reader-page-margin') ?? '32'))
@@ -72,6 +73,7 @@ export function useReader(report: (cause: unknown) => void) {
   }
 
   watch(fontSize, (value) => localStorage.setItem('reader-font-size', String(value)))
+  watch(fontFamily, (value) => localStorage.setItem('reader-font-family', value))
   watch(theme, (value) => localStorage.setItem('reader-theme', value))
   watch(lineHeight, (value) => localStorage.setItem('reader-line-height', String(value)))
   watch(pageMargin, (value) => localStorage.setItem('reader-page-margin', String(value)))
@@ -214,6 +216,7 @@ export function useReader(report: (cause: unknown) => void) {
     switchingSource,
     readerContent,
     fontSize,
+    fontFamily,
     theme,
     lineHeight,
     pageMargin,
