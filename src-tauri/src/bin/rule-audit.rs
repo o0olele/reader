@@ -92,6 +92,24 @@ fn error_category(error: &str) -> &'static str {
         "template delimiter"
     } else if l.contains("xpath") || l.contains("jsonpath") {
         "path parser"
+    } else if l.contains("javaimporter")
+        || l.contains("java.lang")
+        || l.contains("java.util")
+        || l.contains("java.io")
+        || l.contains("java.security")
+    {
+        "unsupported JVM access"
+    } else if l.contains("source error") || l.contains("javascript") || l.contains("quickjs") {
+        "js runtime"
+    } else if l.contains("default-mode rule is not supported")
+        && (l.contains("not a css selector") || l.contains("emptyselector"))
+    {
+        "css compatibility"
+    } else if l.contains("cannot read property")
+        || l.contains("cannot read properties")
+        || l.contains("is not defined")
+    {
+        "harness input"
     } else {
         "other"
     }
@@ -137,6 +155,38 @@ fn source_rules(source: &Value) -> Vec<(String, String)> {
         }
     }
     rules
+}
+
+fn is_metadata_url(path: &str, raw: &str) -> bool {
+    let key = path.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
+    (key.ends_with("url") || key == "url")
+        && (raw.trim_start().starts_with("http://") || raw.trim_start().starts_with("https://"))
+        && !raw.contains("@js:")
+        && !raw.contains("@json:")
+        && !raw.contains("@xpath:")
+}
+
+fn is_template_text(raw: &str) -> bool {
+    let value = raw.trim();
+    (value.contains("{$.") || value.contains("{$"))
+        && !value.contains("@js:")
+        && !value.contains("@json:")
+        && !value.contains("@xpath:")
+        && !value.contains("||")
+        && !value.contains("&&")
+        && !value.contains("##")
+}
+
+fn is_literal_fragment(raw: &str) -> bool {
+    matches!(raw.trim(), "+" | "-" | "*" | ",")
+}
+
+fn is_json_field_path(raw: &str) -> bool {
+    let value = raw.trim();
+    value.contains("[*]")
+        && !value.contains('@')
+        && !value.contains(' ')
+        && !value.contains(':')
 }
 
 fn corpus_file(path: &Path) -> Result<PathBuf, String> {
@@ -186,7 +236,12 @@ fn run(input: &str) -> Result<Audit, String> {
             }
             // URL templates, headers and JS libraries are metadata rather than
             // evaluator rules; only actual rule fields are dry-run here.
-            if path.starts_with("rule") {
+            if path.starts_with("rule")
+                && !is_metadata_url(&path, &raw)
+                && !is_template_text(&raw)
+                && !is_json_field_path(&raw)
+                && !is_literal_fragment(&raw)
+            {
                 let dummy_input = if json_source {
                     r#"{"data":{"list":[{"id":"1","title":"audit","content":"audit"}],"score":1},"list":[{"id":"1","title":"audit","content":"audit"}],"id":"1","title":"audit","content":"audit","score":1}"#
                 } else {
@@ -241,6 +296,16 @@ fn markdown(report: &Audit) -> String {
             error.replace('|', "\\|"),
             count
         ));
+    }
+    let mut category_counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for (error, count) in &report.errors {
+        *category_counts.entry(error_category(error)).or_default() += count;
+    }
+    out.push_str("\n## Execution errors by category\n\n| Category | Rule count |\n| --- | ---: |\n");
+    let mut categories: Vec<_> = category_counts.into_iter().collect();
+    categories.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+    for (category, count) in categories {
+        out.push_str(&format!("| {category} | {count} |\n"));
     }
     out.push_str("\n## java.* methods\n\n| Method | Sources |\n| --- | ---: |\n");
     let mut methods: Vec<_> = report.java_methods.iter().collect();
@@ -302,5 +367,60 @@ mod tests {
         let report = run(r#"[{"ruleContent":{"content":"$..content"}}]"#).unwrap();
         assert_eq!(report.clean, 1);
         assert!(report.errors.is_empty());
+    }
+
+    #[test]
+    fn classifies_execution_errors_for_actionable_follow_up() {
+        assert_eq!(
+            error_category("source error: JavaScript 执行失败: not a function"),
+            "js runtime"
+        );
+        assert_eq!(
+            error_category("default-mode rule is not supported: `a.` is not a CSS selector: EmptySelector"),
+            "css compatibility"
+        );
+        assert_eq!(
+            error_category("source error: JavaScript 执行失败: cannot read property of null"),
+            "js runtime"
+        );
+        assert_eq!(
+            error_category("source error: JavaImporter is not defined"),
+            "unsupported JVM access"
+        );
+    }
+
+    #[test]
+    fn skips_literal_url_metadata_from_rule_execution() {
+        assert!(is_metadata_url(
+            "ruleSearch.bookUrl",
+            "https://example.test/book/1"
+        ));
+        assert!(!is_metadata_url(
+            "ruleSearch.bookUrl",
+            "$.id@js:'https://example.test/book/' + result"
+        ));
+    }
+
+    #[test]
+    fn skips_json_template_display_text_from_css_execution() {
+        assert!(is_template_text("{$.grade}分"));
+        assert!(is_template_text("{$.type_name},{$.catalog_name}"));
+        assert!(!is_template_text("$.grade"));
+        assert!(!is_template_text("$.id@js:result"));
+    }
+
+    #[test]
+    fn recognizes_legacy_json_wildcard_paths() {
+        assert!(is_json_field_path("book_tag_list[*].title"));
+        assert!(is_json_field_path("data[*]"));
+        assert!(!is_json_field_path("li:nth-child(2)"));
+        assert!(!is_json_field_path("$.data[*].title@text"));
+    }
+
+    #[test]
+    fn skips_standalone_display_fragments() {
+        assert!(is_literal_fragment("+"));
+        assert!(is_literal_fragment("-"));
+        assert!(!is_literal_fragment(".book + .book"));
     }
 }

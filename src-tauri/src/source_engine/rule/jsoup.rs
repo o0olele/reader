@@ -193,6 +193,13 @@ fn apply_selection<'a>(
 
 fn normalize_css_compat(css: &str) -> String {
     let mut out = css.to_owned();
+    // Legado uses an escaped pipe as a selector union in a few exported
+    // sources (for example `src\|class.red`). `scraper` interprets the pipe
+    // as a namespace separator, so translate it to CSS's selector-list comma
+    // when it is outside an attribute selector.
+    if !out.contains('[') && (out.contains(r"\|") || out.contains('|')) {
+        out = out.replace(r"\|", ",").replace('|', ",");
+    }
     let pseudo = regex::Regex::new(r#":(?:contains|eq)\(\s*['"]?.*?['"]?\s*\)"#).unwrap();
     out = pseudo.replace_all(&out, "").into_owned();
     // scraper requires quoted attribute values; JSoup accepts these legacy forms.
@@ -389,6 +396,13 @@ mod tests {
     fn normalizes_legacy_attr_pseudo_terminals() {
         assert_eq!(run("a:attr(href)", LIST), vec!["/one", "/two"]);
         assert_eq!(run("a::attr(href)", LIST), vec!["/one", "/two"]);
+    }
+
+    #[test]
+    fn normalizes_legacy_escaped_pipe_selector_union() {
+        assert_eq!(normalize_css_compat(r#"src\|class.red"#), "src,class.red");
+        assert_eq!(normalize_css_compat("src|class.red"), "src,class.red");
+        assert_eq!(normalize_css_compat(r#"[src\|class='x']"#), r#"[src\|class='x']"#);
     }
 
     #[test]

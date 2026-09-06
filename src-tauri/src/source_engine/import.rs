@@ -403,4 +403,31 @@ mod tests {
             "@js:result + '@href'"
         );
     }
+
+    #[test]
+    fn imports_reference_default_book_sources_fixture_with_raw_fields() {
+        let input = include_str!("../../tests/fixtures/bookSources.json");
+        let sources = parse_sources_json(input).expect("reference fixture should import");
+        assert_eq!(sources.len(), 1);
+        let source = &sources[0];
+        assert_eq!(source.name, "消消乐听书");
+        assert_eq!(source.base_url, "https://www.kaixin7days.com");
+        assert!(source.explore_url.is_some());
+        assert!(source.concurrent_rate.is_none());
+        assert!(source
+            .raw_rules
+            .search
+            .as_deref()
+            .is_some_and(|rule| rule.contains("bookList")));
+        assert!(source
+            .raw_rules
+            .explore
+            .as_deref()
+            .is_some_and(|rule| rule.contains("bookList")));
+        assert!(source
+            .raw_rules
+            .toc
+            .as_deref()
+            .is_some_and(|rule| rule.contains("chapterList")));
+    }
 }
