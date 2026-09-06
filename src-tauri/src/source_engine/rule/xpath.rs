@@ -93,7 +93,7 @@ impl XPathQuery {
 }
 
 fn to_query(raw: &str) -> Result<XPathQuery, RuleExecutionError> {
-    let raw = raw.trim();
+    let raw = raw.trim().trim_end_matches('/');
     let mut value = raw.strip_prefix("//").unwrap_or(raw);
     if value.starts_with('/') {
         value = value.trim_start_matches('/');
@@ -137,6 +137,26 @@ fn to_query(raw: &str) -> Result<XPathQuery, RuleExecutionError> {
     .expect("static xpath position range regex");
     css = position_range
         .replace_all(&css, ":nth-of-type(n+$1):not(:last-of-type)")
+        .into_owned();
+    // Legado sources frequently use a simple positional predicate such as
+    // `[position()=1]` or `[position() = last()]`.  CSS has an equivalent
+    // `:nth-of-type(...)` selector; handle these before handing the query to
+    // scraper, whose parser otherwise reports `position` as an invalid
+    // attribute selector.
+    let position_equals = regex::Regex::new(r"\[\s*position\(\)\s*=\s*(\d+)\s*\]")
+        .expect("static xpath position equality regex");
+    css = position_equals
+        .replace_all(&css, ":nth-of-type($1)")
+        .into_owned();
+    let position_last = regex::Regex::new(r"\[\s*position\(\)\s*=\s*last\(\)\s*\]")
+        .expect("static xpath last position regex");
+    css = position_last
+        .replace_all(&css, ":last-of-type")
+        .into_owned();
+    let position_greater = regex::Regex::new(r"\[\s*position\(\)\s*>\s*(\d+)\s*\]")
+        .expect("static xpath position greater-than regex");
+    css = position_greater
+        .replace_all(&css, ":not(:nth-of-type(-n+$1))")
         .into_owned();
     let before_last = regex::Regex::new(r"\[\s*position\(\)\s*<\s*last\(\)\s*-\s*(\d+)\s*\]")
         .expect("static xpath before last regex");
@@ -200,7 +220,10 @@ fn xpath_path_to_css(value: &str) -> String {
         } else if bracket_depth == 0 && ch == '/' {
             if tail.starts_with("//") {
                 css.push(' ');
-                i += 1;
+                // Consume both slashes for the XPath descendant axis. Leaving
+                // the second slash to the normal child-axis branch produces a
+                // dangling combinator for paths such as `//*[@id]//tr`.
+                i += 2;
             } else {
                 css.push_str(" > ");
             }
@@ -266,6 +289,30 @@ mod tests {
             to_query("//ul/li[2]").unwrap().css,
             "ul > li:nth-of-type(2)"
         );
+        assert_eq!(
+            to_query("//ul/li[position()=2]").unwrap().css,
+            "ul > li:nth-of-type(2)"
+        );
+        assert_eq!(
+            to_query("//ul/li[position()=last()]").unwrap().css,
+            "ul > li:last-of-type"
+        );
+        assert_eq!(
+            to_query("//ul/li[position()>1]").unwrap().css,
+            "ul > li:not(:nth-of-type(-n+1))"
+        );
+    }
+
+    #[test]
+    fn executes_greater_than_position_predicates() {
+        let rule = xpath_rule("@XPath://ul/li[position()>1]/text()");
+        let values = execute_xpath(
+            &rule,
+            "<ul><li>one</li><li>two</li><li>three</li></ul>",
+            Extraction::Values,
+        )
+        .unwrap();
+        assert_eq!(values, vec!["two", "three"]);
     }
 
     #[test]
@@ -295,6 +342,10 @@ mod tests {
         assert_eq!(
             to_query("//span/following-sibling::a").unwrap().css,
             "span ~ a"
+        );
+        assert_eq!(
+            to_query("//*[@id='bookcon']//tr").unwrap().css,
+            "*[id='bookcon'] tr"
         );
         assert_eq!(
             to_query("//div[@id='list']/dl/dd[position()>=13]")
