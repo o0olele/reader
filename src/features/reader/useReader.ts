@@ -29,7 +29,12 @@ export function useReader(report: (cause: unknown) => void) {
   const switchingSource = ref(false)
   const readerContent = ref<HTMLElement | null>(null)
   const fontSize = ref(Number(localStorage.getItem('reader-font-size') ?? '17'))
-  const fontFamily = ref(localStorage.getItem('reader-font-family') ?? '思源宋体')
+  const storedFontFamily = localStorage.getItem('reader-font-family')
+  const fontFamily = ref(
+    storedFontFamily === '思源宋体' || storedFontFamily === '霞鹜文楷' || storedFontFamily === '系统默认'
+      ? storedFontFamily
+      : '思源宋体',
+  )
   const theme = ref(localStorage.getItem('reader-theme') ?? 'light')
   const lineHeight = ref(Number(localStorage.getItem('reader-line-height') ?? '1.8'))
   const pageMargin = ref(Number(localStorage.getItem('reader-page-margin') ?? '32'))

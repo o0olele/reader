@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   ArrowLeft,
@@ -47,11 +47,20 @@ const autoBrightness = ref(false)
 const fullScreen = ref(false)
 const showStatusBar = ref(true)
 const appTheme = ref<'light' | 'dark'>((localStorage.getItem('app-theme') as 'light' | 'dark') ?? 'light')
-const readerSettingsOpen = ref(true)
-const chapterListOpen = ref(true)
+// Side panels start closed for a clean reading surface.  They can be opened
+// explicitly from the chapter bar and their state is kept independent.
+const readerSettingsOpen = ref(false)
+const chapterListOpen = ref(false)
 const fontMenuOpen = ref(false)
 const fontSizeMenuOpen = ref(false)
 const chooseFile = () => fileInput.value?.click()
+const openBookFromShelf = async (book: Parameters<typeof openBook>[0]) => {
+  chapterListOpen.value = false
+  readerSettingsOpen.value = false
+  fontMenuOpen.value = false
+  fontSizeMenuOpen.value = false
+  await openBook(book)
+}
 const win = getCurrentWindow()
 const windowAction = async (action: 'minimize' | 'maximize' | 'close') => {
   try {
@@ -98,6 +107,14 @@ const setFontSize = (size: number) => {
   reader.fontSize = size
   fontSizeMenuOpen.value = false
 }
+const closeReaderMenus = (event: PointerEvent) => {
+  const target = event.target
+  if (target instanceof Element && target.closest('.reader-dropdown')) return
+  fontMenuOpen.value = false
+  fontSizeMenuOpen.value = false
+}
+onMounted(() => document.addEventListener('pointerdown', closeReaderMenus))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', closeReaderMenus))
 const submitSearch = () => {
   const query = headerQuery.value.trim()
   if (!query) {
@@ -190,7 +207,7 @@ const resetReaderSettings = () => {
             v-for="book in bookshelf.visibleBooks.slice(0, 5)"
             :key="book.id"
             :class="['mini-book', { selected: reader.selectedBook?.id === book.id }]"
-            @click="openBook(book)"
+            @click="openBookFromShelf(book)"
           >
             <span class="mini-cover"
               ><img v-if="book.cover_data" :src="book.cover_data" :alt="book.title" /><BookOpen
@@ -230,8 +247,13 @@ const resetReaderSettings = () => {
             >
             <div class="reader-top-tools">
               <div class="reader-dropdown">
-                <button aria-haspopup="menu" :aria-expanded="fontMenuOpen" @click="toggleFontMenu">Aa</button>
-                <button class="reader-dropdown-chevron" aria-label="选择字体" @click="toggleFontMenu">
+                <span class="reader-dropdown-label">Aa</span>
+                <button
+                  type="button"
+                  class="reader-dropdown-chevron"
+                  aria-label="选择字体"
+                  @click.stop="toggleFontMenu"
+                >
                   <ChevronDown :size="14" />
                 </button>
                 <div v-if="fontMenuOpen" class="reader-menu" role="menu">
@@ -247,10 +269,13 @@ const resetReaderSettings = () => {
                 </div>
               </div>
               <div class="reader-dropdown">
-                <button aria-haspopup="menu" :aria-expanded="fontSizeMenuOpen" @click="toggleFontSizeMenu">
-                  {{ reader.fontSize }}
-                </button>
-                <button class="reader-dropdown-chevron" aria-label="选择字号" @click="toggleFontSizeMenu">
+                <span class="reader-dropdown-label">{{ reader.fontSize }}</span>
+                <button
+                  type="button"
+                  class="reader-dropdown-chevron"
+                  aria-label="选择字号"
+                  @click.stop="toggleFontSizeMenu"
+                >
                   <ChevronDown :size="14" />
                 </button>
                 <div v-if="fontSizeMenuOpen" class="reader-menu reader-size-menu" role="menu">
@@ -268,9 +293,15 @@ const resetReaderSettings = () => {
               <i></i
               ><button aria-label="切换阅读主题" title="切换阅读主题" @click="toggleReaderTheme">
                 <Sun :size="17" /></button
-              ><button aria-label="显示或隐藏目录" title="显示或隐藏目录" @click="chapterListOpen = !chapterListOpen">
+              ><button
+                :class="{ active: chapterListOpen }"
+                aria-label="显示或隐藏目录"
+                title="显示或隐藏目录"
+                @click="chapterListOpen = !chapterListOpen"
+              >
                 <List :size="18" /></button
               ><button
+                :class="{ active: readerSettingsOpen }"
                 aria-label="显示或隐藏阅读设置"
                 title="显示或隐藏阅读设置"
                 @click="readerSettingsOpen = !readerSettingsOpen"
@@ -384,11 +415,11 @@ const resetReaderSettings = () => {
             v-else-if="view === 'downloads' || view === 'rss' || view === 'history' || view === 'bookmarks'"
             :kind="view"
             :books="bookshelf.visibleBooks"
-            @open="openBook" /><BookshelfPage
+            @open="openBookFromShelf" /><BookshelfPage
             v-else
             :books="bookshelf.visibleBooks"
             :groups="bookshelf.groups"
-            @open="openBook"
+            @open="openBookFromShelf"
             @move="bookshelf.moveBook"
             @remove="bookshelf.removeBook"
             @choose="chooseFile"

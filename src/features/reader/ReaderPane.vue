@@ -43,6 +43,14 @@ const {
 const scrollTop = ref(0)
 const viewportHeight = ref(640)
 const estimatedParagraphHeight = computed(() => Math.max(32, props.fontSize * props.lineHeight * 1.8))
+const resolvedFontFamily = computed(() => {
+  const stacks: Record<string, string> = {
+    思源宋体: '"Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", serif',
+    霞鹜文楷: '"LXGW WenKai", "Kaiti SC", "STKaiti", cursive',
+    系统默认: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+  }
+  return stacks[props.fontFamily] ?? stacks['系统默认']
+})
 const paragraphs = computed(() => (props.selectedChapter?.content ?? '').split(/\r?\n/))
 const windowStart = computed(() => {
   if (props.readerMode === 'paged') return 0
@@ -177,7 +185,7 @@ onBeforeUnmount(() => {
       :class="['reader-content', `theme-${theme}`, `mode-${readerMode}`]"
       :style="{
         '--reader-font-size': `${fontSize}px`,
-        '--reader-font-family': fontFamily,
+        '--reader-font-family': resolvedFontFamily,
         '--reader-line-height': lineHeight,
         '--reader-margin': `${pageMargin}px`,
       }"
