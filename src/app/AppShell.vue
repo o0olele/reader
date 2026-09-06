@@ -6,7 +6,6 @@ import {
   ArrowRight,
   BookOpen,
   Bookmark,
-  ChevronDown,
   Clock3,
   Cloud,
   Compass,
@@ -22,6 +21,8 @@ import {
   Settings,
   Square,
   Sun,
+  Type,
+  ALargeSmall,
   X,
 } from 'lucide-vue-next'
 import type { LucideIcon } from 'lucide-vue-next'
@@ -247,14 +248,15 @@ const resetReaderSettings = () => {
             >
             <div class="reader-top-tools">
               <div class="reader-dropdown">
-                <span class="reader-dropdown-label">Aa</span>
                 <button
                   type="button"
-                  class="reader-dropdown-chevron"
+                  class="reader-dropdown-trigger"
                   aria-label="选择字体"
                   @click.stop="toggleFontMenu"
                 >
-                  <ChevronDown :size="14" />
+                  <Type :size="16" aria-hidden="true" /><span class="reader-dropdown-label">{{
+                    reader.fontFamily
+                  }}</span>
                 </button>
                 <div v-if="fontMenuOpen" class="reader-menu" role="menu">
                   <button
@@ -269,14 +271,15 @@ const resetReaderSettings = () => {
                 </div>
               </div>
               <div class="reader-dropdown">
-                <span class="reader-dropdown-label">{{ reader.fontSize }}</span>
                 <button
                   type="button"
-                  class="reader-dropdown-chevron"
+                  class="reader-dropdown-trigger"
                   aria-label="选择字号"
                   @click.stop="toggleFontSizeMenu"
                 >
-                  <ChevronDown :size="14" />
+                  <ALargeSmall :size="16" aria-hidden="true" /><span class="reader-dropdown-label"
+                    >{{ reader.fontSize }}px</span
+                  >
                 </button>
                 <div v-if="fontSizeMenuOpen" class="reader-menu reader-size-menu" role="menu">
                   <button

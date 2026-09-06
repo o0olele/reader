@@ -3,6 +3,43 @@
   --font-sans: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-reader: Georgia, 'Noto Serif SC', serif;
 }
+
+/* WebView2 can ignore layered scrollbar pseudo-element rules. Keep these
+   reader-pane overrides unlayered so native arrow buttons are always removed. */
+.chapter-list::-webkit-scrollbar-button,
+.reader-content::-webkit-scrollbar-button,
+.settings-panel::-webkit-scrollbar-button,
+.chapter-list::-webkit-scrollbar-button:vertical,
+.reader-content::-webkit-scrollbar-button:vertical,
+.reader-content::-webkit-scrollbar-button:horizontal,
+.settings-panel::-webkit-scrollbar-button:vertical,
+.chapter-list::-webkit-scrollbar-button:single-button,
+.reader-content::-webkit-scrollbar-button:single-button,
+.settings-panel::-webkit-scrollbar-button:single-button,
+.chapter-list::-webkit-scrollbar-button:vertical:decrement,
+.chapter-list::-webkit-scrollbar-button:vertical:increment,
+.reader-content::-webkit-scrollbar-button:vertical:decrement,
+.reader-content::-webkit-scrollbar-button:vertical:increment,
+.reader-content::-webkit-scrollbar-button:horizontal:decrement,
+.reader-content::-webkit-scrollbar-button:horizontal:increment,
+.settings-panel::-webkit-scrollbar-button:vertical:decrement,
+.settings-panel::-webkit-scrollbar-button:vertical:increment,
+.chapter-list::-webkit-scrollbar-button:start:decrement,
+.chapter-list::-webkit-scrollbar-button:end:increment,
+.reader-content::-webkit-scrollbar-button:start:decrement,
+.reader-content::-webkit-scrollbar-button:end:increment,
+.settings-panel::-webkit-scrollbar-button:start:decrement,
+.settings-panel::-webkit-scrollbar-button:end:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  background: transparent !important;
+  border: 0 !important;
+}
 @layer base {
   * {
     @apply box-border;
@@ -158,14 +195,11 @@
   .reader-dropdown {
     @apply relative flex items-center;
   }
-  .reader-dropdown > button:first-child {
-    @apply max-w-[104px] overflow-hidden text-ellipsis whitespace-nowrap;
+  .reader-dropdown-trigger {
+    @apply inline-flex max-w-[168px] items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap;
   }
   .reader-dropdown-label {
-    @apply inline-flex max-w-[104px] items-center overflow-hidden text-ellipsis whitespace-nowrap px-1.5 py-1.5 text-[13px];
-  }
-  .reader-dropdown .reader-dropdown-chevron {
-    @apply p-0;
+    @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px];
   }
   .reader-menu {
     @apply absolute right-0 top-[calc(100%+8px)] z-30 min-w-[136px] rounded-lg border border-[#dfe7f2] bg-white p-1.5 shadow-[0_12px_30px_rgba(38,62,94,0.16)];
@@ -235,9 +269,12 @@
   }
   .reader-content {
     @apply min-w-0 flex-1 overflow-y-auto px-[46px] pb-20 pt-12 outline-none;
+    overflow-anchor: none;
   }
   .reader-content p {
-    @apply mb-5 whitespace-pre-wrap text-[var(--reader-font-size,17px)] leading-[var(--reader-line-height,1.8)] text-[#34445e] indent-[2em];
+    @apply mb-5 whitespace-pre-wrap text-[#34445e] indent-[2em];
+    font-size: var(--reader-font-size, 17px);
+    line-height: var(--reader-line-height, 1.8);
     font-family: var(--reader-font-family, var(--font-reader));
   }
   .reader-content h2 {

@@ -40,9 +40,6 @@ const {
   contentRef,
   (mode) => emit('readerMode', mode),
 )
-const scrollTop = ref(0)
-const viewportHeight = ref(640)
-const estimatedParagraphHeight = computed(() => Math.max(32, props.fontSize * props.lineHeight * 1.8))
 const resolvedFontFamily = computed(() => {
   const stacks: Record<string, string> = {
     思源宋体: '"Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", serif',
@@ -52,16 +49,9 @@ const resolvedFontFamily = computed(() => {
   return stacks[props.fontFamily] ?? stacks['系统默认']
 })
 const paragraphs = computed(() => (props.selectedChapter?.content ?? '').split(/\r?\n/))
-const windowStart = computed(() => {
-  if (props.readerMode === 'paged') return 0
-  return Math.max(0, Math.floor(scrollTop.value / estimatedParagraphHeight.value) - 8)
-})
-const windowEnd = computed(() => {
-  if (props.readerMode === 'paged') return paragraphs.value.length
-  const visible = Math.ceil(viewportHeight.value / estimatedParagraphHeight.value) + 16
-  return Math.min(paragraphs.value.length, windowStart.value + visible)
-})
-const visibleParagraphs = computed(() => paragraphs.value.slice(windowStart.value, windowEnd.value))
+// Keep the scroll-mode DOM stable. Replacing paragraphs while scrolling changes
+// scrollHeight and makes the native scrollbar thumb lag or jump.
+const visibleParagraphs = computed(() => paragraphs.value)
 const searchMatches = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
   if (!query) return []
@@ -70,16 +60,8 @@ const searchMatches = computed(() => {
     return matches
   }, [])
 })
-const topSpacer = computed(() => windowStart.value * estimatedParagraphHeight.value)
-const bottomSpacer = computed(
-  () => Math.max(0, paragraphs.value.length - windowEnd.value) * estimatedParagraphHeight.value,
-)
 
-function updateViewport() {
-  if (contentRef.value) viewportHeight.value = contentRef.value.clientHeight
-}
 function onScroll() {
-  scrollTop.value = contentRef.value?.scrollTop ?? 0
   emit('scroll')
 }
 function changeMode(mode: 'scroll' | 'paged') {
@@ -97,7 +79,6 @@ function changeMode(mode: 'scroll' | 'paged') {
     : 0
   emit('readerMode', mode)
   void nextTick(() => {
-    updateViewport()
     if (!contentRef.value || !ratio) return
     if (mode === 'paged') {
       contentRef.value.scrollLeft = ratio * Math.max(0, contentRef.value.scrollWidth - contentRef.value.clientWidth)
@@ -126,9 +107,7 @@ watch(contentRef, (element) => emit('readerContent', element))
 watch(
   () => props.selectedChapter?.id,
   () => {
-    scrollTop.value = 0
     void nextTick(() => {
-      updateViewport()
       if (!contentRef.value) return
       contentRef.value.scrollTop = 0
       contentRef.value.scrollLeft = 0
@@ -138,15 +117,13 @@ watch(
 watch(searchMatches, (matches) => {
   const index = matches[0]
   if (index === undefined || !contentRef.value || props.readerMode !== 'scroll') return
-  contentRef.value.scrollTop = index * estimatedParagraphHeight.value
+  const target = contentRef.value.querySelectorAll('.reader-paragraph')[index]
+  target?.scrollIntoView({ block: 'start' })
 })
 onMounted(() => {
-  updateViewport()
-  window.addEventListener('resize', updateViewport)
   window.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateViewport)
   window.removeEventListener('keydown', onKeydown)
 })
 </script>
@@ -222,11 +199,9 @@ onBeforeUnmount(() => {
       <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
       <p v-if="loading" class="reader-loading">正在获取正文...</p>
       <template v-else>
-        <div v-if="readerMode === 'scroll'" :style="{ height: `${topSpacer}px` }" aria-hidden="true" />
-        <p v-for="(paragraph, index) in visibleParagraphs" :key="windowStart + index">
+        <p v-for="(paragraph, index) in visibleParagraphs" :key="index" class="reader-paragraph">
           {{ paragraph }}
         </p>
-        <div v-if="readerMode === 'scroll'" :style="{ height: `${bottomSpacer}px` }" aria-hidden="true" />
       </template>
     </article>
   </div>
