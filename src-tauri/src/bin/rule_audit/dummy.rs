@@ -1,7 +1,8 @@
 use reader_desktop_lib::source_engine::rule::{split_rule, RuleMode};
 
 pub(super) const JSON: &str = r#"{"data":{"list":[{"id":"1","title":"audit","content":"audit"}],"score":1},"list":[{"id":"1","title":"audit","content":"audit"}],"id":"1","title":"audit","content":"audit","score":1}"#;
-pub(super) const HTML: &str = "<html><body><div class=\"item\"><a class=\"name\">audit</a></div></body></html>";
+pub(super) const HTML: &str =
+    "<html><body><div class=\"item\"><a class=\"name\">audit</a></div></body></html>";
 
 /// A source can search an API and read chapters from HTML pages. Respect
 /// explicit rule modes and HTML extraction syntax before the source heuristic.

@@ -4,6 +4,7 @@
 //! the public IPC contract structured while the legacy implementation moves.
 
 pub mod book;
+pub mod bookmark;
 pub mod bookshelf;
 pub mod explore;
 pub mod reader;

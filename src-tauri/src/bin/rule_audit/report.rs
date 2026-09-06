@@ -23,15 +23,15 @@ pub(super) fn markdown(report: &Audit) -> String {
     }
     out.push_str("\n## Execution errors\n\n| Error | Rule count |\n| --- | ---: |\n");
     for (error, count) in &report.errors {
-        out.push_str(&format!(
-            "| `{}` | {} |\n",
-            cell(error),
-            count
-        ));
+        out.push_str(&format!("| `{}` | {} |\n", cell(error), count));
     }
     out.push_str("\n## Failed rule examples\n\n| Error | Example paths |\n| --- | --- |\n");
     for (error, examples) in &report.failed_rules {
-        let sample = examples.iter().map(|v| cell(v)).collect::<Vec<_>>().join("<br>");
+        let sample = examples
+            .iter()
+            .map(|v| cell(v))
+            .collect::<Vec<_>>()
+            .join("<br>");
         out.push_str(&format!("| {} | {} |\n", cell(error), sample));
     }
     let mut category_counts: BTreeMap<&str, usize> = BTreeMap::new();
@@ -58,7 +58,15 @@ pub(super) fn markdown(report: &Audit) -> String {
     let mut blocked: Vec<_> = report.blocked_by.iter().collect();
     blocked.sort_by_key(|(_, sources)| std::cmp::Reverse(sources.len()));
     for (category, sources) in blocked {
-        let sole = sources.iter().filter(|source| report.blocked_by.iter().all(|(other, blocked)| other == category || !blocked.contains(source))).count();
+        let sole = sources
+            .iter()
+            .filter(|source| {
+                report
+                    .blocked_by
+                    .iter()
+                    .all(|(other, blocked)| other == category || !blocked.contains(source))
+            })
+            .count();
         out.push_str(&format!("| {category} | {} | {sole} |\n", sources.len()));
     }
     out
@@ -73,4 +81,3 @@ fn cell(raw: &str) -> String {
         .replace('\r', "")
         .replace('\n', "<br>")
 }
-

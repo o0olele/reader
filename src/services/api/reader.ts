@@ -1,6 +1,30 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { Chapter, ReadingProgress } from './types'
 
+export interface Bookmark {
+  book_id: number
+  chapter_id: number
+  offset: number
+  mode: 'scroll' | 'paged'
+}
+
+export function getBookmark(bookId: number, chapterId: number): Promise<Bookmark | null> {
+  return invoke('get_bookmark', { bookId, chapterId })
+}
+
+export function saveBookmark(
+  bookId: number,
+  chapterId: number,
+  offset: number,
+  mode: 'scroll' | 'paged',
+): Promise<void> {
+  return invoke('save_bookmark', { bookId, chapterId, offset, mode })
+}
+
+export function deleteBookmark(bookId: number, chapterId: number): Promise<void> {
+  return invoke('delete_bookmark', { bookId, chapterId })
+}
+
 export function listChapters(bookId: number): Promise<Chapter[]> {
   return invoke<Chapter[]>('list_chapters', { bookId })
 }

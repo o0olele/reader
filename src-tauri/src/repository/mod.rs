@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub mod book;
+pub mod bookmark;
 pub mod bookshelf;
 pub mod chapter;
 pub mod progress;

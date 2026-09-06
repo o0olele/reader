@@ -421,11 +421,32 @@ mod tests {
     fn chooses_json_mode_from_content_and_respects_explicit_css() {
         let input = r#"{"data":[{"title":"one"},{"title":"two"}],"score":9}"#;
         let mut context = RuleContext::default();
-        assert_eq!(evaluate("data[*].title", input, Extraction::Values, &mut context).unwrap(), vec!["one", "two"]);
+        assert_eq!(
+            evaluate("data[*].title", input, Extraction::Values, &mut context).unwrap(),
+            vec!["one", "two"]
+        );
         for css in ["@CSS:data[*].title", "@@data[*].title"] {
             assert!(evaluate(css, input, Extraction::Values, &mut context).is_err());
         }
-        assert_eq!(evaluate("@Json:data[*].title", input, Extraction::Nodes, &mut context).unwrap(), vec!["one", "two"]);
-        assert_eq!(evaluate("div@text", "<div>html</div>", Extraction::Values, &mut context).unwrap(), vec!["html"]);
+        assert_eq!(
+            evaluate(
+                "@Json:data[*].title",
+                input,
+                Extraction::Nodes,
+                &mut context
+            )
+            .unwrap(),
+            vec!["one", "two"]
+        );
+        assert_eq!(
+            evaluate(
+                "div@text",
+                "<div>html</div>",
+                Extraction::Values,
+                &mut context
+            )
+            .unwrap(),
+            vec!["html"]
+        );
     }
 }

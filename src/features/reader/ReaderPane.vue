@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Chapter } from '../../services/api'
+import { useBookmark } from './useBookmark'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -23,8 +24,18 @@ const emit = defineEmits<{
 
 const contentRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
-const bookmarked = ref(false)
-const bookmarkOffset = ref(0)
+const {
+  bookmark,
+  busy: bookmarkBusy,
+  error: bookmarkError,
+  toggleBookmark,
+  jumpToBookmark,
+} = useBookmark(
+  () => [props.book?.id, props.selectedChapter?.id],
+  () => props.readerMode,
+  contentRef,
+  (mode) => emit('readerMode', mode),
+)
 const scrollTop = ref(0)
 const viewportHeight = ref(640)
 const estimatedParagraphHeight = computed(() => Math.max(32, props.fontSize * props.lineHeight * 1.8))
@@ -98,58 +109,19 @@ function onKeydown(event: KeyboardEvent) {
     turnPage(-1)
   }
 }
-function bookmarkStorageKey() {
-  return props.book?.id && props.selectedChapter?.id
-    ? `reader-bookmark:${props.book.id}:${props.selectedChapter.id}`
-    : ''
-}
-function loadBookmark() {
-  const key = bookmarkStorageKey()
-  const value = key ? localStorage.getItem(key) : null
-  bookmarked.value = Boolean(value)
-  bookmarkOffset.value = 0
-  if (!value) return
-  try {
-    bookmarkOffset.value = Number(JSON.parse(value).offset ?? 0)
-  } catch {
-    // Backward-compatible with the original boolean bookmark marker.
-  }
-}
-function toggleBookmark() {
-  const key = bookmarkStorageKey()
-  if (!key) return
-  bookmarked.value = !bookmarked.value
-  if (bookmarked.value) {
-    bookmarkOffset.value =
-      props.readerMode === 'paged' ? (contentRef.value?.scrollLeft ?? 0) : (contentRef.value?.scrollTop ?? 0)
-    localStorage.setItem(key, JSON.stringify({ offset: Math.round(bookmarkOffset.value) }))
-  } else localStorage.removeItem(key)
-}
 onMounted(() => emit('readerContent', contentRef.value))
 watch(contentRef, (element) => emit('readerContent', element))
 watch(
   () => props.selectedChapter?.id,
   () => {
     scrollTop.value = 0
-    loadBookmark()
     void nextTick(() => {
       updateViewport()
       if (!contentRef.value) return
       contentRef.value.scrollTop = 0
       contentRef.value.scrollLeft = 0
-      if (bookmarkOffset.value) {
-        if (props.readerMode === 'paged') contentRef.value.scrollLeft = bookmarkOffset.value
-        else contentRef.value.scrollTop = bookmarkOffset.value
-      }
     })
   },
-)
-watch(
-  () => [props.book?.id, props.selectedChapter?.id],
-  () => {
-    loadBookmark()
-  },
-  { immediate: true },
 )
 watch(searchMatches, (matches) => {
   const index = matches[0]
@@ -205,11 +177,20 @@ onBeforeUnmount(() => {
         <div class="reader-tools">
           <input v-model="searchQuery" type="search" placeholder="搜索本章" aria-label="搜索本章" />
           <span v-if="searchQuery.trim()" class="reader-search-count">{{ searchMatches.length }} 处</span>
-          <button type="button" :aria-pressed="bookmarked" @click="toggleBookmark">
-            {{ bookmarked ? '已书签' : '书签' }}
+          <button
+            type="button"
+            :aria-pressed="Boolean(bookmark)"
+            :disabled="bookmarkBusy || loading"
+            @click="toggleBookmark"
+          >
+            {{ bookmark ? '移除书签' : '添加书签' }}
           </button>
         </div>
       </div>
+      <p v-if="bookmarkError" role="alert">{{ bookmarkError }}</p>
+      <button v-if="bookmark" type="button" :disabled="bookmarkBusy || loading" @click="jumpToBookmark">
+        跳到书签
+      </button>
       <h2 class="reader-title">{{ selectedChapter.title }}</h2>
       <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
       <p v-if="loading" class="reader-loading">正在获取正文...</p>

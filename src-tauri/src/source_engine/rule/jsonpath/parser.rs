@@ -15,7 +15,11 @@ pub(super) fn parse_path(path: &str) -> Result<Vec<Token>, RuleExecutionError> {
     let path = if path.starts_with('$') {
         path
     } else {
-        normalized = if path.starts_with('[') { format!("${path}") } else { format!("$.{path}") };
+        normalized = if path.starts_with('[') {
+            format!("${path}")
+        } else {
+            format!("$.{path}")
+        };
         normalized.as_str()
     };
     let mut out = Vec::new();
@@ -73,7 +77,11 @@ pub(super) fn parse_path(path: &str) -> Result<Vec<Token>, RuleExecutionError> {
             while i < path.len() && path.as_bytes()[i] != b'.' && path.as_bytes()[i] != b'[' {
                 i += 1;
             }
-            if s == i || path[s..i].chars().any(|c| !(c.is_alphanumeric() || c == '_' || c == '-')) {
+            if s == i
+                || path[s..i]
+                    .chars()
+                    .any(|c| !(c.is_alphanumeric() || c == '_' || c == '-'))
+            {
                 return Err(invalid(format!("unexpected character at {i}")));
             }
             out.push(Token::Key(path[s..i].to_owned()));

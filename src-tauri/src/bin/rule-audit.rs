@@ -5,18 +5,18 @@
 //! deterministic dummy document; it never performs network requests.
 
 use reader_desktop_lib::source_engine::rule::{evaluate, Extraction, RuleContext};
+#[path = "rule_audit/dummy.rs"]
+mod dummy;
 #[path = "rule_audit/input.rs"]
 mod input;
 #[path = "rule_audit/report.rs"]
 mod report;
-#[path = "rule_audit/dummy.rs"]
-mod dummy;
 #[cfg(test)]
 #[path = "rule_audit/tests.rs"]
 mod tests;
 use input::{error_category, is_metadata_url, source_is_json, source_rules, TOKENS};
-use report::markdown;
 use regex::Regex;
+use report::markdown;
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -84,9 +84,7 @@ fn run(input: &str) -> Result<Audit, String> {
             }
             // URL templates, headers and JS libraries are metadata rather than
             // evaluator rules; only actual rule fields are dry-run here.
-            if path.starts_with("rule")
-                && !is_metadata_url(&path, &raw)
-            {
+            if path.starts_with("rule") && !is_metadata_url(&path, &raw) {
                 report.executed += 1;
                 let dummy_input = dummy::input_for(&raw, json_source);
                 if let Err(error) = evaluate(

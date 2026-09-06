@@ -145,4 +145,3 @@ pub(super) fn is_metadata_url(path: &str, raw: &str) -> bool {
         && !raw.contains("@json:")
         && !raw.contains("@xpath:")
 }
-

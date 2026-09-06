@@ -8,7 +8,10 @@ pub fn split_rule(raw: &str) -> Result<RuleAlternatives, RuleParseError> {
     split_rule_for_input(raw, false)
 }
 
-pub(super) fn split_rule_for_input(raw: &str, json_input: bool) -> Result<RuleAlternatives, RuleParseError> {
+pub(super) fn split_rule_for_input(
+    raw: &str,
+    json_input: bool,
+) -> Result<RuleAlternatives, RuleParseError> {
     if raw.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -174,7 +177,8 @@ fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
             RuleMode::Regex,
             candidate.strip_prefix(':').unwrap_or(candidate),
         )
-    } else if candidate.starts_with("$.") || candidate.starts_with("$[")
+    } else if candidate.starts_with("$.")
+        || candidate.starts_with("$[")
         || (json_input && looks_like_legacy_json_path(candidate))
     {
         (RuleMode::Json, candidate)
@@ -187,10 +191,15 @@ fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
 
 fn looks_like_legacy_json_path(value: &str) -> bool {
     let value = value.trim();
-    !value.is_empty() && !value.contains("{{") && !value.contains('@')
-        && !value.contains(' ') && !value.contains(':')
+    !value.is_empty()
+        && !value.contains("{{")
+        && !value.contains('@')
+        && !value.contains(' ')
+        && !value.contains(':')
         && (value.contains("[*]") || value.contains("[-") || value.split('.').count() >= 2)
-        && value.chars().all(|c| c.is_alphanumeric() || ".[]*_-'\"".contains(c))
+        && value
+            .chars()
+            .all(|c| c.is_alphanumeric() || ".[]*_-'\"".contains(c))
 }
 
 fn find_tail_js(raw: &str, from: usize) -> Option<usize> {

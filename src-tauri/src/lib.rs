@@ -42,6 +42,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             health_check,
+            command_api::bookmark::get_bookmark_cmd,
+            command_api::bookmark::save_bookmark_cmd,
+            command_api::bookmark::delete_bookmark_cmd,
             command_api::book::import_txt_book_cmd,
             command_api::book::import_epub_book_cmd,
             command_api::book::list_books_cmd,

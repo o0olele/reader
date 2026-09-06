@@ -368,14 +368,18 @@ mod tests {
 
     #[test]
     fn descendant_axis_preserves_the_first_selector_character() {
-        let html = "<div id='bookcon'><section><a href='/one'>one</a><strong>two</strong></section></div>";
+        let html =
+            "<div id='bookcon'><section><a href='/one'>one</a><strong>two</strong></section></div>";
         for (path, expected) in [
             ("//*[@id='bookcon']//a/text()", vec!["one"]),
             ("//*[@id='bookcon']//strong/text()", vec!["two"]),
             ("//*[@id='bookcon']//*[@href]/@href", vec!["/one"]),
         ] {
             let rule = xpath_rule(path);
-            assert_eq!(execute_xpath(&rule, html, Extraction::Values).unwrap(), expected);
+            assert_eq!(
+                execute_xpath(&rule, html, Extraction::Values).unwrap(),
+                expected
+            );
         }
     }
 }
