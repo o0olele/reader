@@ -8,6 +8,7 @@ pub mod bookmark;
 pub mod bookshelf;
 pub mod explore;
 pub mod reader;
+pub mod replace_rule;
 pub mod search;
 pub mod settings;
 pub mod source;

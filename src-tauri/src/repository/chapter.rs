@@ -11,6 +11,11 @@ impl SqliteChapterRepository {
         Self { pool }
     }
 
+    pub async fn get(&self, id: i64) -> Result<Option<Chapter>, AppError> {
+        sqlx::query_as("SELECT c.id, c.book_id, c.title, c.number, COALESCE(cc.content, c.content) AS content, c.remote_url FROM chapters c LEFT JOIN chapter_contents cc ON cc.chapter_id = c.id WHERE c.id = ?")
+            .bind(id).fetch_optional(&self.pool).await.map_err(AppError::database)
+    }
+
     pub async fn cached_content(&self, chapter_id: i64) -> Result<Option<String>, AppError> {
         sqlx::query_scalar("SELECT content FROM chapter_contents WHERE chapter_id = ?")
             .bind(chapter_id)

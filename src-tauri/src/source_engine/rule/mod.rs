@@ -9,6 +9,7 @@ mod jsonpath;
 mod jsoup;
 mod model;
 mod position;
+pub(crate) mod regex_compat;
 mod scanner;
 mod step;
 mod xpath;

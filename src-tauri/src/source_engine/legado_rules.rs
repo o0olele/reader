@@ -39,6 +39,7 @@ pub struct LegadoSearchRule {
     pub kind: Option<String>,
     #[serde(alias = "lastChapter", alias = "latestChapter")]
     pub last_chapter: Option<String>,
+    #[serde(alias = "wordCount")]
     pub word_count: Option<String>,
 }
 
@@ -76,6 +77,8 @@ pub struct LegadoContentRule {
     pub content: Option<String>,
     #[serde(alias = "nextContentUrl", alias = "nextUrl", alias = "next")]
     pub next_content_url: Option<String>,
+    #[serde(alias = "replaceRegex")]
+    pub replace_regex: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -94,6 +97,7 @@ pub struct LegadoExploreRule {
     pub kind: Option<String>,
     #[serde(alias = "lastChapter", alias = "latestChapter")]
     pub last_chapter: Option<String>,
+    #[serde(alias = "wordCount")]
     pub word_count: Option<String>,
 }
 

@@ -15,6 +15,22 @@ pub(super) fn install<'js>(
 ) -> Result<(), AppError> {
     let book = Object::new(ctx.clone()).map_err(js_error)?;
     let chapter = Object::new(ctx.clone()).map_err(js_error)?;
+    if let Ok(values) = variables.lock() {
+        for (prefix, object) in [("book.", &book), ("chapter.", &chapter)] {
+            for (key, value) in values
+                .iter()
+                .filter_map(|(key, value)| key.strip_prefix(prefix).map(|key| (key, value)))
+            {
+                if matches!(key, "index" | "number") {
+                    if let Ok(number) = value.parse::<i64>() {
+                        object.set(key, number).map_err(js_error)?;
+                        continue;
+                    }
+                }
+                object.set(key, value.clone()).map_err(js_error)?;
+            }
+        }
+    }
     for object in [&book, &chapter] {
         let get_values = Arc::clone(variables);
         object

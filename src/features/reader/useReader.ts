@@ -1,7 +1,7 @@
 /* global HTMLElement, localStorage, setTimeout, clearTimeout, setInterval, clearInterval, document */
 import { nextTick, reactive, ref, watch } from 'vue'
 import {
-  fetchOnlineContent,
+  readChapter,
   addReadingTime,
   getReadingRecord,
   fetchBookInfo,
@@ -37,6 +37,7 @@ export function useReader(report: (cause: unknown) => void) {
   let saveTimer: ReturnType<typeof setTimeout> | undefined
   let readingTimer: ReturnType<typeof setInterval> | undefined
   let readingTickAt = 0
+  let chapterRequest = 0
 
   async function flushReadingTime() {
     const book = selectedBook.value
@@ -159,15 +160,16 @@ export function useReader(report: (cause: unknown) => void) {
   }
 
   async function loadChapterContent(chapter?: Chapter) {
-    const book = selectedBook.value
-    if (!chapter || chapter.content || !book?.source_id || !chapter.remote_url) return
+    if (!chapter) return
+    const request = ++chapterRequest
     loadingChapter.value = true
     try {
-      chapter.content = await fetchOnlineContent(book.source_id, chapter.remote_url, chapter.id)
+      const processed = await readChapter(chapter.id)
+      if (request === chapterRequest && selectedChapter.value?.id === chapter.id) selectedChapter.value = processed
     } catch (cause) {
-      report(cause)
+      if (request === chapterRequest) report(cause)
     } finally {
-      loadingChapter.value = false
+      if (request === chapterRequest) loadingChapter.value = false
     }
   }
 
@@ -190,6 +192,8 @@ export function useReader(report: (cause: unknown) => void) {
   }
 
   async function closeBook() {
+    chapterRequest++
+    loadingChapter.value = false
     scheduleProgressSave()
     await stopReadingTimer()
     // Let the debounced write land before the refs it reads are cleared.

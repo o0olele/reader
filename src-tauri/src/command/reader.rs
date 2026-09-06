@@ -6,6 +6,16 @@ use crate::{
 };
 use tauri::{AppHandle, Emitter, State};
 
+#[tauri::command(rename = "read_chapter")]
+pub async fn read_chapter_cmd(
+    state: State<'_, AppState>,
+    chapter_id: i64,
+) -> Result<Chapter, AppError> {
+    ReaderService::new(state.database()?)
+        .read_chapter(chapter_id)
+        .await
+}
+
 #[tauri::command(rename = "list_chapters")]
 pub async fn list_chapters_cmd(
     state: State<'_, AppState>,

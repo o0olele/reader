@@ -24,6 +24,11 @@ pub fn execute_rule(
     input: &str,
     want: Extraction,
 ) -> Result<Vec<String>, RuleExecutionError> {
+    if rule.rule.is_empty() && rule.replace.is_some() {
+        let mut values = vec![input.to_owned()];
+        apply_postprocess(rule, &mut values);
+        return Ok(values);
+    }
     match rule.mode {
         RuleMode::Default => execute_jsoup(rule, input, want),
         RuleMode::Regex => execute_regex(rule, input),

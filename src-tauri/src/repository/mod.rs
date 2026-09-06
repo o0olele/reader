@@ -15,6 +15,7 @@ pub mod bookshelf;
 pub mod chapter;
 pub mod progress;
 pub mod reading_record;
+pub mod replace_rule;
 pub mod source;
 
 pub trait BookRepository: Send + Sync {

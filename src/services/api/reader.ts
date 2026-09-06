@@ -29,6 +29,10 @@ export function listChapters(bookId: number): Promise<Chapter[]> {
   return invoke<Chapter[]>('list_chapters', { bookId })
 }
 
+export function readChapter(chapterId: number): Promise<Chapter> {
+  return invoke('read_chapter', { chapterId })
+}
+
 /** Re-fetches the catalog from the book's source and returns the merged list. */
 export function refreshCatalog(bookId: number): Promise<Chapter[]> {
   return invoke<Chapter[]>('refresh_catalog', { bookId })

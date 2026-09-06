@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { inject } from 'vue'
 import { settingsKey } from '../../app/shellKeys'
+import ReplaceRulesPanel from './ReplaceRulesPanel.vue'
 
 const settings = inject(settingsKey)!
 </script>
 
 <template>
   <div class="search-results">
+    <ReplaceRulesPanel />
     <section class="source-editor">
       <h2>网络代理</h2>
       <p>所有书源请求默认使用此代理，书源单独配置的代理会覆盖这里的设置。</p>
