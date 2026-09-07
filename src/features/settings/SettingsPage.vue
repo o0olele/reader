@@ -10,6 +10,15 @@ const settings = inject(settingsKey)!
   <div class="search-results">
     <ReplaceRulesPanel />
     <section class="source-editor">
+      <h2>备份与恢复</h2>
+      <p>将书架、阅读进度、书源、净化规则和下载任务导出为 JSON；恢复时会覆盖当前本地数据。备份包含已保存的书源认证信息，请勿外传。</p>
+      <div class="source-import">
+        <button type="button" class="primary" @click="settings.backup">导出备份</button>
+        <button type="button" class="secondary" @click="settings.restore">恢复备份</button>
+      </div>
+    </section>
+
+    <section class="source-editor">
       <h2>网络代理</h2>
       <p>所有书源请求默认使用此代理，书源单独配置的代理会覆盖这里的设置。</p>
       <form class="source-import" @submit.prevent="settings.save()">

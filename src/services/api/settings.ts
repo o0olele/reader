@@ -25,3 +25,11 @@ export function saveAppSettings(proxyUrl: string, userAgent = ''): Promise<AppSe
 export function reportWebviewUserAgent(): Promise<void> {
   return invoke<void>('report_webview_user_agent', { userAgent: window.navigator.userAgent })
 }
+
+export function exportBackup(path: string): Promise<{ rows: number; path: string }> {
+  return invoke('export_backup', { path })
+}
+
+export function restoreBackup(path: string): Promise<{ rows: number; path: string }> {
+  return invoke('restore_backup', { path })
+}

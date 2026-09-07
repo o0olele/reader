@@ -1,5 +1,6 @@
 import { reactive, ref } from 'vue'
-import { getAppSettings, saveAppSettings } from '../../services/api'
+import { exportBackup, getAppSettings, restoreBackup, saveAppSettings } from '../../services/api'
+import { open, save as saveDialog } from '@tauri-apps/plugin-dialog'
 
 /** Owns application settings: the global proxy and the User-Agent override. */
 export function useSettings(report: (cause: unknown) => void, notify: (message: string) => void) {
@@ -35,6 +36,30 @@ export function useSettings(report: (cause: unknown) => void, notify: (message: 
     }
   }
 
+  async function backup() {
+    const path = await saveDialog({ defaultPath: 'reader-desktop-backup.json', filters: [{ name: 'JSON backup', extensions: ['json'] }] })
+    if (!path) return
+    try {
+      const result = await exportBackup(path)
+      notify(`备份已保存（${result.rows} 条记录）`)
+    } catch (cause) {
+      report(cause)
+    }
+  }
+
+  async function restore() {
+    const path = await open({ multiple: false, directory: false, filters: [{ name: 'JSON backup', extensions: ['json'] }] })
+    if (!path || Array.isArray(path)) return
+    if (!window.confirm('恢复备份会覆盖当前本地数据，确定继续吗？')) return
+    try {
+      const result = await restoreBackup(path)
+      notify(`备份已恢复（${result.rows} 条记录），正在刷新…`)
+      window.setTimeout(() => window.location.reload(), 250)
+    } catch (cause) {
+      report(cause)
+    }
+  }
+
   return reactive({
     proxyUrl,
     userAgent,
@@ -42,6 +67,8 @@ export function useSettings(report: (cause: unknown) => void, notify: (message: 
     saving,
     refresh,
     save,
+    backup,
+    restore,
     clear: () => (proxyUrl.value = ''),
   })
 }

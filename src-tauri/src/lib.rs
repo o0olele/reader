@@ -70,6 +70,8 @@ pub fn run() {
             command_api::download::set_cache_quota_cmd,
             command_api::download::clear_chapter_cache_cmd,
             command_api::book::delete_book_cmd,
+            command_api::backup::export_backup_cmd,
+            command_api::backup::restore_backup_cmd,
             command_api::bookshelf::list_groups_cmd,
             command_api::bookshelf::create_group_cmd,
             command_api::bookshelf::move_book_to_group_cmd,

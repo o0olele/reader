@@ -1,5 +1,6 @@
 //! Application workflow boundary.
 
+pub mod backup_service;
 pub mod book_service;
 pub mod bookshelf_service;
 pub mod cache_service;

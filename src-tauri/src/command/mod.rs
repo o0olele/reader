@@ -3,6 +3,7 @@
 //! Business logic is being migrated out of `command.rs`; these adapters keep
 //! the public IPC contract structured while the legacy implementation moves.
 
+pub mod backup;
 pub mod book;
 pub mod bookmark;
 pub mod bookshelf;
