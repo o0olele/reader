@@ -14,3 +14,4 @@ src-tauri/spikes/**/target/
 src-tauri/tests/corpus/*
 !src-tauri/tests/corpus/README.md
 .scratch/
+src-tauri/target-ci/

@@ -119,12 +119,14 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
         // JSONPath/private expression that cannot be compiled by scraper (for
         // example `$.list` or `tr!0`). If the engine produced no items, do not
         // turn that expected no-match into a misleading CSS parse failure.
-        Err(error) if !source.raw_rules.is_empty() && error.starts_with("搜索结果选择器无效:") =>
+        Err(error)
+            if !source.raw_rules.is_empty()
+                && error.to_string().starts_with("parse error: 搜索结果选择器无效:") =>
         {
-            tracing::debug!(target: "source", source = %source.name, error, "ignoring invalid CSS projection after raw rule no-match");
+            tracing::debug!(target: "source", source = %source.name, %error, "ignoring invalid CSS projection after raw rule no-match");
             Ok(Vec::new())
         }
-        Err(error) => Err(AppError::parse(error)),
+        Err(error) => Err(error),
     }
 }
 
@@ -237,7 +239,7 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppE
             return Ok(info);
         }
     }
-    selector::parse_book_info(source, html).map_err(AppError::parse)
+    selector::parse_book_info(source, html)
 }
 
 type CatalogPage = (Vec<(String, String)>, Option<String>);
@@ -280,7 +282,7 @@ pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage
             ));
         }
     }
-    selector::parse_catalog_page(source, html).map_err(AppError::parse)
+    selector::parse_catalog_page(source, html)
 }
 
 pub fn parse_content_page(
@@ -302,7 +304,7 @@ pub fn parse_content_page(
             }
         }
     }
-    selector::parse_content_page(source, html).map_err(AppError::parse)
+    selector::parse_content_page(source, html)
 }
 
 #[cfg(test)]

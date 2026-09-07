@@ -92,7 +92,7 @@ pub(super) fn nested_rule_values(
     want: Extraction,
     variables: &Arc<Mutex<HashMap<String, String>>>,
     http: Option<JsHttpContext>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, AppError> {
     let snapshot = variables
         .lock()
         .map(|values| values.clone())
@@ -101,13 +101,15 @@ pub(super) fn nested_rule_values(
     if let Some(http) = http {
         context.with_http(http);
     }
-    let values = evaluate(rule, input, want, &mut context).map_err(|error| error.to_string())?;
+    let values = evaluate(rule, input, want, &mut context).map_err(|error| {
+        AppError::Source(format!("nested rule `{rule}` is not executable: {error}"))
+    })?;
     if let Ok(mut shared) = variables.lock() {
         shared.extend(context.snapshot());
     }
     Ok(values)
 }
 
-pub(super) fn rule_js_error(error: String) -> rquickjs::Error {
-    rquickjs::Error::new_from_js_message("Rule", "String", error)
+pub(super) fn rule_js_error(error: AppError) -> rquickjs::Error {
+    rquickjs::Error::new_from_js_message("Rule", "String", error.to_string())
 }

@@ -2,7 +2,7 @@ mod app;
 #[path = "command/mod.rs"]
 mod command_api;
 pub mod domain;
-mod error;
+pub mod error;
 pub mod infrastructure;
 mod repository;
 mod service;
@@ -77,6 +77,7 @@ pub fn run() {
             command_api::bookshelf::move_book_to_group_cmd,
             command_api::source::debug_source_stage_cmd,
             command_api::source::update_book_source_rules_cmd,
+            command_api::source::export_source_fixture_cmd,
             command_api::source::list_book_sources_cmd,
             command_api::source::set_book_source_enabled_cmd,
             command_api::source::update_book_source_management_cmd,

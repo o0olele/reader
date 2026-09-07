@@ -5,6 +5,7 @@
 //! [`SourceImport::raw_rules`] and are what the rule engine actually executes.
 
 use crate::domain::source::{CatalogRule, InfoRule, RawSourceRules, SearchRule, SourceImport};
+use crate::error::AppError;
 
 fn rule(value: Option<&serde_json::Value>, keys: &[&str]) -> Option<String> {
     value
@@ -251,13 +252,15 @@ fn attr(rule: String, name: &str) -> String {
     }
 }
 
-pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(input).map_err(|error| format!("书源 JSON 格式无效: {error}"))?;
+pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, AppError> {
+    let value: serde_json::Value = serde_json::from_str(input)
+        .map_err(|error| AppError::InvalidArgument(format!("书源 JSON 格式无效: {error}")))?;
     let values = value.as_array().cloned().unwrap_or_else(|| vec![value]);
     let mut sources = Vec::new();
     for value in values {
-        let object = value.as_object().ok_or("书源必须是 JSON 对象")?;
+        let object = value
+            .as_object()
+            .ok_or_else(|| AppError::InvalidArgument("书源必须是 JSON 对象".into()))?;
         let name = field(object, "name", "bookSourceName").unwrap_or_default();
         let base_url = field(object, "base_url", "bookSourceUrl").unwrap_or_default();
         let search_url = field(object, "search_url", "searchUrl")
@@ -384,7 +387,7 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
         });
     }
     if sources.is_empty() {
-        Err("JSON 中没有可导入的书源".into())
+        Err(AppError::InvalidArgument("JSON 中没有可导入的书源".into()))
     } else {
         Ok(sources)
     }

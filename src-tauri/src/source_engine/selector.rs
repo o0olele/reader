@@ -1,6 +1,7 @@
 //! CSS selector execution for the currently supported source-rule subset.
 
 use crate::domain::source::{BookInfo, BookSearchResult, BookSource};
+use crate::error::AppError;
 use crate::source_engine::{import::normalize_rule, url::absolutize};
 use scraper::{ElementRef, Html, Selector};
 
@@ -48,11 +49,11 @@ fn first_by_rule(document: &Html, rule: &str) -> Option<String> {
     }
 }
 
-pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, String)>, String> {
+pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, String)>, AppError> {
     let document = Html::parse_document(html);
     let item_rule = normalize_rule(&source.catalog_rule.item);
     let items =
-        Selector::parse(&item_rule).map_err(|error| format!("目录结果选择器无效: {error}"))?;
+        Selector::parse(&item_rule).map_err(|error| AppError::parse(format!("目录结果选择器无效: {error}")))?;
     Ok(document
         .select(&items)
         .filter_map(|item| {
@@ -66,7 +67,7 @@ pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, Str
 
 type CatalogPage = (Vec<(String, String)>, Option<String>);
 
-pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage, String> {
+pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage, AppError> {
     let catalog = parse_catalog(source, html)?;
     let next = source.next_toc_url_selector.as_deref().and_then(|rule| {
         let document = Html::parse_document(html);
@@ -75,15 +76,15 @@ pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage
     Ok((catalog, next))
 }
 
-pub fn parse_content(source: &BookSource, html: &str) -> Result<String, String> {
+pub fn parse_content(source: &BookSource, html: &str) -> Result<String, AppError> {
     let document = Html::parse_document(html);
     let content_rule = normalize_rule(&source.content_selector);
     let selector =
-        Selector::parse(&content_rule).map_err(|error| format!("正文选择器无效: {error}"))?;
+        Selector::parse(&content_rule).map_err(|error| AppError::parse(format!("正文选择器无效: {error}")))?;
     let content = document
         .select(&selector)
         .next()
-        .ok_or("页面中没有找到正文")?
+        .ok_or_else(|| AppError::parse("页面中没有找到正文"))?
         .text()
         .map(str::trim)
         .filter(|line| !line.is_empty())
@@ -91,13 +92,13 @@ pub fn parse_content(source: &BookSource, html: &str) -> Result<String, String> 
         .join("\n");
     (!content.is_empty())
         .then_some(content)
-        .ok_or_else(|| "页面正文为空".into())
+        .ok_or_else(|| AppError::parse("页面正文为空"))
 }
 
 pub fn parse_content_page(
     source: &BookSource,
     html: &str,
-) -> Result<(String, Option<String>), String> {
+) -> Result<(String, Option<String>), AppError> {
     let content = parse_content(source, html)?;
     let next = source
         .next_content_url_selector
@@ -109,7 +110,7 @@ pub fn parse_content_page(
     Ok((content, next))
 }
 
-pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, String> {
+pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppError> {
     let document = Html::parse_document(html);
     let read = |rule: Option<&String>| -> Option<String> {
         let rule = rule?;
@@ -128,7 +129,7 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, Stri
     })
 }
 
-pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, String> {
+pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
     let document = Html::parse_document(html);
     // The flat projection is only a compatibility fallback.  It still needs
     // to understand the most common legado item spellings, otherwise a source
@@ -182,7 +183,7 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
         }
     }
     match invalid_selector {
-        Some(error) => Err(format!("搜索结果选择器无效: {error}")),
+        Some(error) => Err(AppError::parse(format!("搜索结果选择器无效: {error}"))),
         None => Ok(Vec::new()),
     }
 }

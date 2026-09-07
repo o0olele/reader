@@ -104,17 +104,17 @@ pub(super) fn blocking_http_request_with_options(
 }
 
 pub(super) fn build_js_http_session(context: JsHttpContext) -> Result<JsHttpSession, AppError> {
-    static CLIENT: OnceLock<Result<reqwest::blocking::Client, String>> = OnceLock::new();
+    static CLIENT: OnceLock<Result<reqwest::blocking::Client, AppError>> = OnceLock::new();
     let client = CLIENT
         .get_or_init(|| {
             reqwest::blocking::Client::builder()
                 .cookie_store(true)
                 .timeout(Duration::from_secs(15))
                 .build()
-                .map_err(|error| error.to_string())
+                .map_err(AppError::network)
         })
         .as_ref()
-        .map_err(|error| AppError::Network(error.clone()))?
+        .map_err(|error| AppError::Network(error.to_string()))?
         .clone();
     Ok(JsHttpSession {
         client,

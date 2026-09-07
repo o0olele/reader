@@ -50,6 +50,21 @@ pub async fn update_book_source_rules_cmd(
         .await
 }
 
+#[tauri::command(rename = "export_source_fixture")]
+pub async fn export_source_fixture_cmd(
+    state: State<'_, AppState>,
+    source_id: i64,
+    html: String,
+    out_dir: String,
+) -> Result<String, AppError> {
+    if out_dir.trim().is_empty() {
+        return Err(AppError::InvalidArgument("fixture 目录不能为空".into()));
+    }
+    crate::service::source_debug_service::SourceDebugService::new(state.database()?)
+        .export_fixture(source_id, &html, std::path::Path::new(&out_dir))
+        .await
+}
+
 #[tauri::command(rename = "list_book_sources")]
 pub async fn list_book_sources_cmd(
     state: State<'_, AppState>,

@@ -497,3 +497,21 @@ async fn request_options_and_response_metadata_are_available_to_scripts() {
     server.join().unwrap();
     assert_eq!(value, JsValue::String("ok|201|runtime|text/plain".into()));
 }
+
+#[tokio::test]
+async fn terminates_infinite_loop_scripts_within_timeout() {
+    let runtime = QuickJsRuntime::new(Duration::from_millis(300), 16 * 1024 * 1024);
+    let started = std::time::Instant::now();
+    let error = runtime
+        .execute("while (true) {}", JsContext::default())
+        .await
+        .unwrap_err();
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "infinite loop should be interrupted by the QuickJS interrupt handler"
+    );
+    assert!(
+        error.to_string().contains("interrupted") || error.to_string().contains("超时"),
+        "{error}"
+    );
+}
