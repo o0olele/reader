@@ -450,7 +450,7 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 验收：
 
 - [ ] 100 万字单章 TXT 打开 < 1s，滚动无掉帧
-- [ ] 分页模式下改字号 → 重排后进度不丢
+- [x] 分页模式下改字号 → 重排后进度不丢（2026-09-07：段落锚点 + 段内比例持久化，兼容旧像素偏移）
 - [x] 重启后书签仍在
 - [ ] 用本项目读完一本真实在线书
 
@@ -458,10 +458,14 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 
 ## 6. P4 · 下载 / 缓存 / 导出（2 周）
 
+2026-09-07 已开始落地下载闭环：`download_tasks` 持久化任务表、启动/暂停/继续/取消 IPC、四并发调度、失败重试、正文缓存复用、应用启动续跑，以及下载页 UI。导出 TXT/EPUB 与磁盘配额仍待后续补齐。
+
 `scheduler/` 目前不存在，本步引入：`DownloadManager`、任务状态机落库、三级缓存。追加：
 
 - 对位 `CacheBook.kt` 的**双层限流**：全局并发上限 + 按书源 `concurrentRate`（复用 `source_engine/url/rate_limit.rs`）
 - 导出 TXT / EPUB，对位 `ExportBookService.kt`
+
+已完成其中的任务持久化、调度、暂停/继续/取消、失败重试与正文缓存复用；限流目前为全局四并发，按书源 `concurrentRate` 和导出仍待补齐。
 
 ---
 

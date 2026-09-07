@@ -1,4 +1,5 @@
 export * from './book'
+export * from './download'
 export * from './bookshelf'
 export * from './reader'
 export * from './search'

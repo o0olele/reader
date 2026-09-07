@@ -27,6 +27,7 @@ import {
 } from 'lucide-vue-next'
 import type { LucideIcon } from 'lucide-vue-next'
 import BookshelfPage from '../features/bookshelf/BookshelfPage.vue'
+import DownloadPage from '../features/download/DownloadPage.vue'
 import LibraryTabPage from '../features/bookshelf/LibraryTabPage.vue'
 import ReaderPane from '../features/reader/ReaderPane.vue'
 import ExplorePage from '../features/search/ExplorePage.vue'
@@ -414,8 +415,10 @@ const resetReaderSettings = () => {
             accept=".txt,.epub,text/plain,application/epub+zip"
             @change="bookshelf.handleFile" /><SettingsPage v-if="view === 'settings'" /><SourceDebugPage
             v-else-if="view === 'sources'" /><SearchPage v-else-if="view === 'search'" /><ExplorePage
-            v-else-if="view === 'explore'" /><LibraryTabPage
-            v-else-if="view === 'downloads' || view === 'rss' || view === 'history' || view === 'bookmarks'"
+            v-else-if="view === 'explore'" /><DownloadPage
+            v-else-if="view === 'downloads'"
+            :books="bookshelf.visibleBooks" /><LibraryTabPage
+            v-else-if="view === 'rss' || view === 'history' || view === 'bookmarks'"
             :kind="view"
             :books="bookshelf.visibleBooks"
             @open="openBookFromShelf" /><BookshelfPage

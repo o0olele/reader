@@ -3,6 +3,7 @@
 pub mod book_service;
 pub mod bookshelf_service;
 pub mod content_processor;
+pub mod download_service;
 pub mod explore_service;
 pub mod reader_service;
 pub mod replace_rule_service;

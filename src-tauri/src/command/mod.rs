@@ -6,6 +6,7 @@
 pub mod book;
 pub mod bookmark;
 pub mod bookshelf;
+pub mod download;
 pub mod explore;
 pub mod reader;
 pub mod replace_rule;

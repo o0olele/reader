@@ -46,8 +46,14 @@ export function getReadingProgress(bookId: number): Promise<ReadingProgress | nu
   return invoke<ReadingProgress | null>('get_reading_progress', { bookId })
 }
 
-export function saveReadingProgress(bookId: number, chapterId: number, offset: number): Promise<void> {
-  return invoke<void>('save_reading_progress', { bookId, chapterId, offset })
+export function saveReadingProgress(
+  bookId: number,
+  chapterId: number,
+  offset: number,
+  anchorIndex?: number,
+  anchorRatio?: number,
+): Promise<void> {
+  return invoke<void>('save_reading_progress', { bookId, chapterId, offset, anchorIndex, anchorRatio })
 }
 
 export function getReadingRecord(bookId: number): Promise<ReadingRecord | null> {

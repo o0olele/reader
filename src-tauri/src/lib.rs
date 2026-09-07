@@ -37,6 +37,11 @@ pub fn run() {
             let db_path = data_dir.join("app.db");
             tauri::async_runtime::block_on(app::bootstrap::initialize_database(&state, &db_path))
                 .map_err(error::AppError::database)?;
+            let pool = state.database()?;
+            tauri::async_runtime::block_on(
+                service::download_service::DownloadService::resume_incomplete(pool),
+            )
+            .map_err(|error| error::AppError::database(error.to_string()))?;
             tracing::info!(target: "database", path = %db_path.display(), "database initialized");
             Ok(())
         })
@@ -55,6 +60,11 @@ pub fn run() {
             command_api::reader::save_reading_progress_cmd,
             command_api::reader::get_reading_record_cmd,
             command_api::reader::add_reading_time_cmd,
+            command_api::download::list_download_tasks_cmd,
+            command_api::download::start_download_cmd,
+            command_api::download::pause_download_cmd,
+            command_api::download::resume_download_cmd,
+            command_api::download::cancel_download_cmd,
             command_api::book::delete_book_cmd,
             command_api::bookshelf::list_groups_cmd,
             command_api::bookshelf::create_group_cmd,

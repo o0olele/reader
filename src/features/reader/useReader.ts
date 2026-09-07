@@ -14,6 +14,7 @@ import {
   type Book,
   type Chapter,
 } from '../../services/api'
+import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
 
 const PROGRESS_DEBOUNCE_MS = 350
 const READING_TIME_TICK_MS = 15_000
@@ -83,6 +84,14 @@ export function useReader(report: (cause: unknown) => void) {
   watch(lineHeight, (value) => localStorage.setItem('reader-line-height', String(value)))
   watch(pageMargin, (value) => localStorage.setItem('reader-page-margin', String(value)))
   watch(readerMode, (value) => localStorage.setItem('reader-mode', value))
+  watch([fontSize, fontFamily, lineHeight, pageMargin], async () => {
+    const element = readerContent.value
+    if (!element || !selectedChapter.value) return
+    const locator = captureReadingLocator(element, readerMode.value)
+    await nextTick()
+    restoreReadingLocator(element, readerMode.value, locator)
+    scheduleProgressSave()
+  })
 
   const isOnline = (book: Book) => book.source_id !== undefined && book.source_id !== null
 
@@ -106,7 +115,12 @@ export function useReader(report: (cause: unknown) => void) {
       await loadChapterContent(selectedChapter.value)
       await nextTick()
       if (readerContent.value && progress && selectedChapter.value?.id === progress.chapter_id) {
-        if (readerMode.value === 'paged') readerContent.value.scrollLeft = progress.offset
+        if (progress.anchor_index >= 0) {
+          restoreReadingLocator(readerContent.value, readerMode.value, {
+            index: progress.anchor_index,
+            ratio: progress.anchor_ratio,
+          })
+        } else if (readerMode.value === 'paged') readerContent.value.scrollLeft = progress.offset
         else readerContent.value.scrollTop = progress.offset
       }
     } catch (cause) {
@@ -186,7 +200,14 @@ export function useReader(report: (cause: unknown) => void) {
     saveTimer = setTimeout(() => {
       if (selectedBook.value && selectedChapter.value && readerContent.value) {
         const offset = readerMode.value === 'paged' ? readerContent.value.scrollLeft : readerContent.value.scrollTop
-        void saveReadingProgress(selectedBook.value.id, selectedChapter.value.id, Math.round(offset))
+        const locator = captureReadingLocator(readerContent.value, readerMode.value)
+        void saveReadingProgress(
+          selectedBook.value.id,
+          selectedChapter.value.id,
+          Math.round(offset),
+          locator.index,
+          locator.ratio,
+        )
       }
     }, PROGRESS_DEBOUNCE_MS)
   }

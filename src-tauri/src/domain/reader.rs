@@ -15,4 +15,6 @@ pub struct ReadingProgress {
     pub book_id: i64,
     pub chapter_id: i64,
     pub offset: i64,
+    pub anchor_index: i64,
+    pub anchor_ratio: f64,
 }

@@ -3,6 +3,7 @@ import type { Chapter } from '../../services/api'
 import { useBookmark } from './useBookmark'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Bookmark, List } from 'lucide-vue-next'
+import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
 
 const props = defineProps<{
   chapters: Chapter[]
@@ -66,25 +67,12 @@ function onScroll() {
 }
 function changeMode(mode: 'scroll' | 'paged') {
   const element = contentRef.value
-  const currentExtent =
-    props.readerMode === 'paged'
-      ? element && element.scrollWidth > element.clientWidth
-        ? element.scrollWidth - element.clientWidth
-        : 0
-      : element && element.scrollHeight > element.clientHeight
-        ? element.scrollHeight - element.clientHeight
-        : 0
-  const ratio = currentExtent
-    ? (props.readerMode === 'paged' ? element!.scrollLeft : element!.scrollTop) / currentExtent
-    : 0
+  const locator = element ? captureReadingLocator(element, props.readerMode) : undefined
   emit('readerMode', mode)
   void nextTick(() => {
-    if (!contentRef.value || !ratio) return
-    if (mode === 'paged') {
-      contentRef.value.scrollLeft = ratio * Math.max(0, contentRef.value.scrollWidth - contentRef.value.clientWidth)
-    } else {
-      contentRef.value.scrollTop = ratio * Math.max(0, contentRef.value.scrollHeight - contentRef.value.clientHeight)
-    }
+    if (!contentRef.value || !locator) return
+    restoreReadingLocator(contentRef.value, mode, locator)
+    emit('scroll')
   })
 }
 function turnPage(direction: number) {
@@ -199,7 +187,12 @@ onBeforeUnmount(() => {
       <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
       <p v-if="loading" class="reader-loading">正在获取正文...</p>
       <template v-else>
-        <p v-for="(paragraph, index) in visibleParagraphs" :key="index" class="reader-paragraph">
+        <p
+          v-for="(paragraph, index) in visibleParagraphs"
+          :key="index"
+          class="reader-paragraph"
+          :data-reader-index="index"
+        >
           {{ paragraph }}
         </p>
       </template>

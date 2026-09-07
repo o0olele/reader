@@ -82,10 +82,17 @@ pub async fn save_reading_progress_cmd(
     book_id: i64,
     chapter_id: i64,
     offset: i64,
+    anchor_index: Option<i64>,
+    anchor_ratio: Option<f64>,
 ) -> Result<(), AppError> {
-    ReaderService::new(state.database()?)
-        .save_progress(book_id, chapter_id, offset)
-        .await
+    let service = ReaderService::new(state.database()?);
+    if let (Some(anchor_index), Some(anchor_ratio)) = (anchor_index, anchor_ratio) {
+        service
+            .save_progress_anchor(book_id, chapter_id, offset, anchor_index, anchor_ratio)
+            .await
+    } else {
+        service.save_progress(book_id, chapter_id, offset).await
+    }
 }
 
 #[tauri::command(rename = "get_reading_record")]

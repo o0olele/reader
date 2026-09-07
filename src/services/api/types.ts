@@ -28,11 +28,26 @@ export interface ReadingProgress {
   book_id: number
   chapter_id: number
   offset: number
+  anchor_index: number
+  anchor_ratio: number
 }
 
 export interface ReadingRecord {
   book_id: number
   duration_seconds: number
+}
+
+export interface DownloadTask {
+  id: number
+  book_id: number
+  book_title: string
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+  total_chapters: number
+  completed_chapters: number
+  retry_count: number
+  error?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface BookshelfGroup {

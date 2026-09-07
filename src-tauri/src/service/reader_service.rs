@@ -88,6 +88,30 @@ impl ReaderService {
                 book_id,
                 chapter_id,
                 offset,
+                anchor_index: 0,
+                anchor_ratio: 0.0,
+            })
+            .await
+    }
+
+    pub async fn save_progress_anchor(
+        &self,
+        book_id: i64,
+        chapter_id: i64,
+        offset: i64,
+        anchor_index: i64,
+        anchor_ratio: f64,
+    ) -> Result<(), AppError> {
+        if offset < 0 || anchor_index < 0 || !(0.0..=1.0).contains(&anchor_ratio) {
+            return Err(AppError::InvalidArgument("阅读位置无效".into()));
+        }
+        self.progress
+            .save(&ReadingProgress {
+                book_id,
+                chapter_id,
+                offset,
+                anchor_index,
+                anchor_ratio,
             })
             .await
     }
@@ -175,5 +199,28 @@ mod tests {
         assert_eq!(chapters.len(), 2);
         assert_eq!(chapters[0].content, "cached body");
         assert_eq!(chapters[0].title, "Updated");
+    }
+
+    #[tokio::test]
+    async fn semantic_progress_anchor_round_trips() {
+        let pool = pool().await;
+        sqlx::query("INSERT INTO books (title, path) VALUES ('Book', 'local')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO chapters (book_id, number, title, content) VALUES (1, 0, 'One', 'body')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let service = ReaderService::new(pool);
+        service
+            .save_progress_anchor(1, 1, 480, 12, 0.375)
+            .await
+            .unwrap();
+        let progress = service.progress(1).await.unwrap().unwrap();
+        assert_eq!(progress.anchor_index, 12);
+        assert!((progress.anchor_ratio - 0.375).abs() < f64::EPSILON);
     }
 }
