@@ -4,6 +4,7 @@ use crate::{
     domain::source::{BookInfo, BookSearchResult, BookSource},
     error::AppError,
     source_engine::{
+        html_text::html_to_text,
         legado_rules::{LegadoRules, LegadoTocRule},
         rule::{Extraction, RuleContext},
         url::absolutize,
@@ -233,8 +234,12 @@ pub fn parse_content_page(
         if let Some(rule) = rules.content.as_deref() {
             let mut context = RuleContext::default();
             context.with_http(source.http_context());
-            let content =
+            let raw =
                 values_in(source, rule, html, Extraction::Values, &mut context)?.join("\n");
+            // Legado runs HtmlFormatter.formatKeepImg on the extracted content
+            // before any further processing; without it, `@html`/`@all` rules
+            // leak markup like <div>, <br> and &nbsp; into the reader.
+            let content = html_to_text(&raw);
             if !content.trim().is_empty() {
                 return Ok((
                     content,
