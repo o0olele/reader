@@ -44,6 +44,9 @@ const finalText = computed(() =>
       >
         {{ debug.savingRules ? '保存中...' : '保存规则' }}
       </button>
+      <button type="button" class="secondary" :disabled="!debug.result" @click="debug.exportFixture()">
+        导出 fixture
+      </button>
     </div>
 
     <div class="debug-grid">

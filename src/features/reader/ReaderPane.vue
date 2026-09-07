@@ -27,6 +27,7 @@ const emit = defineEmits<{
 }>()
 
 const contentRef = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | undefined
 const activeTab = ref<'catalog' | 'bookmarks'>('catalog')
 const searchQuery = ref('')
 const {
@@ -78,7 +79,30 @@ function changeMode(mode: 'scroll' | 'paged') {
 function turnPage(direction: number) {
   const element = contentRef.value
   if (!element || props.readerMode !== 'paged') return
-  element.scrollBy({ left: direction * Math.max(1, element.clientWidth - 48), behavior: 'smooth' })
+  const gap = Number.parseFloat(getComputedStyle(element).columnGap || '48') || 48
+  const style = getComputedStyle(element)
+  const pageWidth =
+    Number.parseFloat(style.getPropertyValue('--reader-page-width')) ||
+    Math.max(
+      1,
+      element.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0),
+    )
+  element.scrollBy({ left: direction * (pageWidth + gap), behavior: 'smooth' })
+}
+
+function syncPageMetrics() {
+  const element = contentRef.value
+  if (!element) return
+  // Keep the column geometry tied to the actual viewport.  A fixed CSS
+  // `column-width: calc(...)` drifts when the side panel or window changes,
+  // which is especially visible after changing font size in paged mode.
+  const style = getComputedStyle(element)
+  const horizontalPadding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0)
+  const verticalPadding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0)
+  const pageWidth = Math.max(1, element.clientWidth - horizontalPadding)
+  const pageHeight = Math.max(1, element.clientHeight - verticalPadding - 72)
+  element.style.setProperty('--reader-page-width', `${pageWidth}px`)
+  element.style.setProperty('--reader-page-height', `${pageHeight}px`)
 }
 function onKeydown(event: KeyboardEvent) {
   if (props.readerMode !== 'paged') return
@@ -90,7 +114,14 @@ function onKeydown(event: KeyboardEvent) {
     turnPage(-1)
   }
 }
-onMounted(() => emit('readerContent', contentRef.value))
+onMounted(() => {
+  emit('readerContent', contentRef.value)
+  syncPageMetrics()
+  if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
+    resizeObserver = new ResizeObserver(() => syncPageMetrics())
+    resizeObserver.observe(contentRef.value)
+  }
+})
 watch(contentRef, (element) => emit('readerContent', element))
 watch(
   () => props.selectedChapter?.id,
@@ -113,6 +144,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  resizeObserver?.disconnect()
 })
 </script>
 
@@ -186,7 +218,7 @@ onBeforeUnmount(() => {
       <h2 class="reader-title">{{ selectedChapter.title }}</h2>
       <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
       <p v-if="loading" class="reader-loading">正在获取正文...</p>
-      <template v-else>
+      <div v-else class="reader-flow">
         <p
           v-for="(paragraph, index) in visibleParagraphs"
           :key="index"
@@ -195,7 +227,7 @@ onBeforeUnmount(() => {
         >
           {{ paragraph }}
         </p>
-      </template>
+      </div>
     </article>
   </div>
 </template>

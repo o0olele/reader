@@ -1,4 +1,4 @@
-/* global HTMLElement */
+/* global HTMLElement, getComputedStyle */
 
 export interface ReadingLocator {
   index: number
@@ -6,6 +6,13 @@ export interface ReadingLocator {
 }
 
 const clampRatio = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0))
+
+function pageStep(element: HTMLElement): number {
+  const style = getComputedStyle(element)
+  const gap = Number.parseFloat(style.columnGap || '0') || 0
+  const horizontalPadding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0)
+  return Math.max(1, element.clientWidth - horizontalPadding + gap)
+}
 
 export function captureReadingLocator(element: HTMLElement, mode: 'scroll' | 'paged'): ReadingLocator {
   const viewport = element.getBoundingClientRect()
@@ -49,6 +56,5 @@ export function restoreReadingLocator(element: HTMLElement, mode: 'scroll' | 'pa
   const fragment = fragments[Math.round(clampRatio(locator.ratio) * Math.max(0, fragments.length - 1))]
   if (!fragment) return
   const target = element.scrollLeft + fragment.left - viewport.left
-  const pageWidth = Math.max(1, element.clientWidth)
-  element.scrollLeft = Math.round(target / pageWidth) * pageWidth
+  element.scrollLeft = Math.round(target / pageStep(element)) * pageStep(element)
 }

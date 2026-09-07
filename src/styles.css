@@ -317,11 +317,13 @@
     @apply overflow-x-auto overflow-y-hidden;
     scroll-behavior: auto;
   }
-  .reader-content.mode-paged {
-    column-width: calc(100% - 48px);
+  .reader-content.mode-paged .reader-flow {
+    column-width: var(--reader-page-width, calc(100% - 48px));
     column-gap: 48px;
+    column-fill: auto;
+    height: var(--reader-page-height, calc(100% - 72px));
   }
-  .reader-content.mode-paged p {
+  .reader-content.mode-paged .reader-flow p {
     break-inside: avoid;
   }
   .reader-paragraph {

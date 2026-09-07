@@ -1,3 +1,4 @@
+/* global Blob, URL, document */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -122,6 +123,37 @@ export function useSourceDebug(
     }
   }
 
+  function exportFixture() {
+    const current = result.value
+    const source = currentSource.value
+    if (!current || !source) {
+      notify('请先执行一次调试再导出 fixture')
+      return
+    }
+    const fixture = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      source,
+      stage: current.stage,
+      input: input.value.trim(),
+      request: current.request,
+      status: current.status,
+      response_headers: current.response_headers,
+      raw_html: current.raw_html,
+      steps: current.steps,
+      final_json: current.final_json,
+      error: current.error,
+    }
+    const blob = new Blob([JSON.stringify(fixture, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `reader-source-${source.id}-${current.stage}-fixture.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    notify('fixture 已导出，可直接加入 tests/fixtures 做回归')
+  }
+
   return reactive({
     stages: DEBUG_STAGES,
     sourceId,
@@ -138,5 +170,6 @@ export function useSourceDebug(
     openFor,
     run,
     saveRules,
+    exportFixture,
   })
 }
