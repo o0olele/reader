@@ -421,7 +421,7 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 - [x] 全项目 `Result<_, String>` 归零（2026-09-07：全部改为 `AppError` / `RuleParseError`，含 bin 与 js_runtime）
 - [ ] 单源规则执行 P95 < 200ms（不含网络）
 - [x] JS 死循环脚本 5 秒内被终止且不影响主进程（QuickJS interrupt handler + 5s 超时；新增 `terminates_infinite_loop_scripts_within_timeout` 回归测试）
-- [ ] **最大单文件非测试行 < 250**（2026-09-07 已拆 `search_service`：`mod.rs` 710 → `search.rs`/`probe.rs`/`browser.rs`/`request.rs`/`types.rs` 均 < 250；剩余越线：`command/source.rs` 463 / `source_service.rs` 440 / `import.rs` 395 / `source_debug_service.rs` 326 / `pipeline.rs` 309 / `jsoup.rs` 299 / `selector.rs` 278 / `domain/source.rs` 262 / `engine.rs` 255）
+- [x] **最大单文件非测试行 < 250**（2026-09-07：`search_service`、`command/source`、`source_service`、`import`、`pipeline`、`jsoup`、`selector`、`source_debug_service`、`domain/source`、`engine` 全部拆至 < 250；唯一越线文件为纯测试模块 `js_runtime/tests.rs`，按「非测试行」口径豁免）
 - [x] Rhino JVM 包访问的 9 个源被明确标注为不支持，非静默失败（导入 `partial` 标注 + audit `unsupported JVM access` 类别）
 
 ---
@@ -601,7 +601,7 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | Cloudflare / JS challenge | 22 源不可用 | WebView 认证已落地，待真实站点验收；不承诺无头绕过 |
 | `rquickjs` C 工具链跨平台 | Linux / macOS 构建失败 | **v1 登记至今未关闭** —— P1 结束时 spike |
 | 兜底路径掩盖失败 | `pipeline.rs` 曾吞掉引擎错误 | `READER_STRICT_ENGINE` 已落地；`selector.rs` 兜底待删除（§15 第 16 项） |
-| 业务在 service 层重新聚团 | `search_service/mod.rs` 710 → 已拆五模块；剩余 `command/source` 463 / `source_service` 440 / `import` 395 等 9 文件越线 | 每个 P 收尾复查最大文件（§15 第 17 项） |
+| 业务在 service 层重新聚团 | 已全部拆至 < 250 非测试行（`js_runtime/tests.rs` 为纯测试豁免） | ✅ 本轮关闭 |
 | ~~引擎覆盖率无法自测~~ · ~~真实语料不足~~ · ~~XPath crate 不匹配~~ · ~~AnalyzeUrl 缺失~~ · ~~架构重构回归~~ | — | **已关闭** |
 
 ---
@@ -644,7 +644,7 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | 14 | ✅ **§10 文档漂移修复** | `ARCHITECTURE.md` 三处过时描述 + 里程碑/日志目标更新 | §10 |
 | 15 | 🟡 **调试器增量** | `SourceDebugRequest.charset` + `export_source_fixture` 命令与 TS API；前端按钮待接 | §4 |
 | 16 | ⬜ **`selector.rs` 兜底删除 + 扁平列迁移** | 删除旧 CSS 投影路径；需先迁移导入/导出/管理链路到 raw_rules | §3.9 |
-| 17 | 🟡 **最大单文件 < 250 行** | `search_service` 已拆到 < 250；剩余 9 个生产文件越线（`command/source.rs` 463 最重） | §3.9 |
+| 17 | ✅ **最大单文件 < 250 行** | 10 个越线生产文件全部拆至 < 250；唯一越线为纯测试 `js_runtime/tests.rs`（豁免） | §3.9 |
 
 **第 1、2 项必须先做。** 在此之前，第 3–6 项的收益无法度量 —— 而上一轮正是因为在错误口径上排期，
 把七项全做完却只换来 17 个百分点。

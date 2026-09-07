@@ -1,5 +1,12 @@
 //! Single-request source diagnostics for the source debugger.
 
+#[path = "source_debug_service/fixture.rs"]
+mod fixture;
+#[path = "source_debug_service/types.rs"]
+mod types;
+
+pub use types::{SourceDebugRequest, SourceDebugResult, SourceDebugStage, SourceDebugStep};
+
 use crate::{
     domain::source::{BookSource, RawSourceRules},
     error::AppError,
@@ -17,64 +24,8 @@ use crate::{
         build as build_url_request, decode_text, decode_text_string, RequestSpec,
     },
 };
-use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use tauri::WebviewWindow;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SourceDebugStage {
-    Search,
-    BookInfo,
-    Toc,
-    Content,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SourceDebugStep {
-    pub field: String,
-    pub input_preview: String,
-    pub node_count: usize,
-    pub output_preview: String,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SourceDebugRequest {
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, String)>,
-    pub body: Option<String>,
-    pub charset: Option<String>,
-    pub auth_attached: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SourceDebugResult {
-    pub source_id: i64,
-    pub source_name: String,
-    pub stage: SourceDebugStage,
-    pub request: Option<SourceDebugRequest>,
-    pub status: Option<u16>,
-    pub response_headers: Vec<(String, String)>,
-    pub duration_ms: u64,
-    pub raw_html: String,
-    pub steps: Vec<SourceDebugStep>,
-    pub final_json: serde_json::Value,
-    pub session_state: String,
-    pub error: Option<String>,
-}
-
-impl SourceDebugStage {
-    fn label(&self) -> &'static str {
-        match self {
-            Self::Search => "搜索",
-            Self::BookInfo => "详情",
-            Self::Toc => "目录",
-            Self::Content => "正文",
-        }
-    }
-}
 
 pub struct SourceDebugService {
     sources: SqliteSourceRepository,
@@ -209,33 +160,6 @@ impl SourceDebugService {
     ) -> Result<(), AppError> {
         self.sources.update_raw_rules(source_id, &rules).await
     }
-
-    /// Writes the current source definition and a captured response into a
-    /// fixture directory so a real failure can be turned into a regression
-    /// test. Credentials are cleared before serialization.
-    pub async fn export_fixture(
-        &self,
-        source_id: i64,
-        html: &str,
-        out_dir: &std::path::Path,
-    ) -> Result<String, AppError> {
-        let mut source = self
-            .sources
-            .get(source_id)
-            .await?
-            .ok_or_else(|| AppError::Source("书源不存在".into()))?;
-        source.access_token = None;
-        source.session_cookie = None;
-        source.session_expires_at = None;
-        std::fs::create_dir_all(out_dir).map_err(AppError::io)?;
-        let slug = slugify_source_name(&source.name);
-        let source_path = out_dir.join(format!("{slug}.source.json"));
-        let html_path = out_dir.join(format!("{slug}.response.html"));
-        let source_json = serde_json::to_string_pretty(&source).map_err(AppError::parse)?;
-        std::fs::write(&source_path, source_json).map_err(AppError::io)?;
-        std::fs::write(&html_path, html).map_err(AppError::io)?;
-        Ok(source_path.display().to_string())
-    }
 }
 
 fn is_cloudflare_challenge(headers: &[(String, String)], body: &str) -> bool {
@@ -245,27 +169,6 @@ fn is_cloudflare_challenge(headers: &[(String, String)], body: &str) -> bool {
             .map(|(name, value)| (name.as_str(), value.as_str())),
         body,
     )
-}
-
-fn slugify_source_name(name: &str) -> String {
-    let mut slug = String::new();
-    for character in name.chars() {
-        if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
-            slug.push(character.to_ascii_lowercase());
-        } else if character.is_whitespace() || matches!(character, '·' | '（' | '）' | '(' | ')') {
-            if !slug.ends_with('-') {
-                slug.push('-');
-            }
-        } else if slug.is_empty() {
-            slug.push_str("source");
-        }
-    }
-    let slug = slug.trim_matches('-');
-    if slug.is_empty() {
-        "source".into()
-    } else {
-        slug.to_owned()
-    }
 }
 
 fn request_for_stage(
