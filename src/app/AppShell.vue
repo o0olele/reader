@@ -125,11 +125,14 @@ const submitSearch = () => {
   }
   search.query = query
   void show('search')
-  void search.run()
+  // Let the search page mount and register its source provider before the
+  // header-triggered search starts.
+  window.setTimeout(() => void search.run(), 0)
 }
 const navItems: { id: ShellView; label: string; icon: LucideIcon }[] = [
   { id: 'bookshelf', label: '书架', icon: BookOpen },
   { id: 'explore', label: '发现', icon: Compass },
+  { id: 'search', label: '搜索', icon: Search },
   { id: 'sources', label: '书源', icon: Database },
   { id: 'downloads', label: '下载', icon: Download },
   { id: 'rss', label: 'RSS', icon: Rss },

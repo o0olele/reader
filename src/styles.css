@@ -225,6 +225,8 @@
   }
   .app-theme-dark .app-search,
   .app-theme-dark .search-page-input,
+  .app-theme-dark .search-toolbar,
+  .app-theme-dark .search-settings-panel,
   .app-theme-dark .library-hero,
   .app-theme-dark .library-book,
   .app-theme-dark .source-editor,
@@ -250,6 +252,15 @@
   .app-theme-dark .source-editor textarea,
   .app-theme-dark .source-editor select {
     @apply bg-transparent text-[#d7e2f2];
+  }
+  .app-theme-dark .search-toolbar,
+  .app-theme-dark .search-settings-panel {
+    @apply border-[#304158] bg-[#202d40] text-[#b9c8dc];
+  }
+  .app-theme-dark .toolbar-button,
+  .app-theme-dark .layout-switch button,
+  .app-theme-dark .search-settings-panel button {
+    @apply border-[#3a4b63] bg-[#26364c] text-[#c1cee0];
   }
   .reader-layout {
     @apply flex min-w-0 flex-1;
@@ -759,6 +770,63 @@
   }
   .search-page-input button {
     @apply rounded-lg border-0 bg-[#3282f7] px-4 py-1.5 text-xs text-white transition hover:bg-[#246fdf] disabled:opacity-50;
+  }
+  .search-page-input .search-clear {
+    @apply grid h-7 w-7 shrink-0 place-items-center bg-transparent p-0 text-[#8b98aa] hover:bg-[#edf3fb] hover:text-[#51627b];
+  }
+  .search-toolbar {
+    @apply mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#e7edf5] bg-[#fbfdff] px-3 py-2 text-xs text-[#66758c];
+  }
+  .search-progress {
+    @apply flex min-w-[280px] flex-1 items-center gap-2;
+  }
+  .search-progress > i {
+    @apply h-1.5 min-w-[100px] flex-1 overflow-hidden rounded-full bg-[#e8eef7];
+  }
+  .search-progress > i b {
+    @apply block h-full rounded-full bg-[#2d83f7] transition-all;
+  }
+  .icon-button,
+  .toolbar-button,
+  .layout-switch button {
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-[#dce5f1] bg-white px-2.5 py-1.5 text-xs text-[#52647f] transition hover:border-[#a8c7fb] hover:bg-[#f5f9ff] hover:text-[#2678f5];
+  }
+  .icon-button {
+    @apply border-0 bg-transparent px-1.5;
+  }
+  .layout-switch {
+    @apply ml-auto flex gap-1;
+  }
+  .layout-switch button {
+    @apply px-2;
+  }
+  .layout-switch button.active,
+  .search-settings-panel button.active {
+    @apply border-[#9dc2fb] bg-[#eaf3ff] text-[#2678f5];
+  }
+  .search-settings-panel {
+    @apply mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#e7edf5] bg-white px-4 py-3 text-xs text-[#5f7088];
+  }
+  .search-settings-panel strong {
+    @apply mr-2 text-[#33445f];
+  }
+  .search-settings-divider {
+    @apply mx-1 h-5 w-px bg-[#e1e7f0];
+  }
+  .search-settings-panel button {
+    @apply rounded-lg border border-transparent bg-[#f4f7fb] px-3 py-1.5 text-xs text-[#64748b];
+  }
+  .search-result-compact {
+    @apply py-3;
+  }
+  .search-result-compact .book-cover {
+    @apply h-[78px] w-[54px];
+  }
+  .search-result-tags {
+    @apply flex flex-wrap gap-1.5;
+  }
+  .search-result-tags span {
+    @apply rounded bg-[#edf5f6] px-1.5 py-0.5 text-[11px] text-[#43818b];
   }
   .search-result,
   .source-editor,
