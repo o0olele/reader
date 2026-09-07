@@ -1,12 +1,12 @@
 use crate::{
     domain::source::BookSearchResult,
     error::AppError,
-    infrastructure::http::{client::build_source_client, request::response_error},
+    infrastructure::http::request::response_error,
     repository::{source::SqliteSourceRepository, SourceRepository},
-    service::settings_service::SettingsService,
+    service::{settings_service::SettingsService, source_session::SourceSession},
     source_engine::{
         pipeline::parse_explore,
-        url::{build as build_url_request, decode_text, send},
+        url::{build as build_url_request, decode_text},
     },
 };
 use serde::Serialize;
@@ -80,9 +80,14 @@ impl ExploreService {
         {
             return Err(AppError::InvalidArgument("发现页 URL 不属于该书源".into()));
         }
-        let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
+        let session = SourceSession::new(
+            source.clone(),
+            self.sources.clone(),
+            15,
+            self.settings.proxy_url().await?.as_deref(),
+        )?;
         let request = build_url_request(&source, raw_url, None, "发现 URL")?;
-        let response = send(&client, &source, &request).await?;
+        let response = session.send(&request).await?;
         if !response.status().is_success() {
             return Err(AppError::Network(
                 response_error(response, &source.name).await,

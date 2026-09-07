@@ -7,16 +7,12 @@ pub use grouping::SearchResultGroup;
 use crate::{
     domain::source::{BookSearchResult, BookSource},
     error::AppError,
-    infrastructure::http::{
-        client::{build_shared_client, build_source_client},
-        request::{is_challenge_response, response_error},
-    },
+    infrastructure::http::request::{is_challenge_response, response_error},
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::settings_service::SettingsService,
-    source_engine::pipeline::parse_search,
+    service::source_session::SourceSession,
     source_engine::url::{
-        build as build_url_request, decode_text, decode_text_string, send as send_url_request,
-        RequestSpec,
+        build as build_url_request, decode_text, decode_text_string, RequestSpec,
     },
 };
 use grouping::group_results;
@@ -85,7 +81,6 @@ impl SearchService {
         }
         let searched_sources = sources.len();
         let proxy = self.settings.proxy_url().await?;
-        let shared = build_shared_client(15)?;
         let concurrency = search_concurrency();
         tracing::info!(
             target: "source",
@@ -97,7 +92,6 @@ impl SearchService {
         let keyword = query.to_owned();
         let jobs = sources.into_iter().map(|source| {
             let service = self.clone();
-            let shared = shared.clone();
             let proxy = proxy.clone();
             let limiter = limiter.clone();
             let keyword = keyword.clone();
@@ -106,7 +100,7 @@ impl SearchService {
                 .and_then(|app| app.get_webview_window(&format!("source-auth-{}", source.id)));
             async move {
                 let result = service
-                    .search_one_source(source.clone(), keyword, shared, proxy, limiter, browser)
+                    .search_one_source(source.clone(), keyword, proxy, limiter, browser)
                     .await;
                 (source.id, source.name, result)
             }
@@ -161,9 +155,15 @@ impl SearchService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let request = build_search_request(&source, query.trim())?;
-        let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let response = send_url_request(&client, &source, &request).await?;
+        let session = SourceSession::new(
+            source.clone(),
+            self.sources.clone(),
+            15,
+            self.settings.proxy_url().await?.as_deref(),
+        )?;
+        let response = session.send(&request).await?;
         let status = response.status().as_u16();
+        let final_url = response.url().to_string();
         let response_headers = response
             .headers()
             .iter()
@@ -198,7 +198,11 @@ impl SearchService {
                                 self.sync_browser_cookies(&source, browser, &request.url)
                                     .await?;
                                 let source = self.sources.get(source_id).await?.unwrap_or(source);
-                                let parsed = parse_search(&source, &browser_text)?;
+                                let parsed = crate::source_engine::pipeline::parse_search_response(
+                                    &source,
+                                    &browser_text,
+                                    request.url.as_str(),
+                                )?;
                                 let source_name = source.name.clone();
                                 let session_state = source.session_state().to_owned();
                                 let duration_ms = started.elapsed().as_millis() as u64;
@@ -225,7 +229,9 @@ impl SearchService {
                 }
                 (Vec::<BookSearchResult>::new(), false, true)
             } else {
-                let results = parse_search(&source, &text)?;
+                let results = crate::source_engine::pipeline::parse_search_response(
+                    &source, &text, &final_url,
+                )?;
                 (results, false, false)
             }
         } else {
@@ -243,7 +249,11 @@ impl SearchService {
                                 self.sync_browser_cookies(&source, browser, &request.url)
                                     .await?;
                                 let source = self.sources.get(source_id).await?.unwrap_or(source);
-                                let parsed = parse_search(&source, &text)?;
+                                let parsed = crate::source_engine::pipeline::parse_search_response(
+                                    &source,
+                                    &text,
+                                    request.url.as_str(),
+                                )?;
                                 let source_name = source.name.clone();
                                 let session_state = source.session_state().to_owned();
                                 let duration_ms = started.elapsed().as_millis() as u64;
@@ -597,27 +607,18 @@ impl SearchService {
         &self,
         source: BookSource,
         keyword: String,
-        shared: reqwest::Client,
         proxy: Option<String>,
         limiter: Arc<tokio::sync::Semaphore>,
         browser: Option<WebviewWindow>,
     ) -> Result<Vec<BookSearchResult>, AppError> {
-        let own = source
-            .proxy_url
-            .as_deref()
-            .is_some_and(|v| !v.trim().is_empty())
-            || proxy.is_some();
-        let client = if own {
-            build_source_client(&source, 15, proxy.as_deref())?
-        } else {
-            shared
-        };
+        let session =
+            SourceSession::new(source.clone(), self.sources.clone(), 15, proxy.as_deref())?;
         let _permit = limiter
             .acquire_owned()
             .await
             .map_err(|_| AppError::Source("搜索并发限制器不可用".into()))?;
         let request = build_search_request(&source, &keyword)?;
-        let response = send_url_request(&client, &source, &request).await?;
+        let response = session.send(&request).await?;
         let response_headers = response
             .headers()
             .iter()
@@ -642,7 +643,11 @@ impl SearchService {
                             if !browser_body_looks_like_challenge(&text) {
                                 self.sync_browser_cookies(&source, browser, &request.url)
                                     .await?;
-                                return parse_search(&source, &text);
+                                return crate::source_engine::pipeline::parse_search_response(
+                                    &source,
+                                    &text,
+                                    request.url.as_str(),
+                                );
                             }
                         }
                     }
@@ -653,6 +658,7 @@ impl SearchService {
             }
             return Err(AppError::Network(reason));
         }
+        let final_url = response.url().to_string();
         let text = decode_text(response, &request, &source).await?;
         let cloudflare_challenge = is_challenge_response(
             response_headers
@@ -668,7 +674,11 @@ impl SearchService {
                         if !browser_body_looks_like_challenge(&browser_text) {
                             self.sync_browser_cookies(&source, browser, &request.url)
                                 .await?;
-                            return parse_search(&source, &browser_text);
+                            return crate::source_engine::pipeline::parse_search_response(
+                                &source,
+                                &browser_text,
+                                request.url.as_str(),
+                            );
                         }
                     }
                 }
@@ -679,7 +689,7 @@ impl SearchService {
                 source.name
             )));
         }
-        parse_search(&source, &text)
+        crate::source_engine::pipeline::parse_search_response(&source, &text, &final_url)
     }
 }
 
@@ -710,6 +720,8 @@ mod tests {
             base_url: "https://www.69shuba.com/".into(),
             search_url: search_url.into(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),

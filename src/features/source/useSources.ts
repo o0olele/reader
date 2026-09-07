@@ -28,6 +28,7 @@ function emptyForm(): SourceForm {
     base_url: '',
     search_url: '',
     explore_url: '',
+    book_url_pattern: '',
     item: '',
     title: '',
     author: '',
@@ -108,6 +109,8 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
         base_url: current.base_url,
         search_url: current.search_url,
         explore_url: current.explore_url || undefined,
+        book_url_pattern: current.book_url_pattern || undefined,
+        enabled_cookie_jar: true,
         search_rule: {
           item: current.item,
           title: current.title,

@@ -45,6 +45,8 @@ fn legado_value(source: &BookSource) -> serde_json::Value {
         "bookSourceUrl": source.base_url,
         "searchUrl": source.search_url,
         "exploreUrl": source.explore_url,
+        "bookUrlPattern": source.book_url_pattern,
+        "enabledCookieJar": source.enabled_cookie_jar,
         "header": source.header,
         "loginUrl": source.login_url,
         "concurrentRate": source.concurrent_rate,
@@ -69,6 +71,7 @@ fn legado_value(source: &BookSource) -> serde_json::Value {
             "coverUrl": source.info_rule.cover,
             "kind": source.info_rule.kind,
             "lastChapter": source.info_rule.latest_chapter,
+            "canReName": source.info_rule.can_rename,
         })),
         "ruleToc": raw_value(raw.toc.as_deref()).unwrap_or_else(|| serde_json::json!({
             "chapterList": source.catalog_rule.item,

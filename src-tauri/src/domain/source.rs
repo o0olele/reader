@@ -41,6 +41,8 @@ pub struct BookSource {
     pub base_url: String,
     pub search_url: String,
     pub explore_url: Option<String>,
+    pub book_url_pattern: Option<String>,
+    pub enabled_cookie_jar: bool,
     pub search_rule: SearchRule,
     pub info_rule: InfoRule,
     pub catalog_rule: CatalogRule,
@@ -77,6 +79,7 @@ pub struct InfoRule {
     pub cover: Option<String>,
     pub kind: Option<String>,
     pub latest_chapter: Option<String>,
+    pub can_rename: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +96,8 @@ pub struct SourceImport {
     pub base_url: String,
     pub search_url: String,
     pub explore_url: Option<String>,
+    pub book_url_pattern: Option<String>,
+    pub enabled_cookie_jar: bool,
     pub search_rule: SearchRule,
     pub info_rule: InfoRule,
     pub catalog_rule: CatalogRule,
@@ -165,6 +170,8 @@ impl BookSource {
             base_url: import.base_url.clone(),
             search_url: import.search_url.clone(),
             explore_url: import.explore_url.clone(),
+            book_url_pattern: import.book_url_pattern.clone(),
+            enabled_cookie_jar: import.enabled_cookie_jar,
             search_rule: import.search_rule.clone(),
             info_rule: import.info_rule.clone(),
             catalog_rule: import.catalog_rule.clone(),
@@ -264,6 +271,8 @@ mod tests {
             base_url: "https://example.com".into(),
             search_url: "https://example.com?q={{key}}".into(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: ".item".into(),
                 title: ".title".into(),
@@ -316,6 +325,8 @@ mod tests {
             base_url: "https://example.com".into(),
             search_url: "https://example.com?q={{key}}".into(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: "a".into(),
                 title: "a".into(),

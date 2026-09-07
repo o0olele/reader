@@ -3,17 +3,18 @@
 use crate::{
     domain::source::{BookSource, RawSourceRules},
     error::AppError,
-    infrastructure::http::{client::build_source_client, request::is_challenge_response},
+    infrastructure::http::request::is_challenge_response,
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::search_service::{
         browser_body_looks_like_challenge, browser_request, navigate_browser_to_challenge,
     },
     service::settings_service::SettingsService,
+    service::source_session::SourceSession,
     source_engine::pipeline::{
         parse_book_info, parse_catalog_page, parse_content_page, parse_search,
     },
     source_engine::url::{
-        build as build_url_request, decode_text, decode_text_string, prepare, send, RequestSpec,
+        build as build_url_request, decode_text, decode_text_string, RequestSpec,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -100,8 +101,13 @@ impl SourceDebugService {
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
         let request_spec = request_for_stage(&source, &stage, input)?;
-        let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
-        let request = prepare(&client, &source, &request_spec)?;
+        let session = SourceSession::new(
+            source.clone(),
+            self.sources.clone(),
+            15,
+            self.settings.proxy_url().await?.as_deref(),
+        )?;
+        let request = session.prepare(&request_spec).await?;
         let request_info = SourceDebugRequest {
             method: request.method().to_string(),
             url: request.url().to_string(),
@@ -125,7 +131,7 @@ impl SourceDebugService {
                 || request.headers().contains_key(reqwest::header::COOKIE),
         };
         let started = Instant::now();
-        let response = send(&client, &source, &request_spec).await?;
+        let response = session.send(&request_spec).await?;
         let mut status = response.status().as_u16();
         let mut response_headers: Vec<(String, String)> = response
             .headers()

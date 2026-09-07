@@ -18,11 +18,11 @@ impl SqliteSourceRepository {
 
     pub async fn upsert(&self, source: &BookSource) -> Result<i64, AppError> {
         sqlx::query(
-            "INSERT INTO book_sources (name, base_url, search_url, explore_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, enabled, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, header, login_url, login_method, login_body, token_path, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content, rule_explore, source_group, custom_order, weight, enabled_explore, respond_time, last_update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET base_url=excluded.base_url, search_url=excluded.search_url, explore_url=excluded.explore_url, search_item_selector=excluded.search_item_selector, title_selector=excluded.title_selector, author_selector=excluded.author_selector, cover_selector=excluded.cover_selector, url_selector=excluded.url_selector, enabled=excluded.enabled, info_title_selector=excluded.info_title_selector, info_author_selector=excluded.info_author_selector, info_intro_selector=excluded.info_intro_selector, info_cover_selector=excluded.info_cover_selector, catalog_item_selector=excluded.catalog_item_selector, catalog_title_selector=excluded.catalog_title_selector, catalog_url_selector=excluded.catalog_url_selector, content_selector=excluded.content_selector, next_toc_url_selector=excluded.next_toc_url_selector, next_content_url_selector=excluded.next_content_url_selector, header=excluded.header, login_url=excluded.login_url, login_method=excluded.login_method, login_body=excluded.login_body, token_path=excluded.token_path, sign_script=excluded.sign_script, proxy_url=excluded.proxy_url, concurrent_rate=excluded.concurrent_rate, rule_search=excluded.rule_search, rule_book_info=excluded.rule_book_info, rule_toc=excluded.rule_toc, rule_content=excluded.rule_content, rule_explore=excluded.rule_explore, source_group=excluded.source_group, custom_order=excluded.custom_order, weight=excluded.weight, enabled_explore=excluded.enabled_explore, respond_time=COALESCE(excluded.respond_time, book_sources.respond_time), last_update_time=COALESCE(excluded.last_update_time, book_sources.last_update_time), updated_at=CURRENT_TIMESTAMP",
+            "INSERT INTO book_sources (name, base_url, search_url, explore_url, book_url_pattern, enabled_cookie_jar, search_item_selector, title_selector, author_selector, cover_selector, url_selector, enabled, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, info_can_rename, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, header, login_url, login_method, login_body, token_path, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content, rule_explore, source_group, custom_order, weight, enabled_explore, respond_time, last_update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET base_url=excluded.base_url, search_url=excluded.search_url, explore_url=excluded.explore_url, book_url_pattern=excluded.book_url_pattern, enabled_cookie_jar=excluded.enabled_cookie_jar, search_item_selector=excluded.search_item_selector, title_selector=excluded.title_selector, author_selector=excluded.author_selector, cover_selector=excluded.cover_selector, url_selector=excluded.url_selector, enabled=excluded.enabled, info_title_selector=excluded.info_title_selector, info_author_selector=excluded.info_author_selector, info_intro_selector=excluded.info_intro_selector, info_cover_selector=excluded.info_cover_selector, info_can_rename=excluded.info_can_rename, catalog_item_selector=excluded.catalog_item_selector, catalog_title_selector=excluded.catalog_title_selector, catalog_url_selector=excluded.catalog_url_selector, content_selector=excluded.content_selector, next_toc_url_selector=excluded.next_toc_url_selector, next_content_url_selector=excluded.next_content_url_selector, header=excluded.header, login_url=excluded.login_url, login_method=excluded.login_method, login_body=excluded.login_body, token_path=excluded.token_path, sign_script=excluded.sign_script, proxy_url=excluded.proxy_url, concurrent_rate=excluded.concurrent_rate, rule_search=excluded.rule_search, rule_book_info=excluded.rule_book_info, rule_toc=excluded.rule_toc, rule_content=excluded.rule_content, rule_explore=excluded.rule_explore, source_group=excluded.source_group, custom_order=excluded.custom_order, weight=excluded.weight, enabled_explore=excluded.enabled_explore, respond_time=COALESCE(excluded.respond_time, book_sources.respond_time), last_update_time=COALESCE(excluded.last_update_time, book_sources.last_update_time), updated_at=CURRENT_TIMESTAMP",
         )
-            .bind(&source.name).bind(&source.base_url).bind(&source.search_url).bind(&source.explore_url)
+            .bind(&source.name).bind(&source.base_url).bind(&source.search_url).bind(&source.explore_url).bind(&source.book_url_pattern).bind(source.enabled_cookie_jar as i64)
             .bind(&source.search_rule.item).bind(&source.search_rule.title).bind(&source.search_rule.author).bind(&source.search_rule.cover).bind(&source.search_rule.url)
-            .bind(source.enabled as i64).bind(&source.info_rule.title).bind(&source.info_rule.author).bind(&source.info_rule.intro).bind(&source.info_rule.cover)
+            .bind(source.enabled as i64).bind(&source.info_rule.title).bind(&source.info_rule.author).bind(&source.info_rule.intro).bind(&source.info_rule.cover).bind(&source.info_rule.can_rename)
             .bind(&source.catalog_rule.item).bind(&source.catalog_rule.title).bind(&source.catalog_rule.url).bind(&source.content_selector)
             .bind(&source.next_toc_url_selector).bind(&source.next_content_url_selector)
             .bind(&source.header).bind(&source.login_url).bind(&source.login_method).bind(&source.login_body).bind(&source.token_path).bind(&source.sign_script).bind(&source.proxy_url).bind(&source.concurrent_rate)
@@ -56,6 +56,20 @@ impl SqliteSourceRepository {
 
     pub async fn clear_session(&self, source_id: i64) -> Result<(), AppError> {
         self.update_session(source_id, None, None, None).await
+    }
+
+    pub async fn update_cookie(
+        &self,
+        source_id: i64,
+        session_cookie: Option<&str>,
+    ) -> Result<(), AppError> {
+        sqlx::query("UPDATE book_sources SET session_cookie = ?, session_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(session_cookie)
+            .bind(source_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(AppError::database)
     }
 
     pub async fn set_enabled(&self, source_id: i64, enabled: bool) -> Result<(), AppError> {
@@ -175,6 +189,8 @@ mod tests {
             base_url: "https://example.com".into(),
             search_url: "https://example.com/?q={{key}}".into(),
             explore_url: Some("热门::/hot".into()),
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),
@@ -276,6 +292,8 @@ mod tests {
             base_url: "https://example.com".into(),
             search_url: "https://example.com/?q={{key}}".into(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: "a".into(),
                 title: "a".into(),

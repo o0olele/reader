@@ -14,3 +14,4 @@ pub mod settings_service;
 pub mod source_debug_service;
 pub mod source_export_service;
 pub mod source_service;
+pub mod source_session;

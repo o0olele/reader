@@ -55,6 +55,8 @@ pub struct LegadoBookInfoRule {
     pub last_chapter: Option<String>,
     #[serde(alias = "coverUrl", alias = "cover")]
     pub cover_url: Option<String>,
+    #[serde(alias = "canReName")]
+    pub can_rename: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]

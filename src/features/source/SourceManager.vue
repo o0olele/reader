@@ -32,6 +32,7 @@ function sessionState(source: { access_token?: string; session_cookie?: string; 
 }
 
 const FIELDS = [
+  { key: 'book_url_pattern', label: '详情页 URL 正则', placeholder: '详情页 URL 正则（可选）' },
   { key: 'name', label: '名称', placeholder: '名称' },
   { key: 'base_url', label: '基础 URL', placeholder: '基础 URL，如 https://example.com' },
   { key: 'search_url', label: '搜索 URL', placeholder: '搜索 URL，使用 {{key}}' },

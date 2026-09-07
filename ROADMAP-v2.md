@@ -90,9 +90,9 @@
 | 本地格式 txt / epub | 🟡（umd / mobi / pdf ⛔） |
 | TXT 目录规则（27 条 legado 正则） | ✅ 已随程序打包 |
 | 下载 / 缓存 / 导出 | ✅ 持久化任务、续跑、双层限流、缓存配额、TXT/EPUB 导出均已接通 |
-| 换源 | 🟡 按书名重搜，并按章节标题/序号对齐阅读位置；`bookUrlPattern` / `canReName` 待补 |
+| 换源 | ✅ 按书名重搜，并按章节标题/序号对齐阅读位置；详情页 `bookUrlPattern` 与 `canReName` 已接入 |
 | 书源批量校验 | ✅ 已进 UI，可 8 并发验证启用源并持久化 `respondTime` / `lastUpdateTime` |
-| Cookie 持久化 | 🟡 登录与浏览器认证 Cookie 已落库；普通响应 Cookie 自动回写待补 |
+| Cookie 持久化 | ✅ 登录、浏览器认证及普通响应 `Set-Cookie` 均会合并回写并在后续请求/重启后复用 |
 | 备份 / 恢复 · WebDAV · RSS | ⬜ |
 | 书源调试器 | ✅ 四阶段 + 不重启改规则 |
 | AI / 词典 / 翻译 / 局域网 Web / 段评 | ⛔ |
@@ -478,9 +478,9 @@ P4 已完成任务持久化、调度、暂停/继续/取消、失败重试、正
 | 项 | legado 对位 | 说明 |
 | --- | --- | --- |
 | **书源批量校验** | `BookSourceCheckService.kt` | ✅ 已接入 UI：8 并发验证全部启用书源并标红失败项；单次与批量验证均持久化 `respondTime` / `lastUpdateTime` |
-| **换源增强** | `ui/book/changesource` | 🟡 已按章节标题归一化匹配、序号回退并保留章内比例；`bookUrlPattern` 匹配、`canReName` 待补 |
+| **换源增强** | `ui/book/changesource` | ✅ 已按章节标题归一化匹配、序号回退并保留章内比例；详情页 `bookUrlPattern` 与 `canReName` 语义已接入 |
 | **分组 / 排序 / 权重 / 启停** | `bookSourceGroup` `customOrder` `weight` `enabledExplore` | ✅ 已落库并接入管理 UI；列表按自定义顺序、权重、名称排序，发现页独立启停生效，Legado JSON 可往返 |
-| **Cookie 持久化** | `Cookie.kt` + `enabledCookieJar` | 🟡 登录与浏览器认证 Cookie 已落库；普通请求响应中的 `Set-Cookie` 尚未自动回写 |
+| **Cookie 持久化** | `Cookie.kt` + `enabledCookieJar` | ✅ 登录、浏览器认证及普通响应 `Set-Cookie` 均会合并回写并在后续请求/重启后复用 |
 | **导出为 legado 兼容 JSON** | — | ✅ 已支持保留原始 `rule*` 对象并回退生成标准 Legado 字段 |
 
 ---
@@ -555,7 +555,7 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | **v0.3.0** | **P1 + P2** | 受阻源数较 P0 基线下降 ≥ 70% · 规则侧在线失败 ≤ 5%（排除连接类）· 兜底路径已删 · 最大文件 < 250 行 —— **真正的「Legado 桌面版」起点** | ⬜ |
 | v0.4.0 | P3 | 能用本项目读完一本真实在线书 | ⬜ |
 | v0.5.0 | P4 | 下载 / 缓存 / 导出 | ✅ |
-| v0.6.0 | P5 | 批量校验 + 换源对齐 + 书源管理 | 🟡（校验回写、书源管理已完成；换源与 Cookie 持久化待收尾） |
+| v0.6.0 | P5 | 批量校验 + 换源对齐 + 书源管理 | ✅ |
 | v0.7.0 | P6 | RSS + legado 兼容备份 | ⬜ |
 | v1.0.0 | P7 | 性能 / 稳定性 / Windows + Linux 打包 | ⬜ |
 
@@ -615,8 +615,8 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | 6 | ✅ **拆 `js_runtime.rs`（2,080 行）并对齐 JS 语义** | 已完成独立模块拆分、行数限制与四个 `java.*` 方法回归测试 | §3.4 |
 | 7 | ✅ **内容后处理主链路** | `replaceRegex` + 全局净化规则 + 设置 UI + 原文/缓存保护已接通 | §3.8 |
 | 8 | ✅ **P5 书源校验与管理字段** | 校验耗时回写；分组、排序、权重、发现页启停可管理并与 Legado JSON 往返 | §7 |
-| 9 | 🟡 **换源增强** | 已按章节标题/序号对齐并保留章内比例；继续补 `bookUrlPattern` / `canReName` | §7 |
-| 10 | ⬜ **普通响应 Cookie 自动持久化** | 将非登录请求产生的 `Set-Cookie` 合并回书源会话，重启后继续可用 | §7 |
+| 9 | ✅ **换源增强** | 已按章节标题/序号对齐并保留章内比例；`bookUrlPattern` / `canReName` 已接入 | §7 |
+| 10 | ✅ **普通响应 Cookie 自动持久化** | 将非登录请求产生的 `Set-Cookie` 合并回书源会话，重启后继续可用 | §7 |
 
 **第 1、2 项必须先做。** 在此之前，第 3–6 项的收益无法度量 —— 而上一轮正是因为在错误口径上排期，
 把七项全做完却只换来 17 个百分点。

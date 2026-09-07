@@ -35,6 +35,8 @@ fn source_c() -> BookSource {
         base_url: "https://legado.example".into(),
         search_url: "https://legado.example/s?wd={{key}}".into(),
         explore_url: None,
+        book_url_pattern: None,
+        enabled_cookie_jar: true,
         search_rule: SearchRule {
             item: ".no-such-item".into(),
             title: ".no-such-title".into(),

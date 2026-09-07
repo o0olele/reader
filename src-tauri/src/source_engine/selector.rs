@@ -287,6 +287,8 @@ mod tests {
             base_url: "https://example.com".into(),
             search_url: String::new(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),
@@ -410,6 +412,7 @@ mod tests {
             cover: Some("img::attr(src)".into()),
             kind: None,
             latest_chapter: None,
+            can_rename: None,
         };
         source.next_toc_url_selector = Some(".next::attr(href)".into());
         source.next_content_url_selector = Some(".more::attr(href)".into());

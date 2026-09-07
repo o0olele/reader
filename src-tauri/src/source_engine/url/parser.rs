@@ -257,6 +257,8 @@ mod tests {
             base_url: "https://example.com/books/".into(),
             search_url: String::new(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: "a".into(),
                 title: "a".into(),

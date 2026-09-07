@@ -91,6 +91,8 @@ export interface BookSource {
   base_url: string
   search_url: string
   explore_url?: string
+  book_url_pattern?: string
+  enabled_cookie_jar: boolean
   search_rule: SearchRule
   raw_rules: RawSourceRules
   enabled: boolean

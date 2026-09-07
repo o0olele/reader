@@ -3,12 +3,15 @@ use crate::{
     domain::Book,
     error::AppError,
     infrastructure::ebook::{epub, title_from_filename, txt, ParsedBook},
-    infrastructure::http::{client::build_source_client, request::response_error},
+    infrastructure::http::request::response_error,
     repository::{book::SqliteBookRepository, BookRepository},
     repository::{source::SqliteSourceRepository, SourceRepository},
-    service::settings_service::SettingsService,
-    source_engine::pipeline::parse_book_info,
-    source_engine::url::{build as build_url_request, decode_text, fetch_bytes, send},
+    service::{settings_service::SettingsService, source_session::SourceSession},
+    source_engine::{
+        legado_rules::LegadoRules,
+        pipeline::parse_book_info,
+        url::{build as build_url_request, decode_text},
+    },
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 
@@ -66,9 +69,14 @@ impl BookService {
             .get(source_id)
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
-        let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
+        let session = SourceSession::new(
+            source.clone(),
+            self.sources.clone(),
+            15,
+            self.settings.proxy_url().await?.as_deref(),
+        )?;
         let request = build_url_request(&source, url, None, "详情 URL")?;
-        let response = send(&client, &source, &request).await?;
+        let response = session.send(&request).await?;
         if !response.status().is_success() {
             return Err(AppError::Network(
                 response_error(response, &source.name).await,
@@ -77,10 +85,17 @@ impl BookService {
         let html = decode_text(response, &request, &source).await?;
         let info = parse_book_info(&source, &html)?;
         let cover_url = info.cover.clone();
-        self.books.update_info(book_id, &info).await?;
+        let raw_can_rename = LegadoRules::decode(&source.raw_rules)
+            .book_info
+            .and_then(|rule| rule.can_rename);
+        let can_rename = raw_can_rename
+            .as_deref()
+            .or(source.info_rule.can_rename.as_deref())
+            .is_some_and(|value| !value.trim().is_empty());
+        self.books.update_info(book_id, &info, can_rename).await?;
         if let Some(cover) = cover_url.as_deref() {
             if let Ok(request) = build_url_request(&source, cover, None, "封面 URL") {
-                if let Ok(fetched) = fetch_bytes(&client, &source, &request).await {
+                if let Ok(fetched) = session.fetch_bytes(&request).await {
                     let mime = fetched.content_type.as_deref().unwrap_or("image/jpeg");
                     self.books
                         .save_cover_data(

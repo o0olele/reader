@@ -108,6 +108,10 @@ pub struct BookSourceInput {
     pub search_url: String,
     #[serde(default)]
     pub explore_url: Option<String>,
+    #[serde(default)]
+    pub book_url_pattern: Option<String>,
+    #[serde(default = "default_enabled_cookie_jar")]
+    pub enabled_cookie_jar: bool,
     pub search_rule: SearchRule,
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -163,6 +167,9 @@ fn default_content_selector() -> String {
 fn default_enabled_explore() -> bool {
     true
 }
+fn default_enabled_cookie_jar() -> bool {
+    true
+}
 #[tauri::command(rename = "save_book_source")]
 pub async fn save_book_source_cmd(
     state: State<'_, AppState>,
@@ -197,6 +204,10 @@ pub async fn save_book_source_cmd(
         base_url: base_url.to_owned(),
         search_url: search_url.to_owned(),
         explore_url: input.explore_url.filter(|value| !value.trim().is_empty()),
+        book_url_pattern: input
+            .book_url_pattern
+            .filter(|value| !value.trim().is_empty()),
+        enabled_cookie_jar: input.enabled_cookie_jar,
         search_rule: input.search_rule,
         info_rule: input.info_rule,
         catalog_rule: input.catalog_rule,
@@ -447,6 +458,8 @@ mod browser_tests {
             base_url: "https://example.com".into(),
             search_url: "search?q={{key}}".into(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),

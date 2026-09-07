@@ -58,6 +58,11 @@ fn source(v: &Value, id: i64) -> BookSource {
         base_url: base,
         search_url,
         explore_url: text(v, "exploreUrl"),
+        book_url_pattern: text(v, "bookUrlPattern"),
+        enabled_cookie_jar: v
+            .get("enabledCookieJar")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
         search_rule: SearchRule {
             item: rule_field(v, "ruleSearch", "bookList").unwrap_or_default(),
             title: rule_field(v, "ruleSearch", "name").unwrap_or_default(),

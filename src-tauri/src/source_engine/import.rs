@@ -299,6 +299,13 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
             base_url,
             search_url,
             explore_url,
+            book_url_pattern: field(object, "book_url_pattern", "bookUrlPattern"),
+            enabled_cookie_jar: boolean_field(
+                object,
+                "enabled_cookie_jar",
+                "enabledCookieJar",
+                true,
+            ),
             search_rule: SearchRule {
                 item: rule(search.as_ref(), &["item", "bookList", "list"])
                     .unwrap_or_else(|| ".book".into()),
@@ -317,6 +324,7 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 cover: rule(info.as_ref(), &["coverUrl", "cover"]).map(|value| attr(value, "src")),
                 kind: rule(info.as_ref(), &["kind"]),
                 latest_chapter: rule(info.as_ref(), &["lastChapter", "latestChapter"]),
+                can_rename: rule(info.as_ref(), &["canReName", "can_rename"]),
             },
             catalog_rule: CatalogRule {
                 item: rule(catalog.as_ref(), &["item", "chapterList", "list"])

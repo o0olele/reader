@@ -12,6 +12,8 @@ fn source_a() -> BookSource {
         base_url: "https://fiction.example".into(),
         search_url: "https://fiction.example/search?q={{key}}".into(),
         explore_url: None,
+        book_url_pattern: None,
+        enabled_cookie_jar: true,
         search_rule: SearchRule {
             item: "article.result".into(),
             title: "h2 a".into(),
@@ -26,6 +28,7 @@ fn source_a() -> BookSource {
             cover: Some(".cover::attr(src)".into()),
             kind: Some(".meta .kind".into()),
             latest_chapter: Some(".latest a".into()),
+            can_rename: None,
         },
         catalog_rule: CatalogRule {
             item: "ol.chapters li".into(),
@@ -77,6 +80,7 @@ fn source_b() -> BookSource {
         cover: Some("meta[property='og:image']::attr(content)".into()),
         kind: None,
         latest_chapter: Some(".recent a".into()),
+        can_rename: None,
     };
     source.catalog_rule = CatalogRule {
         item: "section.toc div.chapter".into(),

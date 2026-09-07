@@ -128,6 +128,45 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
     }
 }
 
+/// Applies Legado's shortcut for search URLs that resolve directly to a book page.
+pub fn parse_search_response(
+    source: &BookSource,
+    html: &str,
+    response_url: &str,
+) -> Result<Vec<BookSearchResult>, AppError> {
+    let pattern_matches = source
+        .book_url_pattern
+        .as_deref()
+        .filter(|pattern| !pattern.trim().is_empty() && !pattern.eq_ignore_ascii_case("NONE"))
+        .is_some_and(|pattern| {
+            let normalized =
+                crate::source_engine::rule::regex_compat::normalize_java_regex(pattern);
+            fancy_regex::Regex::new(&format!("^(?:{normalized})$"))
+                .ok()
+                .and_then(|regex| regex.is_match(response_url).ok())
+                .unwrap_or(false)
+        });
+    if !pattern_matches {
+        return parse_search(source, html);
+    }
+    let info = parse_book_info(source, html)?;
+    let Some(title) = info.title else {
+        return Ok(Vec::new());
+    };
+    Ok(vec![BookSearchResult {
+        source_id: source.id,
+        source_name: source.name.clone(),
+        title,
+        author: info.author,
+        cover: info.cover,
+        url: response_url.to_owned(),
+        intro: info.intro,
+        kind: info.kind,
+        latest_chapter: info.latest_chapter,
+        word_count: None,
+    }])
+}
+
 pub fn parse_explore(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
     let Some(rules) = LegadoRules::decode(&source.raw_rules).explore else {
         return Err(AppError::parse(format!(
@@ -268,7 +307,8 @@ pub fn parse_content_page(
 
 #[cfg(test)]
 mod tests {
-    use super::strict_engine_value;
+    use super::{parse_search_response, strict_engine_value};
+    use crate::domain::source::{BookSource, CatalogRule, InfoRule, RawSourceRules, SearchRule};
 
     #[test]
     fn strict_engine_only_accepts_enabled_values() {
@@ -277,5 +317,69 @@ mod tests {
         assert!(!strict_engine_value(Some("yes")));
         assert!(strict_engine_value(Some("1")));
         assert!(strict_engine_value(Some("TRUE")));
+    }
+
+    #[test]
+    fn book_url_pattern_turns_a_detail_page_into_one_search_result() {
+        let source = BookSource {
+            id: 9,
+            name: "direct".into(),
+            base_url: "https://example.com".into(),
+            search_url: "https://example.com/search?q={{key}}".into(),
+            explore_url: None,
+            book_url_pattern: Some(r".*".into()),
+            enabled_cookie_jar: true,
+            search_rule: SearchRule {
+                item: ".missing".into(),
+                title: ".missing".into(),
+                author: None,
+                cover: None,
+                url: "a".into(),
+            },
+            info_rule: InfoRule {
+                title: Some("h1".into()),
+                author: Some(".author".into()),
+                intro: Some(".intro".into()),
+                ..Default::default()
+            },
+            catalog_rule: CatalogRule {
+                item: "a".into(),
+                title: "a".into(),
+                url: "a".into(),
+                next_url: None,
+            },
+            content_selector: "body".into(),
+            next_toc_url_selector: None,
+            next_content_url_selector: None,
+            header: None,
+            login_url: None,
+            login_method: "GET".into(),
+            login_body: None,
+            token_path: None,
+            access_token: None,
+            session_cookie: None,
+            session_expires_at: None,
+            sign_script: None,
+            proxy_url: None,
+            concurrent_rate: None,
+            enabled: true,
+            source_group: None,
+            custom_order: 0,
+            weight: 0,
+            enabled_explore: true,
+            respond_time: None,
+            last_update_time: None,
+            raw_rules: RawSourceRules::default(),
+        };
+        let results = parse_search_response(
+            &source,
+            r#"<h1>Direct Book</h1><b class="author">Writer</b><p class="intro">Intro</p>"#,
+            "https://example.com/book/42",
+        )
+        .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Direct Book");
+        assert_eq!(results[0].author.as_deref(), Some("Writer"));
+        assert_eq!(results[0].url, "https://example.com/book/42");
     }
 }

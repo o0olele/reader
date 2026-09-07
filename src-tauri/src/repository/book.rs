@@ -27,9 +27,10 @@ impl SqliteBookRepository {
         &self,
         book_id: i64,
         info: &crate::domain::source::BookInfo,
+        can_rename: bool,
     ) -> Result<(), AppError> {
-        sqlx::query("UPDATE books SET title = COALESCE(?, title), author = COALESCE(?, author), intro = ?, kind = ?, latest_chapter = ?, cover_url = COALESCE(?, cover_url), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-            .bind(info.title.as_deref()).bind(info.author.as_deref()).bind(info.intro.as_deref()).bind(info.kind.as_deref()).bind(info.latest_chapter.as_deref()).bind(info.cover.as_deref()).bind(book_id)
+        sqlx::query("UPDATE books SET title = CASE WHEN ? THEN COALESCE(?, title) ELSE title END, author = CASE WHEN ? THEN COALESCE(?, author) ELSE author END, intro = ?, kind = ?, latest_chapter = ?, cover_url = COALESCE(?, cover_url), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(can_rename).bind(info.title.as_deref()).bind(can_rename).bind(info.author.as_deref()).bind(info.intro.as_deref()).bind(info.kind.as_deref()).bind(info.latest_chapter.as_deref()).bind(info.cover.as_deref()).bind(book_id)
             .execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
     }
 

@@ -7,6 +7,8 @@ pub(super) struct SourceRow {
     base_url: String,
     search_url: String,
     explore_url: Option<String>,
+    book_url_pattern: Option<String>,
+    enabled_cookie_jar: i64,
     search_item_selector: String,
     title_selector: String,
     author_selector: Option<String>,
@@ -16,6 +18,7 @@ pub(super) struct SourceRow {
     info_author_selector: Option<String>,
     info_intro_selector: Option<String>,
     info_cover_selector: Option<String>,
+    info_can_rename: Option<String>,
     catalog_item_selector: Option<String>,
     catalog_title_selector: Option<String>,
     catalog_url_selector: Option<String>,
@@ -54,6 +57,8 @@ pub(super) fn map_source(row: SourceRow) -> BookSource {
         base_url: row.base_url,
         search_url: row.search_url,
         explore_url: row.explore_url,
+        book_url_pattern: row.book_url_pattern,
+        enabled_cookie_jar: row.enabled_cookie_jar != 0,
         search_rule: SearchRule {
             item: row.search_item_selector,
             title: row.title_selector,
@@ -68,6 +73,7 @@ pub(super) fn map_source(row: SourceRow) -> BookSource {
             cover: row.info_cover_selector,
             kind: None,
             latest_chapter: None,
+            can_rename: row.info_can_rename,
         },
         catalog_rule: CatalogRule {
             item: row.catalog_item_selector.unwrap_or_else(|| "a".into()),
@@ -108,4 +114,4 @@ pub(super) fn map_source(row: SourceRow) -> BookSource {
     }
 }
 
-pub(super) const SOURCE_SELECT: &str = "SELECT id, name, base_url, search_url, explore_url, search_item_selector, title_selector, author_selector, cover_selector, url_selector, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, enabled, header, login_url, login_method, login_body, token_path, access_token, session_cookie, session_expires_at, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content, rule_explore, source_group, custom_order, weight, enabled_explore, respond_time, last_update_time FROM book_sources";
+pub(super) const SOURCE_SELECT: &str = "SELECT id, name, base_url, search_url, explore_url, book_url_pattern, enabled_cookie_jar, search_item_selector, title_selector, author_selector, cover_selector, url_selector, info_title_selector, info_author_selector, info_intro_selector, info_cover_selector, info_can_rename, catalog_item_selector, catalog_title_selector, catalog_url_selector, content_selector, next_toc_url_selector, next_content_url_selector, enabled, header, login_url, login_method, login_body, token_path, access_token, session_cookie, session_expires_at, sign_script, proxy_url, concurrent_rate, rule_search, rule_book_info, rule_toc, rule_content, rule_explore, source_group, custom_order, weight, enabled_explore, respond_time, last_update_time FROM book_sources";

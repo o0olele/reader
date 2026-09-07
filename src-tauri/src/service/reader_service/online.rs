@@ -1,9 +1,10 @@
 use super::*;
 use crate::{
-    infrastructure::http::{client::build_source_client, request::response_error},
+    infrastructure::http::request::response_error,
+    service::source_session::SourceSession,
     source_engine::{
         pipeline::{parse_catalog_page, parse_content_page},
-        url::{build_with_base, decode_text, send},
+        url::{build_with_base, decode_text},
     },
 };
 use std::collections::HashSet;
@@ -26,7 +27,12 @@ impl ReaderService {
             .get(source_id)
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
-        let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
+        let session = SourceSession::new(
+            source.clone(),
+            self.sources.clone(),
+            15,
+            self.settings.proxy_url().await?.as_deref(),
+        )?;
         let mut current_rule = chapter_url.to_owned();
         let mut current_base = source.base_url.clone();
         let mut visited = HashSet::new();
@@ -37,7 +43,7 @@ impl ReaderService {
             if !visited.insert(request_key) {
                 break;
             }
-            let response = send(&client, &source, &request).await?;
+            let response = session.send(&request).await?;
             if !response.status().is_success() {
                 return Err(AppError::Network(
                     response_error(response, &source.name).await,
@@ -76,7 +82,12 @@ impl ReaderService {
             .get(source_id)
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
-        let client = build_source_client(&source, 15, self.settings.proxy_url().await?.as_deref())?;
+        let session = SourceSession::new(
+            source.clone(),
+            self.sources.clone(),
+            15,
+            self.settings.proxy_url().await?.as_deref(),
+        )?;
         let mut current_rule = book_url;
         let mut current_base = source.base_url.clone();
         let mut visited = HashSet::new();
@@ -87,7 +98,7 @@ impl ReaderService {
             if !visited.insert(request_key) {
                 break;
             }
-            let response = send(&client, &source, &request).await?;
+            let response = session.send(&request).await?;
             if !response.status().is_success() {
                 return Err(AppError::Network(
                     response_error(response, &source.name).await,

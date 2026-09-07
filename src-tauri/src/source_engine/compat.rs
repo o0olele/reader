@@ -128,6 +128,8 @@ mod tests {
             base_url: "https://example.com".into(),
             search_url: "https://example.com?q={{key}}".into(),
             explore_url: None,
+            book_url_pattern: None,
+            enabled_cookie_jar: true,
             search_rule: crate::domain::source::SearchRule {
                 item: ".book".into(),
                 title: ".title".into(),
