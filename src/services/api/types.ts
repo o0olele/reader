@@ -106,6 +106,12 @@ export interface BookSource {
   proxy_url?: string
   next_toc_url_selector?: string
   next_content_url_selector?: string
+  source_group?: string
+  custom_order: number
+  weight: number
+  enabled_explore: boolean
+  respond_time?: number
+  last_update_time?: number
 }
 
 /**
@@ -115,7 +121,7 @@ export interface BookSource {
  */
 export type BookSourceInput = Omit<
   BookSource,
-  'id' | 'raw_rules' | 'access_token' | 'session_cookie' | 'session_expires_at'
+  'id' | 'raw_rules' | 'access_token' | 'session_cookie' | 'session_expires_at' | 'respond_time' | 'last_update_time'
 >
 
 /** One book as returned by a single source. */

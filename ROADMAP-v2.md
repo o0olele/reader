@@ -56,7 +56,7 @@
 | **发现页 Explore** | ✅ `explore_service.rs` + `ExplorePage.vue` + 迁移 016（分页与长尾字段待补） |
 | 章节去重 / 卷识别 `isVolume` | ⬜ |
 | `preciseSearch` / `checkKeyWord` | ⬜ |
-| 内容后处理 `ContentProcessor` | ⬜ **代码库 0 处引用** |
+| 内容后处理 `ContentProcessor` | 🟡 已接入 `replaceRegex`、全局净化规则、设置 UI 与阅读链路；`sourceRegex` / 简繁转换待补 |
 | 封面兜底规则 `coverRule` | ⬜ |
 
 **C 层 · 书源模型**（顶层 `BookSource` 27 字段 / 现有约 18）
@@ -76,11 +76,11 @@
 | --- | :---: |
 | 长章节窗口渲染 / 滚动·分页双模式 / 字号·行距·页边距 | ✅ 第一批已落地（2026-09-04） |
 | 分页排版（对位 `ChapterProvider` + `TextChapterLayout`） | 🟡 无精确页宽页高计算，改字号后进度靠近似还原 |
-| 主题（Light/Dark/Sepia/Green/Black） | 🟡 只有主题名 |
-| 书签 | 🟡 **仅前端 `ReaderPane.vue`，无数据表、无持久化** |
+| 主题（Light/Dark/Sepia/Green/Black） | ✅ 五种阅读主题已接通并持久化 |
+| 书签 | ✅ SQLite 落库并兼容迁移旧 `localStorage` 数据 |
 | 章内搜索 | ✅ |
-| 阅读时长 `readRecord` | ⬜ |
-| 净化替换规则 | ⬜ 依赖 C 层 `ContentProcessor` |
+| 阅读时长 `readRecord` | ✅ 已持久化累计 |
+| 净化替换规则 | ✅ `ContentProcessor` 在每次阅读时从原始正文重新处理 |
 | 图片 / 漫画 / TTS | ⛔ |
 
 **E 层 · 书籍与生态**
@@ -90,9 +90,9 @@
 | 本地格式 txt / epub | 🟡（umd / mobi / pdf ⛔） |
 | TXT 目录规则（27 条 legado 正则） | ✅ 已随程序打包 |
 | 下载 / 缓存 / 导出 | ✅ 持久化任务、续跑、双层限流、缓存配额、TXT/EPUB 导出均已接通 |
-| 换源 | 🟡 按书名重搜，无章节对齐 |
-| 书源批量校验 | 🟡 已进 UI，可 8 并发验证启用源；历史耗时回写待补 |
-| Cookie 持久化 | 🟡 仅 reqwest 内存 store |
+| 换源 | 🟡 按书名重搜，并按章节标题/序号对齐阅读位置；`bookUrlPattern` / `canReName` 待补 |
+| 书源批量校验 | ✅ 已进 UI，可 8 并发验证启用源并持久化 `respondTime` / `lastUpdateTime` |
+| Cookie 持久化 | 🟡 登录与浏览器认证 Cookie 已落库；普通响应 Cookie 自动回写待补 |
 | 备份 / 恢复 · WebDAV · RSS | ⬜ |
 | 书源调试器 | ✅ 四阶段 + 不重启改规则 |
 | AI / 词典 / 翻译 / 局域网 Web / 段评 | ⛔ |
@@ -400,8 +400,11 @@ JSONPath 现在兼容未加 `$.` 的字段路径、数组下标后的紧凑字�
 ### 3.8 内容后处理（`ContentProcessor` 对位）
 
 legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule` → 简繁转换 → 分段。
-**现在一条都没有。** 新增 `replace_rules` 表：
+状态：🟡 已完成主要显示处理链路。书源 `replaceRegex` 先执行，再应用全局 `ReplaceRule`，最后统一分段；
+显示处理不会覆盖本地原文或 `chapter_contents` 缓存，修改规则后无需重新下载即可生效。已新增 `replace_rules` 表：
 `name / group / pattern / replacement / isRegex / scope / scopeTitle / scopeContent / excludeScope / order / enabled`。
+
+暂未实现简繁转换；`sourceRegex` 在 legado 中用于 WebView 源码捕获，不是普通正文切分，需随 WebView 正文链路补充。
 
 ### 3.9 验收
 
@@ -443,7 +446,7 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 - **书签落库** —— ✅ 已新增 SQLite `bookmarks` 表、IPC/API 与前端 composable；兼容迁移旧 `localStorage` 书签，重启后保留
 - **主题** —— ✅ Light / Dark / Sepia / Green / Black 五种主题，阅读器选择器与样式已接通
 - **阅读时长** —— ✅ 已新增 `reading_records` 持久化表、IPC 累计接口与阅读器可见时长采集（15 秒 flush，切书/关闭 flush）
-- **接入 §3.8 的净化替换规则**
+- **接入 §3.8 的净化替换规则** —— ✅ 已完成
 
 不做：仿真翻页动画、竖排、字体反爬、图片/漫画渲染。
 
@@ -474,10 +477,10 @@ P4 已完成任务持久化、调度、暂停/继续/取消、失败重试、正
 
 | 项 | legado 对位 | 说明 |
 | --- | --- | --- |
-| **书源批量校验** | `BookSourceCheckService.kt` | 🟡 已接入 UI：8 并发验证全部启用书源并标红失败项；`respondTime` / `lastUpdateTime` 持久化回写待补 |
-| **换源增强** | `ui/book/changesource` | 补章节对齐、`bookUrlPattern` 匹配、`canReName` |
-| **分组 / 排序 / 权重 / 启停** | `bookSourceGroup` `customOrder` `weight` `enabledExplore` | 🟡 已完成单源启停；分组、排序、权重与发现页独立启停待补 |
-| **Cookie 持久化** | `Cookie.kt` + `enabledCookieJar` | 现在 cookie 只活在 reqwest 内存 store，重启即失 |
+| **书源批量校验** | `BookSourceCheckService.kt` | ✅ 已接入 UI：8 并发验证全部启用书源并标红失败项；单次与批量验证均持久化 `respondTime` / `lastUpdateTime` |
+| **换源增强** | `ui/book/changesource` | 🟡 已按章节标题归一化匹配、序号回退并保留章内比例；`bookUrlPattern` 匹配、`canReName` 待补 |
+| **分组 / 排序 / 权重 / 启停** | `bookSourceGroup` `customOrder` `weight` `enabledExplore` | ✅ 已落库并接入管理 UI；列表按自定义顺序、权重、名称排序，发现页独立启停生效，Legado JSON 可往返 |
+| **Cookie 持久化** | `Cookie.kt` + `enabledCookieJar` | 🟡 登录与浏览器认证 Cookie 已落库；普通请求响应中的 `Set-Cookie` 尚未自动回写 |
 | **导出为 legado 兼容 JSON** | — | ✅ 已支持保留原始 `rule*` 对象并回退生成标准 Legado 字段 |
 
 ---
@@ -552,7 +555,7 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | **v0.3.0** | **P1 + P2** | 受阻源数较 P0 基线下降 ≥ 70% · 规则侧在线失败 ≤ 5%（排除连接类）· 兜底路径已删 · 最大文件 < 250 行 —— **真正的「Legado 桌面版」起点** | ⬜ |
 | v0.4.0 | P3 | 能用本项目读完一本真实在线书 | ⬜ |
 | v0.5.0 | P4 | 下载 / 缓存 / 导出 | ✅ |
-| v0.6.0 | P5 | 批量校验 + 换源对齐 + 书源管理 | ⬜ |
+| v0.6.0 | P5 | 批量校验 + 换源对齐 + 书源管理 | 🟡（校验回写、书源管理已完成；换源与 Cookie 持久化待收尾） |
 | v0.7.0 | P6 | RSS + legado 兼容备份 | ⬜ |
 | v1.0.0 | P7 | 性能 / 稳定性 / Windows + Linux 打包 | ⬜ |
 
@@ -610,7 +613,10 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | 4 | ✅ **Java 正则归一化层** | 已完成 | §3.2 |
 | 5 | ✅ **JSoup 选择器归一化 + `:contains()` / `:eq()`** | 已完成 | §3.3 |
 | 6 | ✅ **拆 `js_runtime.rs`（2,080 行）并对齐 JS 语义** | 已完成独立模块拆分、行数限制与四个 `java.*` 方法回归测试 | §3.4 |
-| 7 | 🟡 **收尾 XPath / JSONPath 残余** | 已处理空 XPath 与未加 `$.` 的 JSON 通配路径；继续按报告清理剩余路径错误 | §3.6 |
+| 7 | ✅ **内容后处理主链路** | `replaceRegex` + 全局净化规则 + 设置 UI + 原文/缓存保护已接通 | §3.8 |
+| 8 | ✅ **P5 书源校验与管理字段** | 校验耗时回写；分组、排序、权重、发现页启停可管理并与 Legado JSON 往返 | §7 |
+| 9 | 🟡 **换源增强** | 已按章节标题/序号对齐并保留章内比例；继续补 `bookUrlPattern` / `canReName` | §7 |
+| 10 | ⬜ **普通响应 Cookie 自动持久化** | 将非登录请求产生的 `Set-Cookie` 合并回书源会话，重启后继续可用 | §7 |
 
 **第 1、2 项必须先做。** 在此之前，第 3–6 项的收益无法度量 —— 而上一轮正是因为在错误口径上排期，
 把七项全做完却只换来 17 个百分点。

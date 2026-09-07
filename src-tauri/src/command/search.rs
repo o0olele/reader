@@ -26,7 +26,7 @@ pub async fn test_book_source_cmd(
 ) -> Result<SourceTestResult, AppError> {
     let browser = app.get_webview_window(&format!("source-auth-{source_id}"));
     SearchService::new(state.database()?)
-        .test_with_browser(source_id, &query, browser)
+        .test_and_record(source_id, &query, browser)
         .await
 }
 

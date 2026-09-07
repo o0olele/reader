@@ -302,6 +302,24 @@ impl SearchService {
         })
     }
 
+    pub async fn test_and_record(
+        &self,
+        source_id: i64,
+        query: &str,
+        browser: Option<WebviewWindow>,
+    ) -> Result<SourceTestResult, AppError> {
+        let started = Instant::now();
+        let result = self.test_with_browser(source_id, query, browser).await;
+        let duration_ms = result
+            .as_ref()
+            .map(|result| result.duration_ms)
+            .unwrap_or_else(|_| started.elapsed().as_millis() as u64);
+        self.sources
+            .update_probe_stats(source_id, duration_ms as i64, epoch_millis())
+            .await?;
+        result
+    }
+
     pub async fn test_all(&self, query: &str) -> Result<Vec<SourceTestResult>, AppError> {
         let query = query.trim();
         if query.is_empty() || query.len() > 120 {
@@ -322,12 +340,15 @@ impl SearchService {
             let limiter = limiter.clone();
             let query = query.to_owned();
             async move {
+                let started = Instant::now();
                 let permit = limiter.acquire_owned().await;
                 let result = match permit {
-                    Ok(_permit) => service.test_with_browser(source.id, &query, None).await,
+                    Ok(_permit) => service.test_and_record(source.id, &query, None).await,
                     Err(_) => Err(AppError::Source("批量验证调度器不可用".into())),
                 };
-                result.unwrap_or_else(|error| SourceTestResult::failed(&source, &error))
+                result.unwrap_or_else(|error| {
+                    SourceTestResult::failed(&source, &error, started.elapsed().as_millis() as u64)
+                })
             }
         });
         Ok(futures::future::join_all(jobs).await)
@@ -532,7 +553,7 @@ pub struct SourceTestResult {
 }
 
 impl SourceTestResult {
-    fn failed(source: &BookSource, error: &AppError) -> Self {
+    fn failed(source: &BookSource, error: &AppError, duration_ms: u64) -> Self {
         Self {
             source_id: source.id,
             source_name: source.name.clone(),
@@ -542,12 +563,19 @@ impl SourceTestResult {
             cloudflare_challenge: error.requires_browser_challenge(),
             session_state: "error".into(),
             request_url: source.search_url.clone(),
-            duration_ms: 0,
+            duration_ms,
             has_token: source.access_token.is_some() && !source.session_expired(),
             has_cookie: source.session_cookie.is_some() && !source.session_expired(),
             user_agent: crate::infrastructure::http::request::user_agent(),
         }
     }
+}
+
+fn epoch_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or_default()
 }
 #[derive(Debug, Serialize)]
 pub struct SourceFailure {
@@ -711,6 +739,12 @@ mod tests {
             proxy_url: None,
             concurrent_rate: None,
             enabled: true,
+            source_group: None,
+            custom_order: 0,
+            weight: 0,
+            enabled_explore: true,
+            respond_time: None,
+            last_update_time: None,
             raw_rules: Default::default(),
         }
     }

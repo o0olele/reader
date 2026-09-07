@@ -50,6 +50,36 @@ impl SourceService {
         self.sources.set_enabled(source_id, enabled).await
     }
 
+    pub async fn update_management(
+        &self,
+        source_id: i64,
+        source_group: Option<String>,
+        custom_order: i64,
+        weight: i64,
+        enabled_explore: bool,
+    ) -> Result<(), AppError> {
+        let source_group = source_group
+            .map(|group| group.trim().to_owned())
+            .filter(|group| !group.is_empty());
+        if source_group
+            .as_ref()
+            .is_some_and(|group| group.chars().count() > 80)
+        {
+            return Err(AppError::InvalidArgument(
+                "书源分组不能超过 80 个字符".into(),
+            ));
+        }
+        self.sources
+            .update_management(
+                source_id,
+                source_group.as_deref(),
+                custom_order,
+                weight,
+                enabled_explore,
+            )
+            .await
+    }
+
     pub async fn import_json(&self, input: &str) -> Result<SourceImportReport, AppError> {
         let sources = parse_sources_json(input)?;
         let raw_partial = raw_unsupported_source_names(input);

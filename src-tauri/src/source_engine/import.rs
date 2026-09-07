@@ -200,6 +200,40 @@ fn field(
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
 }
+
+fn integer_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    primary: &str,
+    legacy: &str,
+) -> Option<i64> {
+    object
+        .get(primary)
+        .or_else(|| object.get(legacy))
+        .and_then(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_str()?.trim().parse::<i64>().ok())
+        })
+}
+
+fn boolean_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    primary: &str,
+    legacy: &str,
+    default: bool,
+) -> bool {
+    object
+        .get(primary)
+        .or_else(|| object.get(legacy))
+        .and_then(|value| {
+            value.as_bool().or_else(|| match value.as_i64() {
+                Some(0) => Some(false),
+                Some(_) => Some(true),
+                None => value.as_str().and_then(|text| text.parse::<bool>().ok()),
+            })
+        })
+        .unwrap_or(default)
+}
 /// Re-encodes a legado rule object verbatim, so the engine can read it back
 /// without inheriting any of the normalization applied above.
 fn raw_rule(object: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> Option<String> {
@@ -326,6 +360,12 @@ pub fn parse_sources_json(input: &str) -> Result<Vec<SourceImport>, String> {
                 .get("enabled")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(true),
+            source_group: field(object, "source_group", "bookSourceGroup"),
+            custom_order: integer_field(object, "custom_order", "customOrder").unwrap_or(0),
+            weight: integer_field(object, "weight", "weight").unwrap_or(0),
+            enabled_explore: boolean_field(object, "enabled_explore", "enabledExplore", true),
+            respond_time: integer_field(object, "respond_time", "respondTime"),
+            last_update_time: integer_field(object, "last_update_time", "lastUpdateTime"),
             raw_rules: RawSourceRules {
                 search: raw_rule(object, &["search_rule", "ruleSearch"]),
                 book_info: raw_rule(object, &["info_rule", "ruleBookInfo"]),
@@ -348,13 +388,19 @@ mod tests {
 
     #[test]
     fn imports_legacy_legado_source() {
-        let input = r#"[{"bookSourceName":"Demo","bookSourceUrl":"https://example.com","searchUrl":"https://example.com/s?q={{key}}","exploreUrl":"热门::/hot","concurrentRate":"5/1000","ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"},"ruleExplore":{"bookList":".book","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
+        let input = r#"[{"bookSourceName":"Demo","bookSourceUrl":"https://example.com","searchUrl":"https://example.com/s?q={{key}}","exploreUrl":"热门::/hot","concurrentRate":"5/1000","bookSourceGroup":"测试","customOrder":2,"weight":8,"enabledExplore":false,"respondTime":120,"lastUpdateTime":123456,"ruleSearch":{"bookList":".book","name":".name","bookUrl":"a"},"ruleExplore":{"bookList":".book","name":".name","bookUrl":"a"},"ruleToc":{"chapterList":".chapter","chapterName":"a","chapterUrl":"a"},"ruleContent":".content"}]"#;
         let sources = parse_sources_json(input).unwrap();
         assert_eq!(sources[0].name, "Demo");
         assert_eq!(sources[0].search_rule.url, "a::attr(href)");
         assert_eq!(sources[0].catalog_rule.item, ".chapter");
         assert_eq!(sources[0].concurrent_rate.as_deref(), Some("5/1000"));
         assert_eq!(sources[0].explore_url.as_deref(), Some("热门::/hot"));
+        assert_eq!(sources[0].source_group.as_deref(), Some("测试"));
+        assert_eq!(sources[0].custom_order, 2);
+        assert_eq!(sources[0].weight, 8);
+        assert!(!sources[0].enabled_explore);
+        assert_eq!(sources[0].respond_time, Some(120));
+        assert_eq!(sources[0].last_update_time, Some(123456));
         assert!(sources[0]
             .raw_rules
             .explore

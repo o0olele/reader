@@ -40,7 +40,7 @@ impl ExploreService {
             .list()
             .await?
             .into_iter()
-            .filter(|source| source.enabled)
+            .filter(|source| source.enabled && source.enabled_explore)
         {
             let Some(raw) = source.explore_url.as_deref() else {
                 continue;
@@ -67,6 +67,9 @@ impl ExploreService {
             .get(source_id)
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
+        if !source.enabled || !source.enabled_explore {
+            return Err(AppError::Source("该书源的发现页已停用".into()));
+        }
         let configured = source
             .explore_url
             .as_deref()

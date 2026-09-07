@@ -48,6 +48,12 @@ fn source_a() -> BookSource {
         proxy_url: None,
         concurrent_rate: None,
         enabled: true,
+        source_group: None,
+        custom_order: 0,
+        weight: 0,
+        enabled_explore: true,
+        respond_time: None,
+        last_update_time: None,
         raw_rules: RawSourceRules::default(),
     }
 }

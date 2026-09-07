@@ -32,6 +32,22 @@ export function setBookSourceEnabled(sourceId: number, enabled: boolean): Promis
   return invoke<void>('set_book_source_enabled', { sourceId, enabled })
 }
 
+export function updateBookSourceManagement(
+  sourceId: number,
+  sourceGroup: string | undefined,
+  customOrder: number,
+  weight: number,
+  enabledExplore: boolean,
+): Promise<void> {
+  return invoke<void>('update_book_source_management', {
+    sourceId,
+    sourceGroup,
+    customOrder,
+    weight,
+    enabledExplore,
+  })
+}
+
 export function exportBookSources(targetPath: string): Promise<SourceExportResult> {
   return invoke<SourceExportResult>('export_book_sources', { targetPath })
 }

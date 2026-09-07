@@ -49,6 +49,12 @@ fn legado_value(source: &BookSource) -> serde_json::Value {
         "loginUrl": source.login_url,
         "concurrentRate": source.concurrent_rate,
         "enabled": source.enabled,
+        "bookSourceGroup": source.source_group,
+        "customOrder": source.custom_order,
+        "weight": source.weight,
+        "enabledExplore": source.enabled_explore,
+        "respondTime": source.respond_time,
+        "lastUpdateTime": source.last_update_time,
         "ruleSearch": raw_value(raw.search.as_deref()).unwrap_or_else(|| serde_json::json!({
             "bookList": source.search_rule.item,
             "name": source.search_rule.title,

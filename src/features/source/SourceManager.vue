@@ -47,6 +47,9 @@ const FIELDS = [
   { key: 'proxy_url', label: '代理 URL', placeholder: '代理 URL（可选）' },
   { key: 'next_toc_url_selector', label: '目录下一页 CSS', placeholder: '目录下一页 CSS，如 .next::attr(href)' },
   { key: 'next_content_url_selector', label: '正文下一页 CSS', placeholder: '正文下一页 CSS，如 .next::attr(href)' },
+  { key: 'source_group', label: '书源分组', placeholder: '书源分组（可选）' },
+  { key: 'custom_order', label: '排序', placeholder: '排序，数字越小越靠前' },
+  { key: 'weight', label: '权重', placeholder: '权重，同序时数字越大越靠前' },
 ] as const
 </script>
 
@@ -106,7 +109,23 @@ const FIELDS = [
     <summary>已配置的书源（{{ sources.sources.length }}）</summary>
     <div class="source-list">
       <div v-for="source in sources.sources" :key="source.id" class="source-list-item">
-        <span>{{ source.name }}</span>
+        <div class="source-list-name">
+          <strong>{{ source.name }}</strong>
+          <small>
+            {{ source.source_group || '未分组' }}
+            <template v-if="source.respond_time != null"> · {{ source.respond_time }} ms</template>
+          </small>
+        </div>
+        <input v-model="source.source_group" class="source-management-input" placeholder="分组" aria-label="书源分组" />
+        <input
+          v-model.number="source.custom_order"
+          class="source-management-number"
+          type="number"
+          aria-label="书源排序"
+        />
+        <input v-model.number="source.weight" class="source-management-number" type="number" aria-label="书源权重" />
+        <label class="source-explore-toggle"> <input v-model="source.enabled_explore" type="checkbox" /> 发现 </label>
+        <button type="button" class="secondary" @click="sources.saveManagement(source)">保存管理</button>
         <button type="button" class="secondary" @click="sources.toggle(source)">
           {{ source.enabled ? '停用' : '启用' }}
         </button>

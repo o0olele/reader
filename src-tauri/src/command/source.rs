@@ -68,6 +68,26 @@ pub async fn set_book_source_enabled_cmd(
         .await
 }
 
+#[tauri::command(rename = "update_book_source_management")]
+pub async fn update_book_source_management_cmd(
+    state: State<'_, AppState>,
+    source_id: i64,
+    source_group: Option<String>,
+    custom_order: i64,
+    weight: i64,
+    enabled_explore: bool,
+) -> Result<(), AppError> {
+    SourceService::new(state.database()?)
+        .update_management(
+            source_id,
+            source_group,
+            custom_order,
+            weight,
+            enabled_explore,
+        )
+        .await
+}
+
 #[tauri::command(rename = "export_book_sources")]
 pub async fn export_book_sources_cmd(
     state: State<'_, AppState>,
@@ -116,6 +136,14 @@ pub struct BookSourceInput {
     pub proxy_url: Option<String>,
     #[serde(default)]
     pub concurrent_rate: Option<String>,
+    #[serde(default)]
+    pub source_group: Option<String>,
+    #[serde(default)]
+    pub custom_order: i64,
+    #[serde(default)]
+    pub weight: i64,
+    #[serde(default = "default_enabled_explore")]
+    pub enabled_explore: bool,
 }
 
 fn default_login_method() -> String {
@@ -131,6 +159,9 @@ fn default_catalog_rule() -> CatalogRule {
 }
 fn default_content_selector() -> String {
     "body".into()
+}
+fn default_enabled_explore() -> bool {
+    true
 }
 #[tauri::command(rename = "save_book_source")]
 pub async fn save_book_source_cmd(
@@ -184,6 +215,12 @@ pub async fn save_book_source_cmd(
         proxy_url: input.proxy_url,
         concurrent_rate: input.concurrent_rate,
         enabled: input.enabled.unwrap_or(true),
+        source_group: input.source_group,
+        custom_order: input.custom_order,
+        weight: input.weight,
+        enabled_explore: input.enabled_explore,
+        respond_time: None,
+        last_update_time: None,
         // Saving by hand takes the source's rules over. Carrying legado rules
         // across from an earlier import would silently outrank the selectors
         // the user just typed, since the engine prefers them.
@@ -439,6 +476,12 @@ mod browser_tests {
             proxy_url: proxy_url.map(str::to_owned),
             concurrent_rate: None,
             enabled: true,
+            source_group: None,
+            custom_order: 0,
+            weight: 0,
+            enabled_explore: true,
+            respond_time: None,
+            last_update_time: None,
             raw_rules: Default::default(),
         }
     }

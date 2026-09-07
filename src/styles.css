@@ -867,8 +867,24 @@
   .source-list-item {
     @apply flex flex-wrap items-center gap-2 rounded-xl border border-[#edf1f6] px-3 py-3 text-sm text-[#42536b];
   }
-  .source-list-item > span {
+  .source-list-item > span,
+  .source-list-name {
     @apply mr-auto font-medium;
+  }
+  .source-list-name {
+    @apply flex min-w-36 flex-col gap-0.5;
+  }
+  .source-list-name small {
+    @apply text-[11px] font-normal text-[#8b99ab];
+  }
+  .source-management-input {
+    @apply w-28;
+  }
+  .source-management-number {
+    @apply w-20;
+  }
+  .source-explore-toggle {
+    @apply flex items-center gap-1 text-xs;
   }
   .source-probe-status,
   .source-sessions {

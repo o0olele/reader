@@ -77,6 +77,7 @@ pub fn run() {
             command_api::source::update_book_source_rules_cmd,
             command_api::source::list_book_sources_cmd,
             command_api::source::set_book_source_enabled_cmd,
+            command_api::source::update_book_source_management_cmd,
             command_api::source::export_book_sources_cmd,
             command_api::source::save_book_source_cmd,
             command_api::source::import_book_sources_json_cmd,

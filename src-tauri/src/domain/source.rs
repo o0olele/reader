@@ -59,6 +59,12 @@ pub struct BookSource {
     pub proxy_url: Option<String>,
     pub concurrent_rate: Option<String>,
     pub enabled: bool,
+    pub source_group: Option<String>,
+    pub custom_order: i64,
+    pub weight: i64,
+    pub enabled_explore: bool,
+    pub respond_time: Option<i64>,
+    pub last_update_time: Option<i64>,
     #[serde(default)]
     pub raw_rules: RawSourceRules,
 }
@@ -102,6 +108,12 @@ pub struct SourceImport {
     pub next_toc_url_selector: Option<String>,
     pub next_content_url_selector: Option<String>,
     pub enabled: bool,
+    pub source_group: Option<String>,
+    pub custom_order: i64,
+    pub weight: i64,
+    pub enabled_explore: bool,
+    pub respond_time: Option<i64>,
+    pub last_update_time: Option<i64>,
     #[serde(default)]
     pub raw_rules: RawSourceRules,
 }
@@ -171,6 +183,12 @@ impl BookSource {
             proxy_url: import.proxy_url.clone(),
             concurrent_rate: import.concurrent_rate.clone(),
             enabled: import.enabled,
+            source_group: import.source_group.clone(),
+            custom_order: import.custom_order,
+            weight: import.weight,
+            enabled_explore: import.enabled_explore,
+            respond_time: import.respond_time,
+            last_update_time: import.last_update_time,
             raw_rules: import.raw_rules.clone(),
         }
     }
@@ -272,6 +290,12 @@ mod tests {
             next_toc_url_selector: None,
             next_content_url_selector: None,
             enabled: true,
+            source_group: None,
+            custom_order: 0,
+            weight: 0,
+            enabled_explore: true,
+            respond_time: None,
+            last_update_time: None,
             raw_rules: RawSourceRules::default(),
         };
 
@@ -318,6 +342,12 @@ mod tests {
             next_toc_url_selector: None,
             next_content_url_selector: None,
             enabled: true,
+            source_group: None,
+            custom_order: 0,
+            weight: 0,
+            enabled_explore: true,
+            respond_time: None,
+            last_update_time: None,
             raw_rules: RawSourceRules::default(),
         });
         assert_eq!(source.session_state(), "anonymous");

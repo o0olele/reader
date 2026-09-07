@@ -13,6 +13,7 @@ import {
   saveBookSource,
   setBookSourceEnabled,
   testBookSource,
+  updateBookSourceManagement,
   validateAllSources,
   type BookSource,
   type SourceImportReport,
@@ -39,6 +40,9 @@ function emptyForm(): SourceForm {
     proxy_url: '',
     next_toc_url_selector: '',
     next_content_url_selector: '',
+    source_group: '',
+    custom_order: '0',
+    weight: '0',
   }
 }
 
@@ -118,6 +122,10 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
         proxy_url: current.proxy_url || undefined,
         next_toc_url_selector: current.next_toc_url_selector || undefined,
         next_content_url_selector: current.next_content_url_selector || undefined,
+        source_group: current.source_group || undefined,
+        custom_order: Number(current.custom_order) || 0,
+        weight: Number(current.weight) || 0,
+        enabled_explore: true,
         enabled: true,
       })
       form.value = emptyForm()
@@ -201,6 +209,22 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
       await setBookSourceEnabled(source.id, !source.enabled)
       source.enabled = !source.enabled
       notify(`${source.name} 已${source.enabled ? '启用' : '停用'}`)
+    } catch (cause) {
+      report(cause)
+    }
+  }
+
+  async function saveManagement(source: BookSource) {
+    try {
+      await updateBookSourceManagement(
+        source.id,
+        source.source_group || undefined,
+        Number(source.custom_order) || 0,
+        Number(source.weight) || 0,
+        source.enabled_explore,
+      )
+      await refresh()
+      notify(`${source.name} 的分组与排序已保存`)
     } catch (cause) {
       report(cause)
     }
@@ -298,6 +322,7 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     test,
     batchTest,
     toggle,
+    saveManagement,
     exportTo,
     login,
     refreshSession,

@@ -154,6 +154,12 @@ mod tests {
             next_toc_url_selector: None,
             next_content_url_selector: None,
             enabled: true,
+            source_group: None,
+            custom_order: 0,
+            weight: 0,
+            enabled_explore: true,
+            respond_time: None,
+            last_update_time: None,
             raw_rules: Default::default(),
         };
         source.info_rule.intro = Some("@Json:$.intro".into());

@@ -19,6 +19,13 @@ import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
 const PROGRESS_DEBOUNCE_MS = 350
 const READING_TIME_TICK_MS = 15_000
 
+function chapterKey(title: string): string {
+  return title
+    .toLocaleLowerCase()
+    .replace(/^第[0-9零一二三四五六七八九十百千万两]+[章节卷回集部篇]\s*/u, '')
+    .replace(/[\s\p{P}\p{S}]/gu, '')
+}
+
 /** Owns the open book: its catalog, the current chapter and reading progress. */
 export function useReader(report: (cause: unknown) => void) {
   const selectedBook = ref<Book>()
@@ -152,6 +159,10 @@ export function useReader(report: (cause: unknown) => void) {
   async function switchSource() {
     const book = selectedBook.value
     if (!book?.source_id) return
+    const previousChapter = selectedChapter.value
+    const previousLocator = readerContent.value
+      ? captureReadingLocator(readerContent.value, readerMode.value)
+      : undefined
     switchingSource.value = true
     try {
       const response = await searchBooks(book.title)
@@ -162,8 +173,17 @@ export function useReader(report: (cause: unknown) => void) {
       chapters.value = []
       selectedChapter.value = undefined
       await loadCatalog()
-      selectedChapter.value = chapters.value[0]
+      const previousKey = previousChapter ? chapterKey(previousChapter.title) : ''
+      selectedChapter.value =
+        chapters.value.find((chapter) => previousKey && chapterKey(chapter.title) === previousKey) ??
+        chapters.value.find((chapter) => chapter.number === previousChapter?.number) ??
+        chapters.value[0]
       await loadChapterContent(selectedChapter.value)
+      await nextTick()
+      if (readerContent.value && previousLocator) {
+        restoreReadingLocator(readerContent.value, readerMode.value, previousLocator)
+        scheduleProgressSave()
+      }
     } catch (cause) {
       report(cause)
     } finally {

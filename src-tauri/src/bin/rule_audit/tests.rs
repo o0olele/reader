@@ -1,4 +1,3 @@
-
 use super::*;
 #[test]
 fn audits_nested_rule_objects_and_reports_real_execution() {
