@@ -1,6 +1,7 @@
 //! Ebook decoding adapters: local file bytes to ordered chapters.
 
 pub mod epub;
+pub mod export;
 pub mod txt;
 
 /// A locally imported book: metadata plus ordered `(title, content)` chapters.

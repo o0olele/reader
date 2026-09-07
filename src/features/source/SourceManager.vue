@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /* global HTMLInputElement */
+import { save } from '@tauri-apps/plugin-dialog'
 import { inject, ref } from 'vue'
 import { sourceDebugKey, sourcesKey } from '../../app/shellKeys'
 
@@ -11,6 +12,14 @@ defineProps<{
 const sources = inject(sourcesKey)!
 const sourceDebug = inject(sourceDebugKey)!
 const sourceFile = ref<HTMLInputElement>()
+
+async function exportSources() {
+  const target = await save({
+    defaultPath: 'bookSources.json',
+    filters: [{ name: 'Legado 书源', extensions: ['json'] }],
+  })
+  if (target) await sources.exportTo(target)
+}
 
 function sessionState(source: { access_token?: string; session_cookie?: string; session_expires_at?: string }) {
   if (!source.access_token && !source.session_cookie) return '未认证'
@@ -59,6 +68,17 @@ const FIELDS = [
         <input v-model="sources.sourceUrl" type="url" placeholder="从 URL 导入 JSON" aria-label="书源 JSON URL" />
         <button type="submit" class="secondary" :disabled="sources.importing">导入 URL</button>
       </form>
+      <button
+        type="button"
+        class="secondary"
+        :disabled="sources.batchTesting || !sources.sources.length"
+        @click="sources.batchTest(query)"
+      >
+        {{ sources.batchTesting ? '批量验证中...' : '批量验证启用书源' }}
+      </button>
+      <button type="button" class="secondary" :disabled="sources.exporting" @click="exportSources">
+        {{ sources.exporting ? '导出中...' : '导出 Legado JSON' }}
+      </button>
     </div>
 
     <form @submit.prevent="sources.save()">
@@ -87,6 +107,9 @@ const FIELDS = [
     <div class="source-list">
       <div v-for="source in sources.sources" :key="source.id" class="source-list-item">
         <span>{{ source.name }}</span>
+        <button type="button" class="secondary" @click="sources.toggle(source)">
+          {{ source.enabled ? '停用' : '启用' }}
+        </button>
         <button
           type="button"
           class="secondary"
@@ -114,6 +137,25 @@ const FIELDS = [
     <span v-else>解析 {{ sources.lastProbe.result_count }} 条</span>
     <code>{{ sources.lastProbe.request_url }}</code>
     <code>UA={{ sources.lastProbe.user_agent }}</code>
+  </div>
+
+  <div v-if="sources.batchResults.length" class="source-probe-status source-batch-results" role="status">
+    <strong>批量验证结果</strong>
+    <span
+      v-for="result in sources.batchResults"
+      :key="result.source_id"
+      :class="
+        result.status >= 200 && result.status < 400 && !result.auth_required && !result.cloudflare_challenge
+          ? 'source-ok'
+          : 'source-bad'
+      "
+    >
+      {{
+        result.source_name +
+        '：' +
+        (result.status ? `HTTP ${result.status} · ${result.result_count} 条 · ${result.duration_ms} ms` : '请求失败')
+      }}
+    </span>
   </div>
 
   <details v-if="sources.sources.some((source) => source.login_url)" class="source-editor">

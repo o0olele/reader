@@ -46,6 +46,10 @@ impl SourceService {
         self.sources.upsert(source).await
     }
 
+    pub async fn set_enabled(&self, source_id: i64, enabled: bool) -> Result<(), AppError> {
+        self.sources.set_enabled(source_id, enabled).await
+    }
+
     pub async fn import_json(&self, input: &str) -> Result<SourceImportReport, AppError> {
         let sources = parse_sources_json(input)?;
         let raw_partial = raw_unsupported_source_names(input);

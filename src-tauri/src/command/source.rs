@@ -2,6 +2,7 @@ use crate::{
     app::AppState,
     domain::source::{BookSource, CatalogRule, InfoRule, RawSourceRules, SearchRule},
     error::AppError,
+    service::source_export_service::{SourceExportResult, SourceExportService},
     service::source_service::{
         SourceImportReport, SourceLoginInput, SourceLoginResult, SourceService, SourceSessionStatus,
     },
@@ -54,6 +55,30 @@ pub async fn list_book_sources_cmd(
     state: State<'_, AppState>,
 ) -> Result<Vec<BookSource>, AppError> {
     SourceService::new(state.database()?).list().await
+}
+
+#[tauri::command(rename = "set_book_source_enabled")]
+pub async fn set_book_source_enabled_cmd(
+    state: State<'_, AppState>,
+    source_id: i64,
+    enabled: bool,
+) -> Result<(), AppError> {
+    SourceService::new(state.database()?)
+        .set_enabled(source_id, enabled)
+        .await
+}
+
+#[tauri::command(rename = "export_book_sources")]
+pub async fn export_book_sources_cmd(
+    state: State<'_, AppState>,
+    target_path: String,
+) -> Result<SourceExportResult, AppError> {
+    if target_path.trim().is_empty() {
+        return Err(AppError::InvalidArgument("导出路径不能为空".into()));
+    }
+    SourceExportService::new(state.database()?)
+        .export_legado(std::path::Path::new(&target_path))
+        .await
 }
 
 #[derive(Deserialize)]

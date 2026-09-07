@@ -29,3 +29,11 @@ pub async fn test_book_source_cmd(
         .test_with_browser(source_id, &query, browser)
         .await
 }
+
+#[tauri::command(rename = "validate_all_sources")]
+pub async fn validate_all_sources_cmd(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<SourceTestResult>, AppError> {
+    SearchService::new(state.database()?).test_all(&query).await
+}

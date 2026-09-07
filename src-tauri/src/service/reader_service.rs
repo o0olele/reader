@@ -54,11 +54,14 @@ impl ReaderService {
         self.chapters.cached_content(chapter_id).await
     }
     pub async fn cache_content(&self, chapter_id: i64, content: &str) -> Result<(), AppError> {
+        crate::service::cache_service::CacheService::new(self.pool.clone())
+            .store(chapter_id, content)
+            .await?;
         memory_cache()
             .lock()
             .map_err(|_| AppError::Database("阅读缓存锁不可用".into()))?
             .put(chapter_id, content.to_owned());
-        self.chapters.save_content(chapter_id, content).await
+        Ok(())
     }
     pub async fn list_chapters(&self, book_id: i64) -> Result<Vec<Chapter>, AppError> {
         self.chapters.list_for_book(book_id).await
@@ -132,6 +135,14 @@ impl ReaderService {
             .add_seconds(book_id, duration_seconds)
             .await
     }
+}
+
+pub(crate) fn clear_memory_cache() -> Result<(), AppError> {
+    memory_cache()
+        .lock()
+        .map_err(|_| AppError::Database("阅读缓存锁不可用".into()))?
+        .clear();
+    Ok(())
 }
 
 #[cfg(test)]

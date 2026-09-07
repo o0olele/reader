@@ -54,6 +54,21 @@ impl SqliteSourceRepository {
         self.update_session(source_id, None, None, None).await
     }
 
+    pub async fn set_enabled(&self, source_id: i64, enabled: bool) -> Result<(), AppError> {
+        let result = sqlx::query(
+            "UPDATE book_sources SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(enabled)
+        .bind(source_id)
+        .execute(&self.pool)
+        .await
+        .map_err(AppError::database)?;
+        if result.rows_affected() == 0 {
+            return Err(AppError::InvalidArgument("书源不存在".into()));
+        }
+        Ok(())
+    }
+
     pub async fn update_raw_rules(
         &self,
         source_id: i64,

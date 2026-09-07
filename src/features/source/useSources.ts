@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import {
   clearBookSourceSession,
+  exportBookSources,
   importBookSourcesJson,
   importBookSourcesUrl,
   listBookSources,
@@ -10,9 +11,12 @@ import {
   saveBookSourceBrowserSession,
   refreshBookSourceSession,
   saveBookSource,
+  setBookSourceEnabled,
   testBookSource,
+  validateAllSources,
   type BookSource,
   type SourceImportReport,
+  type SourceTestResult,
 } from '../../services/api'
 
 export type SourceForm = Record<string, string>
@@ -55,6 +59,9 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
   const sourceUrl = ref('')
   const importing = ref(false)
   const testing = ref<number>()
+  const batchTesting = ref(false)
+  const batchResults = ref<SourceTestResult[]>([])
+  const exporting = ref(false)
   const loginForm = ref({ sourceId: 0, username: '', password: '' })
   const loggingIn = ref(false)
   const lastProbe = ref<{
@@ -174,6 +181,43 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     }
   }
 
+  async function batchTest(query: string) {
+    batchTesting.value = true
+    try {
+      batchResults.value = await validateAllSources(query || '测试')
+      const failed = batchResults.value.filter(
+        (result) => result.status < 200 || result.status >= 400 || result.auth_required || result.cloudflare_challenge,
+      ).length
+      notify(`批量验证完成：${batchResults.value.length - failed} 个可用，${failed} 个需处理`)
+    } catch (cause) {
+      report(cause)
+    } finally {
+      batchTesting.value = false
+    }
+  }
+
+  async function toggle(source: BookSource) {
+    try {
+      await setBookSourceEnabled(source.id, !source.enabled)
+      source.enabled = !source.enabled
+      notify(`${source.name} 已${source.enabled ? '启用' : '停用'}`)
+    } catch (cause) {
+      report(cause)
+    }
+  }
+
+  async function exportTo(targetPath: string) {
+    exporting.value = true
+    try {
+      const result = await exportBookSources(targetPath)
+      notify(`已导出 ${result.exported} 个书源`)
+    } catch (cause) {
+      report(cause)
+    } finally {
+      exporting.value = false
+    }
+  }
+
   async function login() {
     const { sourceId, username, password } = loginForm.value
     if (!sourceId || !username || !password) return
@@ -240,6 +284,9 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     sourceUrl,
     importing,
     testing,
+    batchTesting,
+    batchResults,
+    exporting,
     loginForm,
     loggingIn,
     lastProbe,
@@ -249,6 +296,9 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     importFromFile,
     importFromUrl,
     test,
+    batchTest,
+    toggle,
+    exportTo,
     login,
     refreshSession,
     browserAuth,

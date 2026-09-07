@@ -2,12 +2,15 @@
 
 pub mod book_service;
 pub mod bookshelf_service;
+pub mod cache_service;
 pub mod content_processor;
 pub mod download_service;
 pub mod explore_service;
+pub mod export_service;
 pub mod reader_service;
 pub mod replace_rule_service;
 pub mod search_service;
 pub mod settings_service;
 pub mod source_debug_service;
+pub mod source_export_service;
 pub mod source_service;

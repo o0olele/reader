@@ -50,6 +50,17 @@ export interface DownloadTask {
   updated_at: string
 }
 
+export interface ExportResult {
+  path: string
+  bytes_written: number
+}
+
+export interface CacheStats {
+  used_bytes: number
+  quota_bytes: number
+  cached_chapters: number
+}
+
 export interface BookshelfGroup {
   id: number
   name: string
@@ -212,6 +223,11 @@ export interface SourceImportReport {
   imported: number
   failed: string[]
   partial: string[]
+}
+
+export interface SourceExportResult {
+  path: string
+  exported: number
 }
 
 export interface SourceLoginResult {

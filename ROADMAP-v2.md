@@ -89,9 +89,9 @@
 | --- | :---: |
 | 本地格式 txt / epub | 🟡（umd / mobi / pdf ⛔） |
 | TXT 目录规则（27 条 legado 正则） | ✅ 已随程序打包 |
-| 下载 / 缓存 / 导出 | ⬜ `scheduler/` 不存在 |
+| 下载 / 缓存 / 导出 | ✅ 持久化任务、续跑、双层限流、缓存配额、TXT/EPUB 导出均已接通 |
 | 换源 | 🟡 按书名重搜，无章节对齐 |
-| 书源批量校验 | 🟡 `source-audit` bin 已有，未进 UI |
+| 书源批量校验 | 🟡 已进 UI，可 8 并发验证启用源；历史耗时回写待补 |
 | Cookie 持久化 | 🟡 仅 reqwest 内存 store |
 | 备份 / 恢复 · WebDAV · RSS | ⬜ |
 | 书源调试器 | ✅ 四阶段 + 不重启改规则 |
@@ -458,14 +458,15 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 
 ## 6. P4 · 下载 / 缓存 / 导出（2 周）
 
-2026-09-07 已开始落地下载闭环：`download_tasks` 持久化任务表、启动/暂停/继续/取消 IPC、四并发调度、失败重试、正文缓存复用、应用启动续跑，以及下载页 UI。导出 TXT/EPUB 与磁盘配额仍待后续补齐。
+2026-09-07 已完成下载闭环：`download_tasks` 持久化任务表、启动/暂停/继续/取消 IPC、四并发调度、失败重试、正文缓存复用、应用启动续跑、下载页 UI、TXT/EPUB 导出，以及缓存容量统计、软配额和 LRU 清理。
 
-`scheduler/` 目前不存在，本步引入：`DownloadManager`、任务状态机落库、三级缓存。追加：
+实现以 `download_service.rs` + `download_tasks` 状态机落库，正文缓存复用阅读服务；没有额外引入空壳 `scheduler/` 目录。追加：
 
-- 对位 `CacheBook.kt` 的**双层限流**：全局并发上限 + 按书源 `concurrentRate`（复用 `source_engine/url/rate_limit.rs`）
-- 导出 TXT / EPUB，对位 `ExportBookService.kt`
+- [x] 对位 `CacheBook.kt` 的**双层限流**：全局并发上限 + 按书源 `concurrentRate`（正文下载复用 `source_engine/url/transport.rs`，统一经过 `rate_limit.rs`）
+- [x] 导出 TXT / EPUB，对位 `ExportBookService.kt`
+- [x] 缓存磁盘配额、占用统计与清理（保护当前阅读/下载书籍，优先 LRU 淘汰其他书缓存）
 
-已完成其中的任务持久化、调度、暂停/继续/取消、失败重试与正文缓存复用；限流目前为全局四并发，按书源 `concurrentRate` 和导出仍待补齐。
+P4 已完成任务持久化、调度、暂停/继续/取消、失败重试、正文缓存复用、双层限流、TXT/EPUB 导出和缓存配额管理。
 
 ---
 
@@ -473,11 +474,11 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 
 | 项 | legado 对位 | 说明 |
 | --- | --- | --- |
-| **书源批量校验** | `BookSourceCheckService.kt` | 把 `source-audit` bin 搬进 UI，回写 `respondTime` / `lastUpdateTime`，标红失效源 |
+| **书源批量校验** | `BookSourceCheckService.kt` | 🟡 已接入 UI：8 并发验证全部启用书源并标红失败项；`respondTime` / `lastUpdateTime` 持久化回写待补 |
 | **换源增强** | `ui/book/changesource` | 补章节对齐、`bookUrlPattern` 匹配、`canReName` |
-| **分组 / 排序 / 权重 / 启停** | `bookSourceGroup` `customOrder` `weight` `enabledExplore` | 书源上百个之后没有这些就没法管理 |
+| **分组 / 排序 / 权重 / 启停** | `bookSourceGroup` `customOrder` `weight` `enabledExplore` | 🟡 已完成单源启停；分组、排序、权重与发现页独立启停待补 |
 | **Cookie 持久化** | `Cookie.kt` + `enabledCookieJar` | 现在 cookie 只活在 reqwest 内存 store，重启即失 |
-| **导出为 legado 兼容 JSON** | — | 桌面端编辑的源要能回到 Android 端 |
+| **导出为 legado 兼容 JSON** | — | ✅ 已支持保留原始 `rule*` 对象并回退生成标准 Legado 字段 |
 
 ---
 
@@ -550,7 +551,7 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | v0.2.1 | — | WebView 认证闭环在真实 Cloudflare 站点验收通过 | 🟡（链路已实现，待人工验收；不承诺无头绕过） |
 | **v0.3.0** | **P1 + P2** | 受阻源数较 P0 基线下降 ≥ 70% · 规则侧在线失败 ≤ 5%（排除连接类）· 兜底路径已删 · 最大文件 < 250 行 —— **真正的「Legado 桌面版」起点** | ⬜ |
 | v0.4.0 | P3 | 能用本项目读完一本真实在线书 | ⬜ |
-| v0.5.0 | P4 | 下载 / 缓存 / 导出 | ⬜ |
+| v0.5.0 | P4 | 下载 / 缓存 / 导出 | ✅ |
 | v0.6.0 | P5 | 批量校验 + 换源对齐 + 书源管理 | ⬜ |
 | v0.7.0 | P6 | RSS + legado 兼容备份 | ⬜ |
 | v1.0.0 | P7 | 性能 / 稳定性 / Windows + Linux 打包 | ⬜ |

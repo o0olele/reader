@@ -40,6 +40,26 @@ impl SettingsService {
             .bind(user_agent.unwrap_or("")).execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
     }
 
+    pub async fn cache_quota_mb(&self) -> Result<Option<i64>, AppError> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT value FROM app_settings WHERE key = 'cache_quota_mb'",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::database)?
+        .map(|value| {
+            value
+                .parse()
+                .map_err(|error| AppError::Parse(format!("缓存上限设置无效: {error}")))
+        })
+        .transpose()
+    }
+
+    pub async fn save_cache_quota_mb(&self, megabytes: i64) -> Result<(), AppError> {
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES ('cache_quota_mb', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+            .bind(megabytes.to_string()).execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
+    }
+
     /// The `navigator.userAgent` the main window last reported. Cached across
     /// launches so the very first request of a session already matches the
     /// webview, instead of waiting for the frontend to boot and report in.

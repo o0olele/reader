@@ -30,6 +30,10 @@ impl MemoryChapterCache {
             }
         }
     }
+    pub(super) fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+    }
 }
 pub(super) fn memory_cache() -> &'static Mutex<MemoryChapterCache> {
     MEMORY_CACHE.get_or_init(|| Mutex::new(MemoryChapterCache::new()))

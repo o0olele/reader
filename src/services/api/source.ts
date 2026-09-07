@@ -6,6 +6,7 @@ import type {
   SourceDebugResult,
   SourceDebugStage,
   SourceImportReport,
+  SourceExportResult,
   SourceLoginResult,
   SourceSessionStatus,
   SourceTestResult,
@@ -21,6 +22,18 @@ export function saveBookSource(input: BookSourceInput): Promise<BookSource> {
 
 export function testBookSource(sourceId: number, query: string): Promise<SourceTestResult> {
   return invoke<SourceTestResult>('test_book_source', { sourceId, query })
+}
+
+export function validateAllSources(query: string): Promise<SourceTestResult[]> {
+  return invoke<SourceTestResult[]>('validate_all_sources', { query })
+}
+
+export function setBookSourceEnabled(sourceId: number, enabled: boolean): Promise<void> {
+  return invoke<void>('set_book_source_enabled', { sourceId, enabled })
+}
+
+export function exportBookSources(targetPath: string): Promise<SourceExportResult> {
+  return invoke<SourceExportResult>('export_book_sources', { targetPath })
 }
 
 export function importBookSourcesJson(json: string): Promise<SourceImportReport> {

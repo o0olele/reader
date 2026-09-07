@@ -302,6 +302,37 @@ impl SearchService {
         })
     }
 
+    pub async fn test_all(&self, query: &str) -> Result<Vec<SourceTestResult>, AppError> {
+        let query = query.trim();
+        if query.is_empty() || query.len() > 120 {
+            return Err(AppError::InvalidArgument(
+                "验证关键词需要为 1 到 120 个字符".into(),
+            ));
+        }
+        let sources = self
+            .sources
+            .list()
+            .await?
+            .into_iter()
+            .filter(|source| source.enabled)
+            .collect::<Vec<_>>();
+        let limiter = Arc::new(tokio::sync::Semaphore::new(8));
+        let jobs = sources.into_iter().map(|source| {
+            let service = self.clone();
+            let limiter = limiter.clone();
+            let query = query.to_owned();
+            async move {
+                let permit = limiter.acquire_owned().await;
+                let result = match permit {
+                    Ok(_permit) => service.test_with_browser(source.id, &query, None).await,
+                    Err(_) => Err(AppError::Source("批量验证调度器不可用".into())),
+                };
+                result.unwrap_or_else(|error| SourceTestResult::failed(&source, &error))
+            }
+        });
+        Ok(futures::future::join_all(jobs).await)
+    }
+
     async fn sync_browser_cookies(
         &self,
         source: &BookSource,
@@ -498,6 +529,25 @@ pub struct SourceTestResult {
     pub has_token: bool,
     pub has_cookie: bool,
     pub user_agent: String,
+}
+
+impl SourceTestResult {
+    fn failed(source: &BookSource, error: &AppError) -> Self {
+        Self {
+            source_id: source.id,
+            source_name: source.name.clone(),
+            status: 0,
+            result_count: 0,
+            auth_required: error.requires_authentication(),
+            cloudflare_challenge: error.requires_browser_challenge(),
+            session_state: "error".into(),
+            request_url: source.search_url.clone(),
+            duration_ms: 0,
+            has_token: source.access_token.is_some() && !source.session_expired(),
+            has_cookie: source.session_cookie.is_some() && !source.session_expired(),
+            user_agent: crate::infrastructure::http::request::user_agent(),
+        }
+    }
 }
 #[derive(Debug, Serialize)]
 pub struct SourceFailure {

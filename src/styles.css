@@ -581,6 +581,25 @@
   .download-start-card select {
     @apply min-w-[190px] rounded-lg border border-[#dce5f2] bg-white px-3 py-2 text-sm;
   }
+  .cache-card {
+    @apply mb-5 flex items-center gap-3 rounded-xl border border-[#e7edf6] bg-white px-5 py-3 text-sm;
+  }
+  .cache-summary {
+    @apply flex min-w-0 flex-1 flex-col;
+  }
+  .cache-summary span,
+  .cache-card label {
+    @apply text-xs text-[#8290a5];
+  }
+  .cache-card input {
+    @apply ml-1 w-20 rounded-md border border-[#dce5f2] px-2 py-1 text-sm text-[#344054];
+  }
+  .cache-card button {
+    @apply flex items-center gap-1 rounded-lg border border-[#dce5f2] bg-white px-3 py-1.5 text-xs text-[#52627a] hover:bg-[#edf4ff];
+  }
+  .cache-card button.danger {
+    @apply text-[#c53d3d] hover:bg-[#fff0f0];
+  }
   .download-task-list {
     @apply space-y-3;
   }
@@ -795,6 +814,15 @@
   }
   .source-failures button {
     @apply ml-2 rounded border border-amber-300 bg-transparent px-2 py-1 text-xs;
+  }
+  .source-batch-results {
+    @apply flex-wrap;
+  }
+  .source-batch-results .source-ok {
+    @apply text-[#16834a];
+  }
+  .source-batch-results .source-bad {
+    @apply text-[#c53d3d];
   }
   .source-editor {
     @apply mt-3;
