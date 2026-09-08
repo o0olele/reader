@@ -23,7 +23,9 @@ pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>) -> Result<(), AppE
         Function::new(ctx.clone(), |data: String, algorithm: String| {
             digest_bytes(&algorithm, data.as_bytes())
                 .map(|bytes| bytes_to_hex(&bytes))
-                .map_err(|error| rquickjs::Error::new_from_js_message("Digest", "String", error))
+                .map_err(|error| {
+                    rquickjs::Error::new_from_js_message("Digest", "String", error.to_string())
+                })
         }),
     )
     .map_err(js_error)?;
@@ -34,7 +36,9 @@ pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>) -> Result<(), AppE
             |data: String, algorithm: String, key: String| {
                 hmac_bytes(&algorithm, key.as_bytes(), data.as_bytes())
                     .map(|bytes| bytes_to_hex(&bytes))
-                    .map_err(|error| rquickjs::Error::new_from_js_message("HMac", "String", error))
+                    .map_err(|error| {
+                        rquickjs::Error::new_from_js_message("HMac", "String", error.to_string())
+                    })
             },
         ),
     )
@@ -46,7 +50,9 @@ pub(super) fn install<'js>(ctx: Ctx<'js>, java: &Object<'js>) -> Result<(), AppE
             |data: String, algorithm: String, key: String| {
                 hmac_bytes(&algorithm, key.as_bytes(), data.as_bytes())
                     .map(|bytes| STANDARD.encode(bytes))
-                    .map_err(|error| rquickjs::Error::new_from_js_message("HMac", "String", error))
+                    .map_err(|error| {
+                        rquickjs::Error::new_from_js_message("HMac", "String", error.to_string())
+                    })
             },
         ),
     )
@@ -77,44 +83,48 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn digest_bytes(algorithm: &str, data: &[u8]) -> Result<Vec<u8>, String> {
+fn digest_bytes(algorithm: &str, data: &[u8]) -> Result<Vec<u8>, AppError> {
     match canonical_algorithm(algorithm).as_str() {
         "MD5" => Ok(Md5::digest(data).to_vec()),
         "SHA1" => Ok(Sha1::digest(data).to_vec()),
         "SHA256" => Ok(Sha256::digest(data).to_vec()),
         "SHA512" => Ok(Sha512::digest(data).to_vec()),
-        other => Err(format!("unsupported digest algorithm: {other}")),
+        other => Err(AppError::InvalidArgument(format!(
+            "unsupported digest algorithm: {other}"
+        ))),
     }
 }
 
-fn hmac_bytes(algorithm: &str, key: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
+fn hmac_bytes(algorithm: &str, key: &[u8], data: &[u8]) -> Result<Vec<u8>, AppError> {
     let normalized = canonical_algorithm(algorithm);
     let digest_name = normalized.strip_prefix("HMAC").unwrap_or(&normalized);
     match digest_name {
         "MD5" => {
             let mut mac = Hmac::<Md5>::new_from_slice(key)
-                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+                .map_err(|error| AppError::InvalidArgument(format!("invalid HMAC key: {error}")))?;
             mac.update(data);
             Ok(mac.finalize().into_bytes().to_vec())
         }
         "SHA1" => {
             let mut mac = Hmac::<Sha1>::new_from_slice(key)
-                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+                .map_err(|error| AppError::InvalidArgument(format!("invalid HMAC key: {error}")))?;
             mac.update(data);
             Ok(mac.finalize().into_bytes().to_vec())
         }
         "SHA256" => {
             let mut mac = Hmac::<Sha256>::new_from_slice(key)
-                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+                .map_err(|error| AppError::InvalidArgument(format!("invalid HMAC key: {error}")))?;
             mac.update(data);
             Ok(mac.finalize().into_bytes().to_vec())
         }
         "SHA512" => {
             let mut mac = Hmac::<Sha512>::new_from_slice(key)
-                .map_err(|error| format!("invalid HMAC key: {error}"))?;
+                .map_err(|error| AppError::InvalidArgument(format!("invalid HMAC key: {error}")))?;
             mac.update(data);
             Ok(mac.finalize().into_bytes().to_vec())
         }
-        other => Err(format!("unsupported HMAC algorithm: {other}")),
+        other => Err(AppError::InvalidArgument(format!(
+            "unsupported HMAC algorithm: {other}"
+        ))),
     }
 }

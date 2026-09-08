@@ -22,7 +22,11 @@ pub(super) fn install_http_functions<'js>(
                     .map(parse_request_options)
                     .transpose()
                     .map_err(|error| {
-                        rquickjs::Error::new_from_js_message("RequestOptions", "Object", error)
+                        rquickjs::Error::new_from_js_message(
+                            "RequestOptions",
+                            "Object",
+                            error.to_string(),
+                        )
                     })?
                     .unwrap_or_default();
                 blocking_http_request_with_options(&request_http, &url, options).map_err(|error| {

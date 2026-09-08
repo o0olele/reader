@@ -260,7 +260,7 @@ P7  性能 / 稳定性 / 发布                    2 周
 整源的 dummy 输入用一份结构化 JSON 样本；否则用 HTML 样本。
 
 - [x] 按书源识别 JSON/HTML dummy 输入，避免 JSON 规则误用 HTML 输入
-- [ ] 745 条 harness 失败降到 100 条以内（2026-09-06 报告未单列 harness 类，尚不能确认此门槛）
+- [x] 745 条 harness 失败降到 100 条以内（2026-09-07：报告单列 `harness input` 98 条 / 68 源，< 100）
 - [x] 修完立刻重跑，得到**第一个可信的静态覆盖率**（970 源，746 / 970 = 76.9%，224 个受阻源）
 
 ### 2.2 报告按「源」而非「规则」归因
@@ -278,7 +278,7 @@ P7  性能 / 稳定性 / 发布                    2 周
 
 ### 2.4 验收
 
-- [ ] `docs/coverage/rule-audit.md` 中 harness 类失败 < 100 条
+- [x] `docs/coverage/rule-audit.md` 中 harness 类失败 < 100 条（2026-09-07 复跑：98 条）
 - [x] 报告含「阻塞类别 → 受阻源数」表
 - [x] `defaultData/bookSources.json` 进 `tests/fixtures/`，作为字段级导入回归
 
@@ -315,6 +315,13 @@ dummy 输入下无执行错误 **747 / 970 = 77.0%**，受阻 **223 源**，失�
 `book_tag_list[*].title`）先归一化为 `@Json:$.…` 再执行，避免被 CSS 解析器误判。XPath 空选择器
 （`@XPath://`）按 legado 语义返回空结果。完整语料复跑结果为 **790 / 970 = 81.4%**，受阻
 **180 源**；相对上次报告再减少 1 个受阻源。相关回归测试已加入 `rule-audit` 与 XPath 模块。
+
+2026-09-07 复跑（修复归因器顺序 bug：`harness input` 判断原来排在 `js runtime` 之后永远不会命中）：
+**788 / 970 = 81.2%**，受阻 **182 源**。按条数归类：CSS 兼容 125、`harness input` 98、
+JS 运行时 96、other 37、永久 JVM 访问 24、路径解析 2；按源归类：CSS 77、harness 68、JS 67、
+other 27、JVM 14、路径 2。**harness 类失败 98 条 < 100，§2.1/§2.4 门槛达成。**
+该口径把 `cannot read property of null/undefined` 与 `xxx is not defined` 从 js runtime 中剥离，
+js runtime 剩余 96 条为真实兼容缺口（如 `with(JavaImporter)` 之外的语法/绑定差异）。
 
 ---
 
@@ -408,14 +415,14 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 
 ### 3.9 验收
 
-- [ ] 静态覆盖率：以 P0 修正后的口径为基线，**受阻源数下降 ≥ 70%**（当前可信基线：224 个受阻源；
-  2026-09-06 审计结果：180 个受阻源）
+- [ ] 静态覆盖率：以 P0 修正后的口径为基线，**受阻源数下降 ≥ 70%**（可信基线 224；2026-09-07 复跑 182，下降 18.8%，未达标）
 - [ ] 在线可用率：`source-audit` 跑 530 源，**排除连接类失败后**，规则侧失败 ≤ 5%
-- [ ] `selector.rs` CSS 兜底已删除；全项目 `Result<_, String>` 归零（当前 10 处 / 5 文件）
+- [ ] `selector.rs` CSS 兜底已删除（旧扁平 CSS 列仍随导入/导出/管理链路使用，删除需先做扁平列迁移）
+- [x] 全项目 `Result<_, String>` 归零（2026-09-07：全部改为 `AppError` / `RuleParseError`，含 bin 与 js_runtime）
 - [ ] 单源规则执行 P95 < 200ms（不含网络）
-- [ ] JS 死循环脚本 5 秒内被终止且不影响主进程
-- [ ] **最大单文件非测试行 < 250**（当前 `js_runtime.rs` 2,080 / `search_service` 755 / `http/request.rs` 697 / `source_service.rs` 568）
-- [ ] Rhino JVM 包访问的 9 个源被明确标注为不支持，非静默失败
+- [x] JS 死循环脚本 5 秒内被终止且不影响主进程（QuickJS interrupt handler + 5s 超时；新增 `terminates_infinite_loop_scripts_within_timeout` 回归测试）
+- [x] **最大单文件非测试行 < 250**（2026-09-07：`search_service`、`command/source`、`source_service`、`import`、`pipeline`、`jsoup`、`selector`、`source_debug_service`、`domain/source`、`engine` 全部拆至 < 250；唯一越线文件为纯测试模块 `js_runtime/tests.rs`，按「非测试行」口径豁免）
+- [x] Rhino JVM 包访问的 9 个源被明确标注为不支持，非静默失败（导入 `partial` 标注 + audit `unsupported JVM access` 类别）
 
 ---
 
@@ -428,6 +435,11 @@ legado 顺序：`sourceRegex` 切分 → `replaceRegex` → 全局 `ReplaceRule`
 2. **展示认证态** —— 会话是否过期、本次是否携带 token/cookie/sign、是否触发 Cloudflare。
 3. **一键把当前失败源导出为 fixture** —— 响应 HTML + 书源 JSON 直接写进 `tests/fixtures/`，
    让每个真实失败自动变成回归测试。
+
+2026-09-07 增量：`SourceDebugRequest` 增加 `charset` 字段（来自 `RequestSpec`），前端类型同步；
+新增 `export_source_fixture` 命令与 TS API：把当前书源定义（清除 token/cookie/session）与捕获的
+响应 HTML 写入指定 fixture 目录（`{slug}.source.json` + `{slug}.response.html`）。
+前端「导出 fixture」按钮尚未接入（需要目录选择对话框）。
 
 验收：
 
@@ -512,9 +524,9 @@ P4 已完成任务持久化、调度、暂停/继续/取消、失败重试、正
 
 ## 10. 文档漂移（顺手修）
 
-- `ARCHITECTURE.md` 称「使用原生 CSS 而非 Tailwind/shadcn-vue」，但 `32196a3` 已引入 Tailwind。
-- `ARCHITECTURE.md` 的 `source_engine` 段落仍描述「当前实现受支持的 CSS 子集」，与已落地的完整规则引擎不符。
-- `ARCHITECTURE.md` 未提及 `explore`、`source_debug`、`source_engine/url/` 三个新模块。
+- [x] `ARCHITECTURE.md` 称「使用原生 CSS 而非 Tailwind/shadcn-vue」——已改为 Tailwind 工具类 + shadcn-vue 不依赖（2026-09-07 复查确认）。
+- [x] `ARCHITECTURE.md` 的 `source_engine` 段落仍描述「当前实现受支持的 CSS 子集」——已改为多模式规则引擎（Default/JSoup、XPath、JSONPath、regex、QuickJS）。
+- [x] `ARCHITECTURE.md` 未提及 `explore`、`source_debug`、`source_engine/url/`——已补 `service/explore_service.rs`、`service/source_debug_service.rs`、`source_engine/url/` 六阶段 AnalyzeUrl 与 js_runtime 模块拆分，并同步里程碑与 download 日志目标。
 
 ---
 
@@ -578,18 +590,18 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 
 | 风险 | 影响 | 状态 |
 | --- | --- | --- |
-| **覆盖率口径本身不可信** | 41% 的失败是 harness 假输入造成的；36.6% 既非上界也非真实能力 | **本次新增（§0.3.2）** —— P0 全部为它服务 |
+| **覆盖率口径本身不可信** | 41% 的失败是 harness 假输入造成的；36.6% 既非上界也非真实能力 | ✅ 已关闭（2026-09-07）：报告单列 `harness input` 98 条，其余为真实缺口 |
 | **用 token 频次预测覆盖率收益** | 2026-09-02 预测「修完七项到 99.1%」，实际 36.6%，误差 60pp | **本次新增（§0.3.1）** —— 教训：token 出现频次 ≠ 引擎能否执行。**排期只依据真实失败归类** |
 | **Java 正则与 Rust `regex` 差异** | 263 条规则失败，第二大真实缺口 | ✅ 已加入兼容归一化与字面量回退 |
 | **JSoup 选择器宽松度未对齐** | 202 条规则失败 | ✅ 已加入属性选择器归一化、`:contains`、`:eq` |
-| **引擎比 legado 严格** | 338 条规则失败，且会让整源判定为受阻 | **本次新增** —— 最便宜的一项，P1 §3.1 |
-| **`js_runtime.rs` 2,080 行** | 847 → 2,080，是纪律写进路线图后**反而恶化**的文件 | **升级** —— P1 §3.4 强制拆分，不可再顺延 |
+| **引擎比 legado 严格** | 338 条规则失败，且会让整源判定为受阻 | ✅ 已按 legado 语义降级为空结果 |
+| **`js_runtime.rs` 2,080 行** | 847 → 2,080，是纪律写进路线图后**反而恶化**的文件 | ✅ 已拆分到 `js_runtime/*` 与 `bindings/*`，生产模块 < 250 行 |
 | 线上可用率 47.0% | 端到端仍有 53% 失败 | 主因是 194 条连接类失败（69.3%），非引擎；`source-audit` 需分层统计 |
-| Rhino JVM 包访问无法支持 | 9 源（1%）永久不可用 | 选 QuickJS 必须付的账。明确标注，不静默失败 |
+| Rhino JVM 包访问无法支持 | 9 源（1%）永久不可用 | 选 QuickJS 必须付的账。导入 `partial` 标注 + audit 单列，不静默失败 |
 | Cloudflare / JS challenge | 22 源不可用 | WebView 认证已落地，待真实站点验收；不承诺无头绕过 |
 | `rquickjs` C 工具链跨平台 | Linux / macOS 构建失败 | **v1 登记至今未关闭** —— P1 结束时 spike |
-| 兜底路径掩盖失败 | `pipeline.rs` 曾吞掉引擎错误 | `READER_STRICT_ENGINE` 已落地；`selector.rs` 兜底待 P1 删除 |
-| 业务在 service 层重新聚团 | `search_service` 755 / `source_service` 568 | 每个 P 收尾复查最大文件 |
+| 兜底路径掩盖失败 | `pipeline.rs` 曾吞掉引擎错误 | `READER_STRICT_ENGINE` 已落地；`selector.rs` 兜底待删除（§15 第 16 项） |
+| 业务在 service 层重新聚团 | 已全部拆至 < 250 非测试行（`js_runtime/tests.rs` 为纯测试豁免） | ✅ 本轮关闭 |
 | ~~引擎覆盖率无法自测~~ · ~~真实语料不足~~ · ~~XPath crate 不匹配~~ · ~~AnalyzeUrl 缺失~~ · ~~架构重构回归~~ | — | **已关闭** |
 
 ---
@@ -626,6 +638,13 @@ find src-tauri/src -name "*.rs" -exec wc -l {} + | sort -rn | head -10
 | 8 | ✅ **P5 书源校验与管理字段** | 校验耗时回写；分组、排序、权重、发现页启停可管理并与 Legado JSON 往返 | §7 |
 | 9 | ✅ **换源增强** | 已按章节标题/序号对齐并保留章内比例；`bookUrlPattern` / `canReName` 已接入 | §7 |
 | 10 | ✅ **普通响应 Cookie 自动持久化** | 将非登录请求产生的 `Set-Cookie` 合并回书源会话，重启后继续可用 | §7 |
+| 11 | ✅ **修 `rule-audit` 归因器顺序** | `harness input` 判断移到 `js runtime` 之前；复跑得 harness 98 条（< 100），js runtime 真实缺口 96 条 | §2.1 |
+| 12 | ✅ **全项目 `Result<_, String>` 归零** | 统一为 `AppError` / `RuleParseError`；`error` 模块公开，bin 同步迁移 | §3.9 |
+| 13 | ✅ **JS 死循环回归测试** | `terminates_infinite_loop_scripts_within_timeout`：interrupt handler 300ms 内终止 | §3.9 |
+| 14 | ✅ **§10 文档漂移修复** | `ARCHITECTURE.md` 三处过时描述 + 里程碑/日志目标更新 | §10 |
+| 15 | 🟡 **调试器增量** | `SourceDebugRequest.charset` + `export_source_fixture` 命令与 TS API；前端按钮待接 | §4 |
+| 16 | ⬜ **`selector.rs` 兜底删除 + 扁平列迁移** | 删除旧 CSS 投影路径；需先迁移导入/导出/管理链路到 raw_rules | §3.9 |
+| 17 | ✅ **最大单文件 < 250 行** | 10 个越线生产文件全部拆至 < 250；唯一越线为纯测试 `js_runtime/tests.rs`（豁免） | §3.9 |
 
 **第 1、2 项必须先做。** 在此之前，第 3–6 项的收益无法度量 —— 而上一轮正是因为在错误口径上排期，
 把七项全做完却只换来 17 个百分点。

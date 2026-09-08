@@ -1,8 +1,14 @@
 //! CSS selector execution for the currently supported source-rule subset.
 
 use crate::domain::source::{BookInfo, BookSearchResult, BookSource};
+use crate::error::AppError;
 use crate::source_engine::{import::normalize_rule, url::absolutize};
 use scraper::{ElementRef, Html, Selector};
+
+#[path = "selector/position.rs"]
+mod position;
+
+use position::{split_alternatives, strip_legacy_position};
 
 fn text(element: ElementRef<'_>) -> Option<String> {
     let value = element.text().collect::<Vec<_>>().join(" ");
@@ -48,11 +54,11 @@ fn first_by_rule(document: &Html, rule: &str) -> Option<String> {
     }
 }
 
-pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, String)>, String> {
+pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, String)>, AppError> {
     let document = Html::parse_document(html);
     let item_rule = normalize_rule(&source.catalog_rule.item);
     let items =
-        Selector::parse(&item_rule).map_err(|error| format!("目录结果选择器无效: {error}"))?;
+        Selector::parse(&item_rule).map_err(|error| AppError::parse(format!("目录结果选择器无效: {error}")))?;
     Ok(document
         .select(&items)
         .filter_map(|item| {
@@ -66,7 +72,7 @@ pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, Str
 
 type CatalogPage = (Vec<(String, String)>, Option<String>);
 
-pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage, String> {
+pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage, AppError> {
     let catalog = parse_catalog(source, html)?;
     let next = source.next_toc_url_selector.as_deref().and_then(|rule| {
         let document = Html::parse_document(html);
@@ -75,15 +81,15 @@ pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage
     Ok((catalog, next))
 }
 
-pub fn parse_content(source: &BookSource, html: &str) -> Result<String, String> {
+pub fn parse_content(source: &BookSource, html: &str) -> Result<String, AppError> {
     let document = Html::parse_document(html);
     let content_rule = normalize_rule(&source.content_selector);
     let selector =
-        Selector::parse(&content_rule).map_err(|error| format!("正文选择器无效: {error}"))?;
+        Selector::parse(&content_rule).map_err(|error| AppError::parse(format!("正文选择器无效: {error}")))?;
     let content = document
         .select(&selector)
         .next()
-        .ok_or("页面中没有找到正文")?
+        .ok_or_else(|| AppError::parse("页面中没有找到正文"))?
         .text()
         .map(str::trim)
         .filter(|line| !line.is_empty())
@@ -91,13 +97,13 @@ pub fn parse_content(source: &BookSource, html: &str) -> Result<String, String> 
         .join("\n");
     (!content.is_empty())
         .then_some(content)
-        .ok_or_else(|| "页面正文为空".into())
+        .ok_or_else(|| AppError::parse("页面正文为空"))
 }
 
 pub fn parse_content_page(
     source: &BookSource,
     html: &str,
-) -> Result<(String, Option<String>), String> {
+) -> Result<(String, Option<String>), AppError> {
     let content = parse_content(source, html)?;
     let next = source
         .next_content_url_selector
@@ -109,7 +115,7 @@ pub fn parse_content_page(
     Ok((content, next))
 }
 
-pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, String> {
+pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppError> {
     let document = Html::parse_document(html);
     let read = |rule: Option<&String>| -> Option<String> {
         let rule = rule?;
@@ -128,7 +134,7 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, Stri
     })
 }
 
-pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, String> {
+pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
     let document = Html::parse_document(html);
     // The flat projection is only a compatibility fallback.  It still needs
     // to understand the most common legado item spellings, otherwise a source
@@ -182,97 +188,14 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
         }
     }
     match invalid_selector {
-        Some(error) => Err(format!("搜索结果选择器无效: {error}")),
+        Some(error) => Err(AppError::parse(format!("搜索结果选择器无效: {error}"))),
         None => Ok(Vec::new()),
     }
-}
-
-fn split_alternatives(raw: &str) -> Vec<&str> {
-    let mut branches = Vec::new();
-    let mut start = 0;
-    let mut depth = 0i32;
-    let mut quote = None;
-    let bytes = raw.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        let character = bytes[index] as char;
-        match quote {
-            Some(active) if character == active => quote = None,
-            Some(_) => {}
-            None => match character {
-                '\'' | '"' => quote = Some(character),
-                '[' | '(' => depth += 1,
-                ']' | ')' => depth = (depth - 1).max(0),
-                '|' if depth == 0 && bytes.get(index + 1) == Some(&b'|') => {
-                    branches.push(raw[start..index].trim());
-                    index += 1;
-                    start = index + 1;
-                }
-                _ => {}
-            },
-        }
-        index += 1;
-    }
-    branches.push(raw[start..].trim());
-    branches
 }
 
 fn normalize_selector_projection(raw: &str) -> String {
     let normalized = normalize_rule(raw);
     strip_legacy_position(&normalized)
-}
-
-/// Removes a trailing legado index/range expression from a CSS projection.
-/// The rule engine executes these filters with the correct semantics; the
-/// fallback only needs a valid selector and therefore deliberately ignores the
-/// position when projecting to scraper CSS.
-fn strip_legacy_position(value: &str) -> String {
-    let value = value.trim();
-    if let Some(content) = value.strip_suffix(']') {
-        if let Some(open) = content.rfind('[') {
-            let expression = content[open + 1..].trim();
-            if is_position_expression(expression) {
-                return content[..open].trim_end().to_owned();
-            }
-        }
-    }
-    if let Some(bang) = value.rfind('!') {
-        let suffix = value[bang + 1..].trim();
-        if is_index_list(suffix) {
-            return value[..bang].trim_end_matches('.').trim_end().to_owned();
-        }
-    }
-    for (dot, _) in value.match_indices('.').rev() {
-        let suffix = value[dot + 1..].trim();
-        if is_index_list(suffix) {
-            return value[..dot].trim_end().to_owned();
-        }
-    }
-    value.to_owned()
-}
-
-fn is_position_expression(value: &str) -> bool {
-    let value = value.strip_prefix('!').unwrap_or(value).trim();
-    !value.is_empty()
-        && value.split(',').all(|part| {
-            let part = part.trim();
-            if part.contains(':') {
-                let pieces = part.split(':').collect::<Vec<_>>();
-                (2..=3).contains(&pieces.len())
-                    && pieces
-                        .iter()
-                        .all(|piece| piece.trim().is_empty() || piece.trim().parse::<i32>().is_ok())
-            } else {
-                part.parse::<i32>().is_ok()
-            }
-        })
-}
-
-fn is_index_list(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .split(':')
-            .all(|part| part.trim().parse::<i32>().is_ok())
 }
 
 #[cfg(test)]

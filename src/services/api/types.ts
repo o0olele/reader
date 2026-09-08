@@ -201,6 +201,7 @@ export interface SourceDebugRequest {
   url: string
   headers: [string, string][]
   body?: string
+  charset?: string
   auth_attached: boolean
 }
 

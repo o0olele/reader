@@ -4,6 +4,7 @@
 //! The audit deliberately executes the real rule splitter/evaluator against a
 //! deterministic dummy document; it never performs network requests.
 
+use reader_desktop_lib::error::AppError;
 use reader_desktop_lib::source_engine::rule::{evaluate, Extraction, RuleContext};
 #[path = "rule_audit/dummy.rs"]
 mod dummy;
@@ -37,22 +38,24 @@ struct Audit {
     failed_rules: BTreeMap<String, BTreeSet<String>>,
 }
 
-fn corpus_file(path: &Path) -> Result<PathBuf, String> {
+fn corpus_file(path: &Path) -> Result<PathBuf, AppError> {
     if path.is_file() {
         return Ok(path.to_owned());
     }
     fs::read_dir(path)
-        .map_err(|e| format!("cannot read corpus directory: {e}"))?
+        .map_err(|e| AppError::Io(format!("cannot read corpus directory: {e}")))?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .find(|candidate| candidate.extension().is_some_and(|ext| ext == "json"))
-        .ok_or_else(|| format!("no JSON corpus found in {}", path.display()))
+        .ok_or_else(|| AppError::InvalidArgument(format!("no JSON corpus found in {}", path.display())))
 }
 
-fn run(input: &str) -> Result<Audit, String> {
-    let value: Value =
-        serde_json::from_str(input).map_err(|e| format!("invalid corpus JSON: {e}"))?;
-    let sources = value.as_array().ok_or("corpus root must be a JSON array")?;
+fn run(input: &str) -> Result<Audit, AppError> {
+    let value: Value = serde_json::from_str(input)
+        .map_err(|e| AppError::InvalidArgument(format!("invalid corpus JSON: {e}")))?;
+    let sources = value
+        .as_array()
+        .ok_or_else(|| AppError::InvalidArgument("corpus root must be a JSON array".into()))?;
     let mut report = Audit {
         sources: sources.len(),
         ..Default::default()
@@ -115,21 +118,25 @@ fn run(input: &str) -> Result<Audit, String> {
     Ok(report)
 }
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), AppError> {
     let args: Vec<String> = env::args().collect();
     let value = |flag: &str| {
         args.windows(2)
             .find(|pair| pair[0] == flag)
             .map(|pair| pair[1].clone())
-            .ok_or_else(|| format!("missing {flag}"))
+            .ok_or_else(|| AppError::InvalidArgument(format!("missing {flag}")))
     };
     let corpus = corpus_file(Path::new(&value("--corpus")?))?;
     let out_dir = PathBuf::from(value("--out")?);
-    let report =
-        run(&fs::read_to_string(&corpus).map_err(|e| format!("cannot read corpus: {e}"))?)?;
-    fs::create_dir_all(&out_dir).map_err(|e| format!("cannot create output directory: {e}"))?;
+    let report = run(
+        &fs::read_to_string(&corpus)
+            .map_err(|e| AppError::Io(format!("cannot read corpus: {e}")))?,
+    )?;
+    fs::create_dir_all(&out_dir)
+        .map_err(|e| AppError::Io(format!("cannot create output directory: {e}")))?;
     let output = out_dir.join("rule-audit.md");
-    fs::write(&output, markdown(&report)).map_err(|e| format!("cannot write report: {e}"))?;
+    fs::write(&output, markdown(&report))
+        .map_err(|e| AppError::Io(format!("cannot write report: {e}")))?;
     println!("{}", output.display());
     Ok(())
 }

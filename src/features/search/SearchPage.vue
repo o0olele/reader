@@ -59,6 +59,34 @@ const visibleGroups = computed(() =>
   }),
 )
 
+/**
+ * Mirrors legado's SearchResultMerger: results whose title/author exactly
+ * equal the keyword go first, then results whose kind tag contains the
+ * keyword, then partial title/author matches, then everything else.  Inside
+ * the first three buckets, books returned by more sources rank higher.
+ */
+function rankBucket(group: SearchResultGroup, keyword: string) {
+  const title = group.title.trim().toLowerCase()
+  const author = (group.author ?? '').trim().toLowerCase()
+  const kind = (group.sources[0]?.kind ?? '').toLowerCase()
+  if (title === keyword || author === keyword) return 0
+  if (kind.includes(keyword)) return 1
+  if (title.includes(keyword) || author.includes(keyword)) return 2
+  return 3
+}
+
+const rankedGroups = computed(() => {
+  const keyword = search.query.trim().toLowerCase()
+  if (!keyword) return visibleGroups.value
+  return [...visibleGroups.value].sort((a, b) => {
+    const rankA = rankBucket(a, keyword)
+    const rankB = rankBucket(b, keyword)
+    if (rankA !== rankB) return rankA - rankB
+    // "other" results keep arrival order; matched buckets prefer more sources.
+    return rankA === 3 ? 0 : b.sources.length - a.sources.length
+  })
+})
+
 const isAdding = (group: SearchResultGroup) => group.sources.some((source) => source.url === search.addingResult)
 
 const canOpenBrowserAuth = (reason: string, authRequired: boolean) =>
@@ -199,7 +227,7 @@ function openBrowserAuth(sourceId: number) {
     <div v-else-if="!visibleGroups.length" class="search-empty">没有符合当前筛选条件的结果</div>
 
     <article
-      v-for="group in visibleGroups"
+      v-for="group in rankedGroups"
       :key="`${group.title}-${group.author ?? ''}`"
       :class="['search-result', { 'search-result-compact': layout === 'compact' }]"
     >

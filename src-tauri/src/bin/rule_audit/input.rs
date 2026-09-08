@@ -75,17 +75,17 @@ pub(super) fn error_category(error: &str) -> &'static str {
         || l.contains("java.security")
     {
         "unsupported JVM access"
+    } else if l.contains("cannot read property")
+        || l.contains("cannot read properties")
+        || l.contains("is not defined")
+    {
+        "harness input"
     } else if l.contains("source error") || l.contains("javascript") || l.contains("quickjs") {
         "js runtime"
     } else if l.contains("default-mode rule is not supported")
         && (l.contains("not a css selector") || l.contains("emptyselector"))
     {
         "css compatibility"
-    } else if l.contains("cannot read property")
-        || l.contains("cannot read properties")
-        || l.contains("is not defined")
-    {
-        "harness input"
     } else {
         "other"
     }

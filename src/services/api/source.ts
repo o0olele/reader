@@ -101,3 +101,8 @@ export function debugSourceStage(sourceId: number, stage: SourceDebugStage, inpu
 export function updateBookSourceRules(sourceId: number, rawRules: RawSourceRules): Promise<void> {
   return invoke<void>('update_book_source_rules', { sourceId, rawRules })
 }
+
+/** Export a captured debug response plus the source definition as a fixture. */
+export function exportSourceFixture(sourceId: number, html: string, outDir: string): Promise<string> {
+  return invoke<string>('export_source_fixture', { sourceId, html, outDir })
+}

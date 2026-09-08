@@ -2,7 +2,7 @@ mod app;
 #[path = "command/mod.rs"]
 mod command_api;
 pub mod domain;
-mod error;
+pub mod error;
 pub mod infrastructure;
 mod repository;
 mod service;
@@ -77,11 +77,12 @@ pub fn run() {
             command_api::bookshelf::move_book_to_group_cmd,
             command_api::source::debug_source_stage_cmd,
             command_api::source::update_book_source_rules_cmd,
+            command_api::source::export_source_fixture_cmd,
             command_api::source::list_book_sources_cmd,
             command_api::source::set_book_source_enabled_cmd,
             command_api::source::update_book_source_management_cmd,
             command_api::source::export_book_sources_cmd,
-            command_api::source::save_book_source_cmd,
+            command_api::source::input::save_book_source_cmd,
             command_api::source::import_book_sources_json_cmd,
             command_api::source::import_book_sources_url_cmd,
             command_api::search::search_books_cmd,
@@ -101,8 +102,8 @@ pub fn run() {
             command_api::source::clear_book_source_session_cmd,
             command_api::source::get_book_source_session_status_cmd,
             command_api::source::refresh_book_source_session_cmd,
-            command_api::source::open_book_source_browser_cmd,
-            command_api::source::save_book_source_browser_session_cmd,
+            command_api::source::browser::open_book_source_browser_cmd,
+            command_api::source::browser::save_book_source_browser_session_cmd,
             command_api::settings::get_app_settings_cmd,
             command_api::settings::save_app_settings_cmd,
             command_api::settings::report_webview_user_agent_cmd
