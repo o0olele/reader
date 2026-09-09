@@ -5,7 +5,8 @@ export interface ReadingLocator {
 
 const clampRatio = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0))
 
-function pageStep(element: HTMLElement): number {
+/** One horizontal page of the column layout: content width plus the column gap. */
+export function pageStep(element: HTMLElement): number {
   const style = getComputedStyle(element)
   const gap = Number.parseFloat(style.columnGap || '0') || 0
   const horizontalPadding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0)

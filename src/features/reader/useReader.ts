@@ -34,6 +34,8 @@ export function useReader(report: (cause: unknown) => void) {
   const selectedBook = ref<Book>()
   const chapters = ref<Chapter[]>([])
   const selectedChapter = ref<Chapter>()
+  /** Persisted reading position: everything before it renders as 已读 in the catalog. */
+  const lastReadChapterId = ref<number>()
   const readingSeconds = ref(0)
   const loadingChapter = ref(false)
   const refreshingCatalog = ref(false)
@@ -136,6 +138,7 @@ export function useReader(report: (cause: unknown) => void) {
       }
       const progress = await getReadingProgress(book.id).catch(() => null)
       selectedChapter.value = chapters.value.find((chapter) => chapter.id === progress?.chapter_id) ?? chapters.value[0]
+      lastReadChapterId.value = progress?.chapter_id ?? selectedChapter.value?.id
       await loadChapterContent(selectedChapter.value)
       await nextTick()
       if (readerContent.value && progress && selectedChapter.value?.id === progress.chapter_id) {
@@ -251,6 +254,7 @@ export function useReader(report: (cause: unknown) => void) {
 
   async function selectChapter(chapter: Chapter) {
     selectedChapter.value = chapter
+    lastReadChapterId.value = chapter.id
     await loadChapterContent(chapter)
     await nextTick()
     scheduleProgressSave()
@@ -266,6 +270,7 @@ export function useReader(report: (cause: unknown) => void) {
     selectedBook.value = undefined
     readingSeconds.value = 0
     selectedChapter.value = undefined
+    lastReadChapterId.value = undefined
     chapters.value = []
   }
 
@@ -273,6 +278,7 @@ export function useReader(report: (cause: unknown) => void) {
     selectedBook,
     chapters,
     selectedChapter,
+    lastReadChapterId,
     readingSeconds,
     loadingChapter,
     refreshingCatalog,
