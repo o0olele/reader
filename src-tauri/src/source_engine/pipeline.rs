@@ -1,6 +1,5 @@
 //! The parsing entry point used by the services.
 
-#[path = "pipeline/stages.rs"]
 mod stages;
 
 pub use stages::{
