@@ -1,6 +1,6 @@
 use crate::{
     app::AppState,
-    domain::{Chapter, ReadingProgress, ReadingRecord},
+    domain::{Chapter, ReadingProgress, ReadingRecord, ReadingStats},
     error::AppError,
     service::reader_service::ReaderService,
 };
@@ -113,5 +113,22 @@ pub async fn add_reading_time_cmd(
 ) -> Result<(), AppError> {
     ReaderService::new(state.database()?)
         .add_reading_time(book_id, duration_seconds)
+        .await
+}
+
+#[tauri::command(rename = "get_reading_stats")]
+pub async fn get_reading_stats_cmd(
+    state: State<'_, AppState>,
+) -> Result<ReadingStats, AppError> {
+    ReaderService::new(state.database()?).reading_stats().await
+}
+
+#[tauri::command(rename = "set_reading_goal")]
+pub async fn set_reading_goal_cmd(
+    state: State<'_, AppState>,
+    minutes: i64,
+) -> Result<ReadingStats, AppError> {
+    ReaderService::new(state.database()?)
+        .set_reading_goal(minutes)
         .await
 }

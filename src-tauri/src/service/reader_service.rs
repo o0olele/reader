@@ -8,7 +8,7 @@ mod processing_tests;
 use cache::memory_cache;
 
 use crate::{
-    domain::{Chapter, ReadingProgress, ReadingRecord},
+    domain::{Chapter, ReadingProgress, ReadingRecord, ReadingStats},
     error::AppError,
     repository::{
         book::SqliteBookRepository, chapter::SqliteChapterRepository,
@@ -134,6 +134,17 @@ impl ReaderService {
         self.reading_records
             .add_seconds(book_id, duration_seconds)
             .await
+    }
+
+    /// Home-dashboard aggregate: totals, today, streak, goal and finished books.
+    pub async fn reading_stats(&self) -> Result<ReadingStats, AppError> {
+        let goal = self.settings.reading_goal_minutes().await?;
+        self.reading_records.stats(goal).await
+    }
+
+    pub async fn set_reading_goal(&self, minutes: i64) -> Result<ReadingStats, AppError> {
+        self.settings.save_reading_goal_minutes(minutes).await?;
+        self.reading_records.stats(minutes).await
     }
 }
 

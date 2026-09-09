@@ -60,6 +60,8 @@ pub fn run() {
             command_api::reader::save_reading_progress_cmd,
             command_api::reader::get_reading_record_cmd,
             command_api::reader::add_reading_time_cmd,
+            command_api::reader::get_reading_stats_cmd,
+            command_api::reader::set_reading_goal_cmd,
             command_api::download::list_download_tasks_cmd,
             command_api::download::start_download_cmd,
             command_api::download::pause_download_cmd,
