@@ -362,6 +362,7 @@ F3 阅读器重建
 
 验收：
 - [ ] 九组快捷键逐一手测通过 —— **未手测**（本机无 GUI 会话，只有静态构建）
+      → 手测清单 `docs/manual-acceptance.md` §A
 - [x] rail 折叠态宽度 56px、展开态 220px
 
 > **F1 偏差登记**：`.rail` 没有直接用 shadcn `Sidebar` 的定位/宽度实现 —— 它的折叠态是 48px
@@ -391,6 +392,7 @@ F3 阅读器重建
 
 验收：
 - [ ] 每页与 `desktop-ui.html` 对应 section 并排截图比对 —— **未做**（本机无法截图比对）
+      → 手测清单 `docs/manual-acceptance.md` §B
 - [x] 无一处渲染非本模块数据：`grep -rn 'props.books.slice' src/features` 无结果；
       未接入模块一律走 `NotConnected.vue` 并列出所需能力
 
@@ -427,6 +429,9 @@ F3 阅读器重建
 - [ ] 分页模式改字号 → 进度不丢 —— 代码路径已接（`readerPosition.ts` + `useReader.ts` 字体 watcher），
       **双栏下的运行时验证未做**
 - [ ] **用本项目读完一本真实在线书**（v2 遗留未验收）—— **未验收**
+
+> 三条都在 `docs/manual-acceptance.md` §C（分栏/页码/退回单栏/改字号不丢）与 §D（性能与端到端）里，
+> 每条都写明了触发条件与期望值。
 
 **F3 实测（在 `427db42` 之上）**：`npm run lint` / `npm run format:check` / `npm run build` 三者全绿；
 最大 SFC 189 行（`ReaderPage.vue`，`ReaderPane.vue` 188）；分栏与退回单栏的样式确实进入产物 ——
@@ -647,6 +652,7 @@ find src \( -name "*.vue" -o -name "*.ts" \) -exec cat {} + | wc -l
 | 5 | 修文档漂移：`css_compat.rs` 路径 · 体量数字 · shadcn 依赖声明 | 独立，可并行 | §0.2 |
 | 6 | 拆 `pipeline/stages.rs`（252 行，唯一越线） | 独立，可并行 | E0 ✅ |
 | 7 | 删 `selector.rs` 兜底 + 扁平列迁移 | 独立，E0 关键项 | E0 |
+| 8 | 在桌面会话执行 `docs/manual-acceptance.md`（§A 快捷键 · §B 七页对位 · §C 阅读器几何 · §D 性能/端到端） | 需要 GUI 会话，可在任意阶段做 | F1 / F2 / F3 |
 
 **第 1–3 项必须先做。** 在此之前每写一个页面，都是在往那个 439 行的单体上继续堆。
 这正是 v2 在 `js_runtime.rs` 上犯过的错 —— 纪律写进了路线图，文件却从 847 行涨到 2,080 行。
