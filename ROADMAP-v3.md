@@ -500,6 +500,8 @@ F3 阅读器重建
 
 - 异常场景矩阵（`plan.md` §30）按真实失败分类补齐
 - Windows + Linux 打包
+  - [x] release exe 不再附带控制台窗口 —— `src/main.rs` 补 `windows_subsystem = "windows"`
+        （PE subsystem 3 → 2），`tracing` 改落盘 `<app_data_dir>/logs/reader-desktop.log`
 
 ---
 

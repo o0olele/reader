@@ -219,6 +219,17 @@ Set-Content -Path "$env:USERPROFILE\Desktop\百万字单章.txt" -Encoding UTF8 
 | D3 | 直接访问 `#/read/<bookId>?toc=0&panel=1` | 目录关闭、右侧面板打开；`toc=0` 生效（原型 :2778–2794） | | |
 | D4 | 直接访问 `#/settings/backup`、`#/settings/lab` | 命中对应 pane（深链接） | | |
 | D5 | 重启应用后回到 `#/read/<bookId>` | 恢复到上次章节与位置 | | |
+| D6 | 双击 `src-tauri/target/release/reader-desktop.exe`（**不要**从终端启动） | **不出现任何控制台窗口**；日志写在 `%APPDATA%\com.reader.desktop\logs\reader-desktop.log` | | |
+| D7 | 同上，用 `cargo tauri build` 出的安装包安装后再启动 | 同样无控制台窗口；卸载后 `%APPDATA%\com.reader.desktop` 是否保留由你决定 | | |
+
+> D6/D7 的自动核对（PE subsystem 必须为 2 = GUI）：
+> ```powershell
+> $p='src-tauri\target\release\reader-desktop.exe'
+> $h=Get-Content $p -AsByteStream -TotalCount 512
+> # 注意：byte 上的 -shl 会按 byte 溢出，必须先 [int]
+> $e=[int]$h[0x3C]+([int]$h[0x3D]-shl 8)+([int]$h[0x3E]-shl 16)+([int]$h[0x3F]-shl 24)
+> [int]$h[$e+24+68]+([int]$h[$e+24+69]-shl 8)   # 期望 2；3 表示控制台程序
+> ```
 
 ---
 

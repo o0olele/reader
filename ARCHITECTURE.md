@@ -31,7 +31,7 @@ The reference project at `D:\Code\chatting\legado-with-MD3` informed the initial
 
 ## Logging
 
-Rust uses `tracing` targets for `book`, `reader`, `source`, `network`, `database`, and `download`; imports, source operations, requests, cache hit/miss, migration duration, and download-task failures are instrumented.
+Rust uses `tracing` targets for `book`, `reader`, `source`, `network`, `database`, and `download`; imports, source operations, requests, cache hit/miss, migration duration, and download-task failures are instrumented. The destination is chosen in `app/logging.rs`: dev builds write to stdout (what `tauri dev` shows), release builds append to `<app_data_dir>/logs/reader-desktop.log` with a single `.1` generation at 5 MiB. `RUST_LOG` overrides the level. Release builds link with `windows_subsystem = "windows"` (`src/main.rs`), so the app must never depend on a console.
 
 ## Database
 
