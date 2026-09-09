@@ -56,6 +56,7 @@
 
 比起 v2 时代 2,080 行的 `js_runtime.rs`，这是量级不同的问题 —— 超 2 行，不是超 8 倍。
 但**打勾的条目必须为真**，否则纪律本身失效。改法：拆 `stages.rs`，并把 214–249 那一档记为观察区。
+（**已拆，见 E0**：拆分后最大非测试生产文件 247 行。）
 
 **② `css_compat.rs` 不存在 —— 文档漂移**
 
@@ -396,39 +397,81 @@ F3 阅读器重建
 
 ### F3 · 阅读器重建（不使用 shadcn 正文层，§3.4）
 
-- [ ] 四区骨架：topbar / toc / stage / panel + bottombar 三层
-- [ ] 双栏分栏排版 + `<820px` / `<760px` 响应式退回单栏
-- [ ] **精确分页排版**（v2 P3 唯一未完成项）：页宽页高计算，改字号后重排进度不丢
-- [ ] 目录侧栏：按卷分组、章节搜索、已读/百分比状态、当前章高亮
-- [ ] 样式面板全量控件（字体/字号/行距/段距/页边距/首行缩进/两端对齐/翻页动画/背景/亮度/护眼）
-- [ ] 底部：可拖动章节进度轨道 + 12 个工具按钮
-- [ ] 沉浸模式（顶底栏 height→0 折叠，非 display:none）
-- [ ] 接入已有能力：书签、正文搜索、净化替换规则、阅读时长
-- [ ] 听书 / AI / 翻译 / 文本处理：未接入态（纪律 F0）
+- [x] 四区骨架：topbar / toc / stage / panel + bottombar 三层
+      —— `ReaderTopbar` · `ReaderCatalog` · `ReaderPane`/`ReaderStage` · `ReaderSettingsPanel` · `ReaderBottomBar`
+- [x] 双栏分栏排版 + `<820px` / `<760px` 响应式退回单栏
+      —— `styles.css` 的 `.reader-content.mode-paged .reader-flow`（`column-rule` 与原型 :836 对齐），
+      退回单栏走 `.is-narrow`（原型 :870–885）
+- [x] **精确分页排版**（v2 P3 唯一未完成项）：页宽页高实测 —— `useReaderPaging.syncPageMetrics`
+      把实测值写进 `--reader-column-width` / `--reader-page-height` / `--reader-page-gap`，
+      字号/边距变化后由 `readerPosition.ts` 的段落锚点重排，进度不丢
+- [x] 目录侧栏：按卷分组、章节搜索、已读/百分比状态、当前章高亮
+      —— 已读以**持久化的阅读位置**为界（`lastReadChapterId`），当前章显示实时章内百分比
+- [x] 样式面板全量控件（字体/字号/行距/段距/页边距/首行缩进/两端对齐/翻页动画/背景/亮度/护眼）
+- [x] 底部：可拖动章节进度轨道 + 12 个工具按钮
+- [x] 沉浸模式（顶底栏 height→0 折叠，非 display:none）
+- [x] 接入已有能力：书签、正文搜索、净化替换规则、阅读时长
+- [x] 听书 / AI / 翻译 / 文本处理：未接入态（纪律 F0）
+
+**F3 明确未做的三小块（不计入上面的勾）：**
+
+| 缺什么 | 为什么 | 归属 |
+| --- | --- | --- |
+| 翻页动画只有「无 / 滑动」 | 覆盖 / 淡入未实现；仿真 / 竖排按 §9 不做 | F3 剩余 |
+| 正文 `<mark>` 高亮、批注角标 | 样式已就位，数据层要等高亮/批注表 | E1 |
+| ttsbar（迷你封面/波形/朗读进度）、「跟随系统亮度」 | 子系统与平台接口 | S / E1 |
 
 验收：
-- 100 万字单章 TXT 打开 < 1s，滚动无掉帧（v2 遗留未验收）
-- 分页模式改字号 → 进度不丢（v2 已实现段落锚点，需在双栏下重验）
-- **用本项目读完一本真实在线书**（v2 遗留未验收）
+- [ ] 100 万字单章 TXT 打开 < 1s，滚动无掉帧（v2 遗留未验收）—— **仍未测**：本机无 GUI 会话
+- [ ] 分页模式改字号 → 进度不丢 —— 代码路径已接（`readerPosition.ts` + `useReader.ts` 字体 watcher），
+      **双栏下的运行时验证未做**
+- [ ] **用本项目读完一本真实在线书**（v2 遗留未验收）—— **未验收**
+
+**F3 实测（在 `427db42` 之上）**：`npm run lint` / `npm run format:check` / `npm run build` 三者全绿；
+最大 SFC 189 行（`ReaderPage.vue`，`ReaderPane.vue` 188）；分栏与退回单栏的样式确实进入产物 ——
+`dist/assets/index-*.css` 命中 `is-narrow`(2) · `column-width`(2) · `column-rule`(3) · `first-letter`(1) ·
+`dialog-line`(1) · `chapter-status`(1) · `--reader-column-width`(1)。
+**未验证项**：分栏落版、页数/页码、改字号重排 —— 需要真实 WebView 几何，本机无 GUI 会话。
 
 ### E0 · v0.3.0 门槛收尾（与 F 轨并行）
 
 - [ ] **受阻源 182 → 门槛见 §6.2**。每次改动重跑 `rule-audit`，把受阻源变化写进 commit message
-- [ ] 删 `selector.rs` CSS 兜底（355 行）+ 扁平列迁移到 `raw_rules`；
-      先迁移 `pipeline/stages.rs` 四个调用点（:50 :179 :225 :251）
+- [ ] 删 `selector.rs` CSS 兜底（333 行）+ 扁平列迁移到 `raw_rules`；
+      四个调用点已随拆分移动：`pipeline/stages/search.rs:50` · `stages/info.rs:41` ·
+      `stages/catalog.rs:57` · `stages/content.rs:37`
 - [ ] `ContentRule` / `ExploreRule` 结构化 —— 目前无独立 struct，靠 `raw_rules` 原始 JSON 懒解析
 - [ ] 补 `SearchRule`（5/11）· `InfoRule`（7/13）· `CatalogRule`（4/10）缺口字段，按 v2 §3.7 填充率排序
-- [ ] 拆 `pipeline/stages.rs`（252 行，唯一越线）
+- [x] 拆 `pipeline/stages.rs`（252 行，唯一越线）—— 拆成门面 `stages.rs`(17) +
+      `stages/search.rs`(104) · `explore.rs`(58) · `info.rs`(42) · `catalog.rs`(58) · `content.rs`(38)；
+      顺带删掉 `pipeline.rs` 里多余的 `#[path]`（它把子模块目录指到 `pipeline/` 而不是 `pipeline/stages/`）。
+      拆分后全仓最大非测试**生产**文件 247 行（`url/parser.rs`），§6.3 #1 首次达标
 - [ ] 在线可用率：排除连接类失败后规则侧失败 ≤ 5%（v2 遗留未验收）
 - [ ] 单源规则执行 P95 < 200ms（不含网络，v2 遗留未验收）
 - [ ] `source_engine` 行覆盖率 ≥ 70%（v2 遗留未验收）
 - [ ] `rquickjs` C 工具链在 Linux / macOS 各构建一次 —— **v1 登记至今三版未关闭**
 
+**E0 附带修复（原本是红门禁）**：`cargo test` 自 `d674c64` 起一直失败 ——
+`rule_audit/input.rs` 的 `error_category` 把 `cannot read property of null` 归到 `harness input`，
+而 `rule_audit/tests.rs:37` 要求它归到 `js runtime`。三版路线图都写着「三件套全绿」，
+实际没人跑过这个 bin 的测试。已按测试期望收窄 `harness input` 分支（只保留 `is not defined`）。
+
+**这次修复顺带纠正了归因表**（`docs/coverage/rule-audit.md`，受阻源总数仍是 182）：
+
+| 类别 | 修复前（规则数 / 受阻源） | 修复后 |
+| --- | ---: | ---: |
+| js runtime | 96 / 67 | **182 / 123**（修好这一类可解 79 源） |
+| harness input | 98 / 68 | 12 / 4 |
+| css compatibility | 125 / 77 | 125 / 77 |
+
+**即 E0 的真正主战场是 JS 运行时，不是 CSS 兼容性** —— 之前这条被错误归因遮住了。
+
 ### E1 · 前端所需的新后端能力
 
 按 F 轨的实际阻塞顺序做，不提前：
 
-- [ ] **阅读统计聚合命令** —— 累计读完本数 / 累计时长 / 今日分钟 / 每日目标 / 连续天数（首页需要）
+- [x] **阅读统计聚合命令** —— `get_reading_stats` / `set_reading_goal`
+      （`command/reader.rs:119`、`service/reader_service.rs:140`、`repository/reading_record.rs:86`，
+      首页 `HomePage.vue` 已在用；roadmap 此前漏记）
 - [ ] **书籍状态字段** —— 未读章数、「更新 / 完结 / 音频」徽标（书架卡片需要）
 - [ ] **书籍详情页命令** —— 现有 `fetch_book_info` 之上补简介/分类/字数/更新时间
 - [ ] **高亮 / 批注** —— 新表 + CRUD（正文 `<mark>` 与批注角标需要）
@@ -469,6 +512,12 @@ F3 阅读器重建
 | 7 | 七页与原型对位 | home / bookshelf / explore / rss / read / my / settings 逐页截图比对 |
 | 8 | 九组快捷键可用 | 手测清单 |
 
+**门槛实测状态（在 `427db42` 之上）**：1 / 2 / 3 / 5 / 6 由命令证明为真 ——
+最大 SFC 189 行、`component: AppShell` 计数 0、`props.books.slice` 无结果、`styles.css` 硬编码十六进制 0
+（424 行，全部为令牌 + 阅读器排版层）、Rust 最大非测试生产文件 247 行。
+4 为逐页人工核对，已做（未接入模块一律走 `NotConnected.vue`）。
+**7 与 8 依赖 GUI 会话，本机做不了 —— 保持未勾，不得以「实现就位」替代。**
+
 ### 6.2 引擎（重设 v0.3.0 门槛）
 
 v2 的「受阻源下降 ≥ 70%」定得过于乐观：六项全做完只降 18.8%。
@@ -499,8 +548,8 @@ v2 的「受阻源下降 ≥ 70%」定得过于乐观：六项全做完只降 18
 | v0.5.0 | v2 P4 | 下载 / 缓存 / 导出 | ✅ |
 | v0.6.0 | v2 P5 | 批量校验 + 换源 + 书源管理 | ✅ |
 | ~~v0.3.0~~ | — | 受阻源 −70% —— **门槛不可达，作废，见 §6.2** | ⛔ |
-| **v0.8.0** | **F0 + F1 + F2** | shadcn-vue 地基 + 真实路由 + 六页对位原型 + 无假数据 + SFC < 200 行 | ⬜ |
-| **v0.9.0** | **F3 + E0** | 阅读器七区全建 + 精确分页 + 读完一本在线书 · 受阻源 ≤ 140 + `selector.rs` 兜底已删 | ⬜ |
+| **v0.8.0** | **F0 + F1 + F2** | shadcn-vue 地基 + 真实路由 + 六页对位原型 + 无假数据 + SFC < 200 行 | 🟡 实现就位；视觉对位（§6.1 #7）未验收 |
+| **v0.9.0** | **F3 + E0** | 阅读器七区全建 + 精确分页 + 读完一本在线书 · 受阻源 ≤ 140 + `selector.rs` 兜底已删 | 🟡 F3 实现就位（运行时未验）；E0 仅 1/8 |
 | v0.9.5 | E1 | 首页仪表盘数据 + 高亮批注 + 书籍详情页 | ⬜ |
 | v1.0.0 | S + R | legado 兼容备份 + RSS + 受阻源 ≤ 90 + Windows/Linux 打包 | ⬜ |
 
@@ -513,6 +562,8 @@ TTS / AI / 翻译 / 局域网 Web 不进 v1.0.0 门槛，各自独立立项。
 | 风险 | 影响 | 状态 |
 | --- | --- | --- |
 | **前端从未被度量** | 三版路线图 0 条前端验收；结果是 439 行单体、装饰性路由、三个假页面 | **本版新增** —— §6.1 建立八条前端门槛 |
+| **门禁声称全绿但从未真的运行** | `cargo test` 自 `d674c64` 起在 `rule_audit` bin 上失败（分类器与测试期望相反），三版路线图都写着「三件套全绿」 | **本版新增** —— E0 附带修复；打勾前必须真的跑一遍 |
+| **F1/F2/F3 的验收依赖 GUI 会话** | 快捷键手测、逐页截图比对、双栏落版、读完一本在线书 —— 本机无 GUI 会话 | **本版新增** —— 相关条目保持 `[ ]`，不许用「实现就位」替代 |
 | **纪律条目打勾但不为真** | v2 §3.9「最大文件 < 250」打 ✅，实测 `stages.rs` 252 | **本版新增** —— 打勾前必须跑一次 §6.3 的命令 |
 | **门槛定得不可达就等于没门槛** | v2 的 −70% 六项做完只到 −18.8%，之后停滞 | **本版新增** —— §6.2 改为 −37.5% / −60% 分级 |
 | **重写期间前后端同时在动** | 页面重建与 E1 新命令交错，容易互相阻塞 | F2 只用已就绪命令；E1 按 F 轨实际阻塞顺序做，不提前 |
@@ -593,7 +644,7 @@ find src \( -name "*.vue" -o -name "*.ts" \) -exec cat {} + | wc -l
 | 3 | 拆 `AppShell.vue`（439 行）+ 路由真实化 | 阻塞全部页面重建 | F0 |
 | 4 | 删 `LibraryTabPage` 假数据三页；处置 `SourceManager` 死代码 | 独立，可并行 | F0 / §1.3 |
 | 5 | 修文档漂移：`css_compat.rs` 路径 · 体量数字 · shadcn 依赖声明 | 独立，可并行 | §0.2 |
-| 6 | 拆 `pipeline/stages.rs`（252 行，唯一越线） | 独立，可并行 | E0 |
+| 6 | 拆 `pipeline/stages.rs`（252 行，唯一越线） | 独立，可并行 | E0 ✅ |
 | 7 | 删 `selector.rs` 兜底 + 扁平列迁移 | 独立，E0 关键项 | E0 |
 
 **第 1–3 项必须先做。** 在此之前每写一个页面，都是在往那个 439 行的单体上继续堆。
@@ -601,6 +652,7 @@ find src \( -name "*.vue" -o -name "*.ts" \) -exec cat {} + | wc -l
 
 ### 需要同步修改的文档
 
-`ARCHITECTURE.md` 当前写着「使用 Tailwind 工具类 + 共享设计令牌，**不依赖 shadcn-vue**」——
+`ARCHITECTURE.md` 原写着「使用 Tailwind 工具类 + 共享设计令牌，**不依赖 shadcn-vue**」——
 v2 §10 刚把这句从「不用 Tailwind/shadcn」改成现在这样。
-F0 完成后需第三次修改为「Tailwind v4 + shadcn-vue（Reka UI）+ CSS 变量令牌；阅读器正文层例外」。
+**已第三次修改为**「Tailwind v4 + shadcn-vue（Reka UI）+ CSS 变量令牌；阅读器正文层例外」，
+同时更新了 Current milestone、`pipeline/stages/` 的模块边界与「13 条真实路由」。

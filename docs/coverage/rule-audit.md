@@ -401,11 +401,11 @@ Input types are inferred from source metadata. Empty matches count as successful
 
 | Category | Rule count |
 | --- | ---: |
+| js runtime | 182 |
 | css compatibility | 125 |
-| harness input | 98 |
-| js runtime | 96 |
 | other | 37 |
 | unsupported JVM access | 24 |
+| harness input | 12 |
 | path parser | 2 |
 
 ## java.* methods
@@ -475,9 +475,9 @@ Input types are inferred from source metadata. Empty matches count as successful
 
 | Category | Blocked sources | Unblocked by fixing only this category |
 | --- | ---: | ---: |
+| js runtime | 123 | 79 |
 | css compatibility | 77 | 40 |
-| harness input | 68 | 43 |
-| js runtime | 67 | 34 |
 | other | 27 | 11 |
 | unsupported JVM access | 14 | 0 |
+| harness input | 4 | 1 |
 | path parser | 2 | 2 |

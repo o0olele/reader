@@ -281,7 +281,7 @@
   }
 
   .reader-content {
-    @apply min-w-0 flex-1 overflow-y-auto pb-20 pt-12 outline-none scroll-smooth;
+    @apply min-h-0 min-w-0 flex-1 overflow-y-auto pb-20 pt-12 outline-none scroll-smooth;
     padding-inline: var(--reader-margin, 32px);
     overflow-anchor: none;
     background: var(--reader-paper);
@@ -354,6 +354,8 @@
   }
   .reader-content.mode-paged {
     @apply overflow-x-auto overflow-y-hidden pt-6 pb-6;
+    /* Fallback for the gap; useReaderPaging rewrites this with the measured value. */
+    --reader-page-gap: 64px;
   }
   .reader-content.mode-paged.anim-none {
     scroll-behavior: auto;

@@ -75,10 +75,10 @@ pub(super) fn error_category(error: &str) -> &'static str {
         || l.contains("java.security")
     {
         "unsupported JVM access"
-    } else if l.contains("cannot read property")
-        || l.contains("cannot read properties")
-        || l.contains("is not defined")
-    {
+    } else if l.contains("is not defined") {
+        // Only a missing *variable* is blamed on the dummy harness input.
+        // `cannot read property of null` is a real script failure, not a
+        // harness artefact, so it falls through to `js runtime` below.
         "harness input"
     } else if l.contains("source error") || l.contains("javascript") || l.contains("quickjs") {
         "js runtime"
