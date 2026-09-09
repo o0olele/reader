@@ -37,6 +37,15 @@ export interface ReadingRecord {
   duration_seconds: number
 }
 
+/** Home-dashboard aggregate returned by `get_reading_stats`. */
+export interface ReadingStats {
+  total_seconds: number
+  today_seconds: number
+  daily_goal_minutes: number
+  streak_days: number
+  finished_books: number
+}
+
 export interface DownloadTask {
   id: number
   book_id: number

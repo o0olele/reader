@@ -1,278 +1,183 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
-import { searchKey, sourcesKey } from '../../app/shellKeys'
-import type { SearchResultGroup } from '../../services/api'
-import { Check, Filter, LayoutList, Pause, Play, Search, SlidersHorizontal, X } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Filter, LayoutList, Pause, Play, Rows3, Search, SlidersHorizontal, X } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import PageBody from '@/components/PageBody.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import SearchResultCard from './SearchResultCard.vue'
+import { useSearchView } from './useSearchView'
 
-const search = inject(searchKey)!
-const sources = inject(sourcesKey)!
+const {
+  search,
+  sources,
+  typeFilter,
+  sourceGroup,
+  sourceGroups,
+  enabledSourceIds,
+  selectedSourceCount,
+  rankedGroups,
+  selectSourceGroup,
+  canOpenBrowserAuth,
+  openBrowserAuth,
+} = useSearchView()
+
 const layout = ref<'list' | 'compact'>('list')
-const showSettings = ref(false)
-const sourceFilterOpen = ref(false)
-type SearchType = 'all' | 'novel' | 'comic' | 'audio'
-const typeFilter = ref<SearchType>('all')
-const sourceGroup = ref('全部书源')
+const showTypeFilter = ref(false)
+const showSourceFilter = ref(false)
+const TYPES = [
+  { value: 'all', label: '全部' },
+  { value: 'novel', label: '小说' },
+  { value: 'comic', label: '漫画' },
+  { value: 'audio', label: '音频' },
+] as const
 
-search.setSourceIdsProvider(() =>
-  sources.sources
-    .filter(
-      (source) =>
-        source.enabled && (sourceGroup.value === '全部书源' || (source.source_group || '未分组') === sourceGroup.value),
-    )
-    .map((source) => source.id),
+const progress = computed(() =>
+  search.totalSources ? Math.round((search.completedSources / search.totalSources) * 100) : 0,
 )
-
-const sourceGroups = computed(() => {
-  const groups = new Set(
-    sources.sources.filter((source) => source.enabled).map((source) => source.source_group || '未分组'),
-  )
-  return ['全部书源', ...groups]
-})
-function selectSourceGroup(group: string) {
-  sourceGroup.value = group
-  search.selectedSourceIds = null
-}
-const enabledSourceIds = computed(() => sources.sources.filter((source) => source.enabled).map((source) => source.id))
-const selectedSourceCount = computed(() =>
-  search.selectedSourceIds === null ? enabledSourceIds.value.length : search.selectedSourceIds.length,
-)
-const matchesType = (kind: string | undefined, type: SearchType) => {
-  if (type === 'all') return true
-  const value = (kind || '').toLowerCase()
-  if (type === 'comic') return value.includes('漫画') || value.includes('comic') || value.includes('manhua')
-  if (type === 'audio') return value.includes('音频') || value.includes('有声') || value.includes('audio')
-  return (
-    !value || value.includes('小说') || value.includes('novel') || (!value.includes('漫画') && !value.includes('音频'))
-  )
-}
-const visibleGroups = computed(() =>
-  search.groups.filter((group) => {
-    if (!group.sources.some((source) => matchesType(source.kind, typeFilter.value))) return false
-    if (
-      sourceGroup.value !== '全部书源' &&
-      !group.sources.some(
-        (source) => sources.sources.find((item) => item.id === source.source_id)?.source_group === sourceGroup.value,
-      )
-    )
-      return false
-    return true
-  }),
-)
-
-/**
- * Mirrors legado's SearchResultMerger: results whose title/author exactly
- * equal the keyword go first, then results whose kind tag contains the
- * keyword, then partial title/author matches, then everything else.  Inside
- * the first three buckets, books returned by more sources rank higher.
- */
-function rankBucket(group: SearchResultGroup, keyword: string) {
-  const title = group.title.trim().toLowerCase()
-  const author = (group.author ?? '').trim().toLowerCase()
-  const kind = (group.sources[0]?.kind ?? '').toLowerCase()
-  if (title === keyword || author === keyword) return 0
-  if (kind.includes(keyword)) return 1
-  if (title.includes(keyword) || author.includes(keyword)) return 2
-  return 3
-}
-
-const rankedGroups = computed(() => {
-  const keyword = search.query.trim().toLowerCase()
-  if (!keyword) return visibleGroups.value
-  return [...visibleGroups.value].sort((a, b) => {
-    const rankA = rankBucket(a, keyword)
-    const rankB = rankBucket(b, keyword)
-    if (rankA !== rankB) return rankA - rankB
-    // "other" results keep arrival order; matched buckets prefer more sources.
-    return rankA === 3 ? 0 : b.sources.length - a.sources.length
-  })
-})
-
-const isAdding = (group: SearchResultGroup) => group.sources.some((source) => source.url === search.addingResult)
-
-const canOpenBrowserAuth = (reason: string, authRequired: boolean) =>
-  authRequired || reason.includes('Cloudflare challenge') || reason.includes('需要浏览器执行 JavaScript 验证')
-
-function openBrowserAuth(sourceId: number) {
-  const source = sources.sources.find((item) => item.id === sourceId)
-  if (source) void sources.browserAuth(source)
-}
 </script>
 
 <template>
-  <div class="search-results">
-    <form class="search-page-form" @submit.prevent="search.run()">
-      <div class="search-page-input">
-        <Search :size="17" /><input
-          v-model="search.query"
-          placeholder="搜索书名、作者或关键词"
-          aria-label="搜索书籍"
-        /><button
-          v-if="search.query"
-          type="button"
-          class="search-clear"
-          aria-label="清空搜索"
-          @click="search.query = ''"
-        >
-          <X :size="15" /></button
-        ><button type="submit">{{ search.searching ? '重新搜索' : '搜索' }}</button>
-      </div>
+  <div class="flex h-full flex-col">
+    <PageHeader title="搜索" :subtitle="`已启用 ${enabledSourceIds.length} 个书源`">
+      <ToggleGroup
+        type="single"
+        :model-value="layout"
+        variant="outline"
+        size="sm"
+        @update:model-value="layout = ($event as 'list' | 'compact') || layout"
+      >
+        <ToggleGroupItem value="list" aria-label="详细列表"><LayoutList /></ToggleGroupItem>
+        <ToggleGroupItem value="compact" aria-label="紧凑列表"><Rows3 /></ToggleGroupItem>
+      </ToggleGroup>
+    </PageHeader>
+
+    <form class="flex shrink-0 items-center gap-2 border-b bg-card px-6 py-2.5" @submit.prevent="search.run()">
+      <Input v-model="search.query" class="h-9 max-w-xl" placeholder="搜索书名、作者或关键词" aria-label="搜索书籍" />
+      <Button type="submit" size="sm">{{ search.searching ? '重新搜索' : '搜索' }}</Button>
+      <Button v-if="search.query" variant="ghost" size="sm" @click="search.query = ''"><X /> 清空</Button>
     </form>
-    <div class="search-toolbar">
-      <div class="search-progress" v-if="search.searching || search.hasSearched">
-        <span
-          >结果 {{ search.groups.length }} · 已搜索 {{ search.completedSources }}/{{
+
+    <div class="flex shrink-0 flex-wrap items-center gap-2 border-b bg-card px-6 py-2">
+      <div v-if="search.searching || search.hasSearched" class="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>
+          结果 {{ search.groups.length }} · 已搜索 {{ search.completedSources }}/{{
             search.totalSources || enabledSourceIds.length
           }}
-          个书源</span
-        >
-        <i
-          ><b
-            :style="{ width: `${search.totalSources ? (search.completedSources / search.totalSources) * 100 : 0}%` }"
-          ></b
-        ></i>
-        <button
+        </span>
+        <Progress :model-value="progress" class="h-1 w-28" />
+        <Button
           v-if="search.searching"
-          type="button"
-          class="icon-button"
+          variant="ghost"
+          size="icon-sm"
           :title="search.paused ? '继续' : '暂停'"
           @click="search.paused ? search.resume() : search.pause()"
         >
-          <Play v-if="search.paused" :size="15" /><Pause v-else :size="15" />
-        </button>
+          <Play v-if="search.paused" /><Pause v-else />
+        </Button>
       </div>
-      <button type="button" class="toolbar-button" @click="showSettings = !showSettings">
-        <SlidersHorizontal :size="15" />设置
-      </button>
-      <button type="button" class="toolbar-button" @click="sourceFilterOpen = !sourceFilterOpen">
-        <Filter :size="15" />书源筛选（{{ selectedSourceCount }}）
-      </button>
-      <div class="layout-switch">
-        <button :class="{ active: layout === 'list' }" @click="layout = 'list'"><LayoutList :size="15" /></button
-        ><button :class="{ active: layout === 'compact' }" @click="layout = 'compact'"><Check :size="15" /></button>
-      </div>
+      <Button variant="outline" size="sm" @click="showTypeFilter = !showTypeFilter">
+        <SlidersHorizontal /> 搜索类型
+      </Button>
+      <Button variant="outline" size="sm" @click="showSourceFilter = !showSourceFilter">
+        <Filter /> 书源筛选（{{ selectedSourceCount }}）
+      </Button>
     </div>
-    <div v-if="showSettings" class="search-settings-panel">
-      <strong>搜索类型</strong>
-      <button
-        v-for="item in [
-          ['all', '全部'],
-          ['novel', '小说'],
-          ['comic', '漫画'],
-          ['audio', '音频'],
-        ]"
-        :key="item[0]"
-        :class="{ active: typeFilter === item[0] }"
-        @click="typeFilter = item[0] as 'all' | 'novel' | 'comic' | 'audio'"
+
+    <div v-if="showTypeFilter" class="flex shrink-0 items-center gap-1.5 border-b bg-card px-6 py-2">
+      <Button
+        v-for="item in TYPES"
+        :key="item.value"
+        :variant="typeFilter === item.value ? 'default' : 'outline'"
+        size="sm"
+        @click="typeFilter = item.value"
       >
-        {{ item[1] }}
-      </button>
+        {{ item.label }}
+      </Button>
     </div>
-    <div v-if="sourceFilterOpen" class="search-settings-panel">
-      <strong>选择书源分组</strong>
-      <button
+
+    <div v-if="showSourceFilter" class="flex shrink-0 flex-wrap items-center gap-1.5 border-b bg-card px-6 py-2">
+      <Button
         v-for="group in sourceGroups"
         :key="group"
-        :class="{ active: sourceGroup === group }"
+        :variant="sourceGroup === group ? 'default' : 'outline'"
+        size="sm"
         @click="selectSourceGroup(group)"
       >
         {{ group }}
-      </button>
-      <span class="search-settings-divider"></span>
-      <strong>书源</strong>
-      <button
-        type="button"
-        :class="{ active: search.selectedSourceIds === null }"
+      </Button>
+      <span class="mx-1 h-5 w-px bg-border" />
+      <Button
+        :variant="search.selectedSourceIds === null ? 'default' : 'outline'"
+        size="sm"
         @click="search.selectedSourceIds = null"
       >
         全部
-      </button>
-      <button
+      </Button>
+      <Button
         v-for="source in sources.sources.filter((item) => item.enabled)"
         :key="source.id"
-        type="button"
-        :class="{ active: search.selectedSourceIds === null || search.selectedSourceIds.includes(source.id) }"
+        :variant="
+          search.selectedSourceIds === null || search.selectedSourceIds.includes(source.id) ? 'default' : 'outline'
+        "
+        size="sm"
         @click="search.toggleSource(source.id, enabledSourceIds)"
       >
         {{ source.name }}
-      </button>
+      </Button>
     </div>
-    <details v-if="search.failures.length" class="source-failures">
-      <summary>
-        {{ search.searchedSources - search.failures.length }} / {{ search.searchedSources }} 个书源返回结果，{{
-          search.failures.length
-        }}
-        个失败
-      </summary>
-      <ul>
-        <li v-for="failure in search.failures" :key="failure.source_id">
-          <strong>{{ failure.source_name }}</strong
-          >：{{ failure.reason }}<span v-if="failure.auth_required">（需要重新认证）</span>
-          <button
-            v-if="
-              canOpenBrowserAuth(failure.reason, failure.auth_required) &&
-              sources.sources.some((item) => item.id === failure.source_id)
-            "
-            type="button"
-            class="secondary"
-            @click="openBrowserAuth(failure.source_id)"
-          >
-            打开认证窗口
-          </button>
-        </li>
-      </ul>
-    </details>
 
-    <div v-if="search.searching && !search.groups.length" class="search-empty">正在搜索，结果会即时显示...</div>
-    <div v-else-if="!search.searching && !search.hasSearched" class="search-empty">输入关键词后开始搜索</div>
-    <div v-else-if="!visibleGroups.length" class="search-empty">没有符合当前筛选条件的结果</div>
+    <PageBody>
+      <details v-if="search.failures.length" class="mb-4 rounded-md border bg-card p-3 text-xs">
+        <summary class="cursor-pointer">
+          {{ search.searchedSources - search.failures.length }} / {{ search.searchedSources }} 个书源返回结果，{{
+            search.failures.length
+          }}
+          个失败
+        </summary>
+        <ul class="mt-2 space-y-1">
+          <li v-for="failure in search.failures" :key="failure.source_id" class="flex items-center gap-2">
+            <strong>{{ failure.source_name }}</strong>
+            <span class="text-muted-foreground">{{ failure.reason }}</span>
+            <Button
+              v-if="
+                canOpenBrowserAuth(failure.reason, failure.auth_required) &&
+                sources.sources.some((item) => item.id === failure.source_id)
+              "
+              variant="outline"
+              size="sm"
+              @click="openBrowserAuth(failure.source_id)"
+            >
+              打开认证窗口
+            </Button>
+          </li>
+        </ul>
+      </details>
 
-    <article
-      v-for="group in rankedGroups"
-      :key="`${group.title}-${group.author ?? ''}`"
-      :class="['search-result', { 'search-result-compact': layout === 'compact' }]"
-    >
-      <div class="book-cover">
-        <img v-if="group.cover" :src="group.cover" :alt="group.title" loading="lazy" />
-        <template v-else>{{ group.title.slice(0, 1) }}</template>
+      <div v-if="search.searching && !search.groups.length" class="py-12 text-center text-xs text-muted-foreground">
+        正在搜索，结果会即时显示…
       </div>
-      <div class="search-result-meta">
-        <h2>{{ group.title }}</h2>
-        <p>
-          {{ group.author || '作者未知' }}
-          <span v-if="group.sources.length > 1"> · {{ group.sources.length }} 个书源</span>
-          <span v-else> · {{ group.sources[0].source_name }}</span>
-        </p>
-        <p
-          v-if="group.sources[0].latest_chapter || group.sources[0].word_count || group.sources[0].kind"
-          class="search-result-tags"
-        >
-          <span v-if="group.sources[0].kind">{{ group.sources[0].kind }}</span>
-          <span v-if="group.sources[0].word_count">{{ group.sources[0].word_count }}</span>
-          <span v-if="group.sources[0].latest_chapter">最新：{{ group.sources[0].latest_chapter }}</span>
-        </p>
-        <p v-if="group.sources[0].intro" class="search-result-intro">{{ group.sources[0].intro }}</p>
-        <details v-if="group.sources.length > 1" class="search-result-sources">
-          <summary>按书源选择</summary>
-          <button
-            v-for="source in group.sources"
-            :key="`${source.source_id}-${source.url}`"
-            type="button"
-            class="secondary"
-            :disabled="search.addingResult === source.url"
-            @click="search.addToShelf(source)"
-          >
-            {{ source.source_name }}
-          </button>
-        </details>
-        <button
-          type="button"
-          class="secondary"
-          :disabled="isAdding(group)"
-          @click="search.addToShelf(group.sources[0])"
-        >
-          {{ isAdding(group) ? '加入中...' : '加入书架' }}
-        </button>
+      <div v-else-if="!search.searching && !search.hasSearched" class="py-12 text-center text-xs text-muted-foreground">
+        <Search :size="28" class="mx-auto mb-2" />
+        输入关键词后开始搜索，或用 Ctrl+K 直接搜索
       </div>
-    </article>
+      <div v-else-if="!rankedGroups.length" class="py-12 text-center text-xs text-muted-foreground">
+        没有符合当前筛选条件的结果
+      </div>
+
+      <div v-else class="grid gap-2">
+        <SearchResultCard
+          v-for="group in rankedGroups"
+          :key="`${group.title}-${group.author ?? ''}`"
+          :group="group"
+          :layout="layout"
+          :adding="group.sources.some((source) => source.url === search.addingResult)"
+          :busy-url="search.addingResult"
+          @add="search.addToShelf($event)"
+        />
+      </div>
+    </PageBody>
   </div>
 </template>

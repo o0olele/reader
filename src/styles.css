@@ -1,35 +1,168 @@
 @import 'tailwindcss';
-@theme {
-  --font-sans: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-reader: Georgia, 'Noto Serif SC', serif;
+@import 'tw-animate-css';
+
+/* shadcn-vue uses a class-based dark variant; `.app-theme-dark` is kept as a
+   transition alias for any surface that still opts in by hand. */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens — ported from the *effective* token set of the prototype
+ * (desktop-ui.html:1045–1121, the shadcn/slate layer), not from the dead
+ * Material/Glass block at :11–105 (ROADMAP-v3 §3.2).
+ * Values are OKLCH so the §6.1 #5 gate stays green:
+ *   grep -cE '#[0-9a-fA-F]{3,8}\b' src/styles.css  → 0
+ */
+:root {
+  --radius: 0.75rem;
+
+  --background: oklch(0.984 0.003 247.858);
+  --foreground: oklch(0.208 0.042 265.755);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.208 0.042 265.755);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.208 0.042 265.755);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-primary: oklch(0.208 0.042 265.755);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* prototype layout / motion tokens (:1083–1084) */
+  --rail-w: 56px;
+  --rail-w-ext: 220px;
+  --titlebar-h: 40px;
+  --dur: 0.16s;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* reader-only tokens — deliberately not folded into the shadcn set (§3.2) */
+  --reader-paper: oklch(0.985 0.001 106.423);
+  --reader-ink: oklch(0.268 0.007 34.298);
+  --reader-ink-soft: oklch(0.553 0.013 58.071);
+
+  --sh-1: 0 1px 2px rgb(15 23 42 / 0.04);
+  --sh-2: 0 4px 10px rgb(15 23 42 / 0.06);
+  --sh-3: 0 8px 20px rgb(15 23 42 / 0.1);
+}
+
+.dark,
+.app-theme-dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.984 0.003 247.858);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.208 0.042 265.755);
+  --border: oklch(0.372 0.044 257.287);
+  --input: oklch(0.372 0.044 257.287);
+  --ring: oklch(0.554 0.046 257.417);
+
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.984 0.003 247.858);
+  --sidebar-primary-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(0.372 0.044 257.287);
+  --sidebar-ring: oklch(0.554 0.046 257.417);
+
+  --reader-paper: oklch(0.21 0.034 264.665);
+  --reader-ink: oklch(0.923 0.003 48.717);
+  --reader-ink-soft: oklch(0.709 0.01 56.259);
+
+  --sh-1: 0 1px 2px rgb(0 0 0 / 0.25);
+  --sh-2: 0 4px 10px rgb(0 0 0 / 0.28);
+  --sh-3: 0 10px 24px rgb(0 0 0 / 0.35);
+}
+
+@theme inline {
+  --font-sans: Inter, ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-reader: Georgia, 'Noto Serif SC', 'Songti SC', serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-reader-paper: var(--reader-paper);
+  --color-reader-ink: var(--reader-ink);
+  --color-reader-ink-soft: var(--reader-ink-soft);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 /* WebView2 can ignore layered scrollbar pseudo-element rules. Keep these
    reader-pane overrides unlayered so native arrow buttons are always removed. */
 .chapter-list::-webkit-scrollbar-button,
 .reader-content::-webkit-scrollbar-button,
-.settings-panel::-webkit-scrollbar-button,
 .chapter-list::-webkit-scrollbar-button:vertical,
 .reader-content::-webkit-scrollbar-button:vertical,
 .reader-content::-webkit-scrollbar-button:horizontal,
-.settings-panel::-webkit-scrollbar-button:vertical,
 .chapter-list::-webkit-scrollbar-button:single-button,
 .reader-content::-webkit-scrollbar-button:single-button,
-.settings-panel::-webkit-scrollbar-button:single-button,
 .chapter-list::-webkit-scrollbar-button:vertical:decrement,
 .chapter-list::-webkit-scrollbar-button:vertical:increment,
 .reader-content::-webkit-scrollbar-button:vertical:decrement,
 .reader-content::-webkit-scrollbar-button:vertical:increment,
 .reader-content::-webkit-scrollbar-button:horizontal:decrement,
 .reader-content::-webkit-scrollbar-button:horizontal:increment,
-.settings-panel::-webkit-scrollbar-button:vertical:decrement,
-.settings-panel::-webkit-scrollbar-button:vertical:increment,
 .chapter-list::-webkit-scrollbar-button:start:decrement,
 .chapter-list::-webkit-scrollbar-button:end:increment,
 .reader-content::-webkit-scrollbar-button:start:decrement,
-.reader-content::-webkit-scrollbar-button:end:increment,
-.settings-panel::-webkit-scrollbar-button:start:decrement,
-.settings-panel::-webkit-scrollbar-button:end:increment {
+.reader-content::-webkit-scrollbar-button:end:increment {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
@@ -40,9 +173,10 @@
   background: transparent !important;
   border: 0 !important;
 }
+
 @layer base {
   * {
-    @apply box-border;
+    @apply box-border border-border outline-ring/50;
   }
   html,
   body,
@@ -50,11 +184,12 @@
     @apply m-0 h-full overflow-hidden;
   }
   body {
-    @apply min-w-[980px] bg-[#f5f7fb] font-sans text-[#24334d] antialiased;
+    @apply min-w-[980px] bg-background font-sans text-foreground antialiased;
   }
   button,
   input,
-  select {
+  select,
+  textarea {
     @apply font-[inherit];
   }
   button {
@@ -63,7 +198,7 @@
   /* Keep scrollable surfaces the same width and remove native arrow buttons. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #c7d2e2 transparent;
+    scrollbar-color: var(--border) transparent;
   }
   *::-webkit-scrollbar {
     width: 8px;
@@ -77,10 +212,10 @@
     border: 2px solid transparent;
     border-radius: 999px;
     background-clip: padding-box;
-    background-color: #c7d2e2;
+    background-color: var(--border);
   }
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #aebed4;
+    background-color: var(--ring);
   }
   *::-webkit-scrollbar-button {
     display: none;
@@ -88,202 +223,67 @@
     height: 0;
   }
 }
+
+/*
+ * Reader typography layer — the only hand-written CSS left on purpose.
+ * `features/reader/**` does not use shadcn primitives for the text surface
+ * (ROADMAP-v3 §3.4): paged columns need a stable, measurable box model, and the
+ * reader has its own paper/ink tokens.
+ */
 @layer components {
-  .reader-app {
-    @apply flex h-screen flex-col bg-[#f5f7fb];
-  }
-  .appbar {
-    @apply flex h-[68px] shrink-0 items-center border-b border-[#e7ebf3] bg-[#f9fbff] px-6;
-  }
-  .appbar-brand {
-    @apply flex w-[216px] items-center gap-3 text-[18px];
-  }
-  .brand-book {
-    @apply text-[34px] text-[#377dff] [text-shadow:7px_0_0_#6851f5];
-  }
-  .app-search {
-    @apply flex h-10 w-[464px] items-center gap-3 rounded-lg border border-[#e2e7f0] bg-white px-3.5 text-[13px] text-[#9aa7ba];
-  }
-  .search-icon {
-    @apply text-[23px];
-  }
-  .appbar-tools {
-    @apply ml-auto flex items-center gap-5;
-  }
-  .appbar-tools button {
-    @apply border-0 bg-transparent p-0 text-[20px];
-  }
-  .appbar-tools i {
-    @apply h-5 w-px bg-[#e1e6ef];
-  }
-  .app-body {
-    @apply flex min-h-0 flex-1;
-  }
-  .left-nav {
-    @apply flex w-[250px] shrink-0 flex-col border-r border-[#e7ebf3] bg-[#f8faff] px-3 py-5;
-  }
-  .left-nav nav {
-    @apply grid gap-1;
-  }
-  .nav-item {
-    @apply flex h-10 items-center gap-3 rounded-lg border-0 bg-transparent px-4 text-left text-[14px] text-[#233552] hover:bg-[#edf3ff];
-  }
-  .nav-item span {
-    @apply min-w-0 whitespace-nowrap text-left text-[14px] text-[#60708a];
-  }
-  .nav-item.active {
-    @apply bg-[#e6efff] font-semibold text-[#2877f7];
-  }
-  .nav-item > svg {
-    @apply shrink-0;
-  }
-  .my-books {
-    @apply mt-7 min-h-0 flex-1 overflow-hidden;
-  }
-  .my-books-title {
-    @apply mb-2 flex items-center justify-between px-3 text-[12px];
-  }
-  .my-books-title button {
-    @apply border-0 bg-transparent text-xl;
-  }
-  .mini-book {
-    @apply flex w-full items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2 text-left hover:bg-white;
-  }
-  .mini-book.selected {
-    @apply bg-[#e8f0ff];
-  }
-  .mini-cover {
-    @apply grid h-[74px] w-[46px] shrink-0 place-items-center overflow-hidden rounded-md bg-[#2e3e54] text-white;
-  }
-  .mini-cover img {
-    @apply h-full w-full object-cover;
-  }
-  .mini-meta {
-    @apply min-w-0;
-  }
-  .mini-meta b,
-  .mini-meta small,
-  .mini-meta em {
-    @apply block overflow-hidden text-ellipsis whitespace-nowrap;
-  }
-  .mini-meta b {
-    @apply text-[13px];
-  }
-  .mini-meta small,
-  .mini-meta em {
-    @apply mt-1 text-[11px] not-italic text-[#92a0b4];
-  }
-  .settings-link {
-    @apply mt-auto flex items-center gap-3 border-0 bg-transparent px-4 py-3 text-[13px];
-  }
-  .main-area {
-    @apply flex min-w-0 flex-1 flex-col overflow-hidden bg-white;
-  }
-  .reader-topbar {
-    @apply flex h-[56px] items-center border-b border-[#edf0f5] px-7 text-[14px];
-  }
-  .reader-nav-actions {
-    @apply mr-6 flex gap-4;
-  }
-  .reader-nav-actions button,
-  .reader-top-tools button {
-    @apply border-0 bg-transparent;
-  }
-  .reader-top-tools {
-    @apply ml-auto flex items-center gap-4 text-[13px];
-  }
-  .reader-dropdown {
-    @apply relative flex items-center;
-  }
-  .reader-dropdown-trigger {
-    @apply inline-flex max-w-[168px] items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap;
-  }
-  .reader-dropdown-label {
-    @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px];
-  }
-  .reader-menu {
-    @apply absolute right-0 top-[calc(100%+8px)] z-30 min-w-[136px] rounded-lg border border-[#dfe7f2] bg-white p-1.5 shadow-[0_12px_30px_rgba(38,62,94,0.16)];
-  }
-  .reader-menu button {
-    @apply flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-[#53647d] hover:bg-[#edf4ff] hover:text-[#2678f5];
-  }
-  .reader-menu button.selected {
-    @apply bg-[#eaf2ff] font-semibold text-[#2678f5];
-  }
-  .reader-size-menu {
-    @apply min-w-[92px];
-  }
-  .reader-workspace {
-    @apply flex h-[calc(100vh-124px)] min-h-0;
-  }
-  .app-theme-dark .appbar,
-  .app-theme-dark .left-nav,
-  .app-theme-dark .main-area,
-  .app-theme-dark .settings-panel,
-  .app-theme-dark .chapter-list {
-    @apply border-[#29364a] bg-[#182231] text-[#d7e2f2];
-  }
-  .app-theme-dark .app-search,
-  .app-theme-dark .search-page-input,
-  .app-theme-dark .search-toolbar,
-  .app-theme-dark .search-settings-panel,
-  .app-theme-dark .library-hero,
-  .app-theme-dark .library-book,
-  .app-theme-dark .source-editor,
-  .app-theme-dark .search-result,
-  .app-theme-dark .debug-rules,
-  .app-theme-dark .debug-output {
-    @apply border-[#304158] bg-[#202d40];
-  }
-  .app-theme-dark .nav-item,
-  .app-theme-dark .settings-link,
-  .app-theme-dark .mini-book,
-  .app-theme-dark .page-heading h1,
-  .app-theme-dark .library-hero h1,
-  .app-theme-dark .search-result-meta h2,
-  .app-theme-dark .source-editor h2,
-  .app-theme-dark .debug-output h2,
-  .app-theme-dark .debug-rules h2 {
-    @apply text-[#d7e2f2];
-  }
-  .app-theme-dark .app-search input,
-  .app-theme-dark .search-page-input input,
-  .app-theme-dark .source-editor input,
-  .app-theme-dark .source-editor textarea,
-  .app-theme-dark .source-editor select {
-    @apply bg-transparent text-[#d7e2f2];
-  }
-  .app-theme-dark .search-toolbar,
-  .app-theme-dark .search-settings-panel {
-    @apply border-[#304158] bg-[#202d40] text-[#b9c8dc];
-  }
-  .app-theme-dark .toolbar-button,
-  .app-theme-dark .layout-switch button,
-  .app-theme-dark .search-settings-panel button {
-    @apply border-[#3a4b63] bg-[#26364c] text-[#c1cee0];
-  }
   .reader-layout {
-    @apply flex min-w-0 flex-1;
+    @apply flex min-w-0 flex-1 bg-card;
   }
   .chapter-list {
-    @apply w-[288px] shrink-0 overflow-y-scroll border-r border-[#edf0f5] bg-[#fbfcff] px-5 py-5;
+    @apply w-[288px] shrink-0 overflow-y-scroll border-r bg-card px-5 py-5;
     scrollbar-gutter: stable both-edges;
   }
-  .chapter-list h2 {
-    @apply mb-5 text-[15px];
+  .reader-side-tabs {
+    @apply mb-4 flex border-b;
+  }
+  .reader-side-tabs button {
+    @apply flex flex-1 items-center justify-center gap-1.5 border-0 border-b-2 border-transparent bg-transparent py-2.5 text-[13px] text-muted-foreground transition hover:text-foreground;
+  }
+  .reader-side-tabs button.active {
+    @apply border-primary font-semibold text-foreground;
   }
   .chapter-button {
-    @apply mb-1 w-full rounded-lg border-0 bg-transparent px-4 py-3 text-left text-[14px] text-[#5d6d86] hover:bg-[#edf3ff];
+    @apply mb-1 w-full rounded-lg border-0 bg-transparent px-4 py-3 text-left text-[14px] text-muted-foreground transition hover:bg-accent;
   }
   .chapter-button.selected {
-    @apply bg-[#eaf1ff] text-[#2376f5];
+    @apply bg-accent font-medium text-foreground;
   }
+  .bookmark-panel {
+    @apply pt-2;
+  }
+  .bookmark-item {
+    @apply flex w-full items-center gap-2 rounded-lg border bg-muted px-3 py-3 text-left text-[13px];
+  }
+  .bookmark-item span {
+    @apply ml-auto text-[11px] text-muted-foreground;
+  }
+  .bookmark-empty {
+    @apply px-2 py-6 text-center text-xs text-muted-foreground;
+  }
+
   .reader-content {
-    @apply min-w-0 flex-1 overflow-y-auto px-[46px] pb-20 pt-12 outline-none;
+    @apply min-w-0 flex-1 overflow-y-auto pb-20 pt-12 outline-none scroll-smooth;
+    padding-inline: var(--reader-margin, 32px);
     overflow-anchor: none;
+    background: var(--reader-paper);
+    color: var(--reader-ink);
+    filter: brightness(var(--reader-brightness, 1));
+  }
+  .reader-content.eye-care {
+    filter: brightness(var(--reader-brightness, 1)) sepia(0.22);
+  }
+  .reader-content.justify-text p {
+    @apply text-justify;
   }
   .reader-content p {
-    @apply mb-5 whitespace-pre-wrap text-[#34445e] indent-[2em];
+    @apply whitespace-pre-wrap tracking-[0.01em];
+    margin-bottom: var(--reader-paragraph-spacing, 1.2em);
+    text-indent: var(--reader-text-indent, 2em);
     font-size: var(--reader-font-size, 17px);
     line-height: var(--reader-line-height, 1.8);
     font-family: var(--reader-font-family, var(--font-reader));
@@ -299,34 +299,25 @@
   .reader-content .book-intro {
     @apply text-center;
   }
-  .reader-toolbar {
-    @apply mb-4 flex items-center justify-end gap-2 text-xs;
-  }
-  .reader-toolbar button,
-  .reader-toolbar input {
-    @apply rounded border border-[#e3e8f0] bg-white px-2 py-1 text-xs;
-  }
   .reader-content.theme-sepia {
-    @apply bg-[#fbf5e5];
-  }
-  .reader-content.theme-sepia p {
-    @apply text-[#55483a];
+    background: oklch(0.95 0.03 85);
+    color: oklch(0.42 0.03 60);
   }
   .reader-content.theme-dark {
-    @apply bg-[#20242b];
-  }
-  .reader-content.theme-dark p,
-  .reader-content.theme-dark h2,
-  .reader-content.theme-black p,
-  .reader-content.theme-black h2 {
-    @apply text-slate-100;
+    background: oklch(0.27 0.02 265);
+    color: oklch(0.93 0.003 48.717);
   }
   .reader-content.theme-black {
-    @apply bg-black;
+    @apply bg-black text-slate-100;
   }
   .reader-content.mode-paged {
     @apply overflow-x-auto overflow-y-hidden;
+  }
+  .reader-content.mode-paged.anim-none {
     scroll-behavior: auto;
+  }
+  .reader-content.mode-paged.anim-slide {
+    scroll-behavior: smooth;
   }
   .reader-content.mode-paged .reader-flow {
     column-width: var(--reader-page-width, calc(100% - 48px));
@@ -341,692 +332,23 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 3.5em;
   }
-  .settings-panel {
-    @apply w-[304px] shrink-0 overflow-y-auto border-l border-[#e9edf4] bg-[#fbfcff] px-5 py-5;
-  }
-  .settings-head {
-    @apply mb-6 flex items-center justify-between;
-  }
-  .settings-head button {
-    @apply border-0 bg-transparent text-xl;
-  }
-  .setting-label {
-    @apply mb-2 mt-4 flex justify-between text-[13px];
-  }
-  .setting-label output {
-    @apply text-xs text-[#64748b];
-  }
-  .theme-grid {
-    @apply grid grid-cols-4 gap-2;
-  }
-  .theme-card {
-    @apply border-0 bg-transparent text-center;
-  }
-  .theme-card.active .theme-swatch {
-    @apply ring-2 ring-[#2f80ff] ring-offset-1;
-  }
-  .theme-swatch {
-    @apply mb-1 grid h-[52px] place-items-center rounded-md border border-[#dce3ee];
-  }
-  .theme-swatch.light {
-    @apply bg-white;
-  }
-  .theme-swatch.sepia {
-    @apply bg-[#f1ecda];
-  }
-  .theme-swatch.dark {
-    @apply bg-[#222b39];
-  }
-  .theme-swatch.black {
-    @apply bg-[#12151a];
-  }
-  .theme-card small {
-    @apply text-[11px];
-  }
-  .setting-select {
-    @apply h-9 w-full rounded-md border border-[#e0e6ef] bg-white px-3 text-[13px];
-  }
-  .font-step,
-  .mode-switch {
-    @apply flex h-9 overflow-hidden rounded-md border border-[#e0e6ef] bg-white;
-  }
-  .font-step > *,
-  .mode-switch button {
-    @apply flex flex-1 items-center justify-center border-0 border-r border-[#e0e6ef] bg-transparent text-[12px] last:border-0;
-  }
-  .mode-switch button.active {
-    @apply bg-[#eaf2ff] text-[#2e7df8];
-  }
-  .settings-panel input[type='range'] {
-    @apply w-full accent-[#3384ff];
-  }
-  .toggle-row {
-    @apply mt-4 flex items-center justify-between text-[13px];
-  }
-  .toggle {
-    @apply relative h-5 w-9 rounded-full border-0 bg-[#d9e0eb];
-  }
-  .toggle::after {
-    content: '';
-    @apply absolute left-1 top-1 h-3 w-3 rounded-full bg-white;
-  }
-  .toggle.on {
-    @apply bg-[#3284ff];
-  }
-  .toggle.on::after {
-    @apply left-5;
-  }
-  .reset-settings {
-    @apply mt-7 h-10 w-full rounded-lg border border-[#e0e6ef] bg-transparent;
-  }
-  .page-heading {
-    @apply flex items-end justify-between px-10 pb-4 pt-10;
-  }
-  .page-heading span {
-    @apply text-xs text-[#94a2b6];
-  }
-  .page-heading h1 {
-    @apply mt-1 text-[30px];
-  }
-  .primary {
-    @apply rounded-lg border-0 bg-[#3282f7] px-4 py-2 text-sm text-white;
-  }
-  .book-grid {
-    @apply grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-5 px-10 pb-10;
-  }
-  .book-item {
-    @apply flex min-h-[138px] cursor-pointer gap-3 rounded-xl border border-[#e8edf5] bg-white p-4 shadow-sm;
-  }
-  .book-cover {
-    @apply grid h-[82px] w-14 shrink-0 place-items-center overflow-hidden rounded bg-[#2e3e54] text-white;
-  }
-  .book-cover img {
-    @apply h-full w-full object-cover;
-  }
-  .book-meta h2 {
-    @apply my-1 text-[15px];
-  }
-  .book-meta p {
-    @apply text-xs text-[#8a98ad];
-  }
-  .book-meta select {
-    @apply mt-2 rounded border border-[#e2e7ef] text-xs;
-  }
-  .delete-button {
-    @apply ml-2 border-0 bg-transparent text-xs text-red-500;
-  }
-  .empty-state {
-    @apply grid place-content-center justify-items-center gap-3 p-16 text-center;
-  }
-  .empty-icon {
-    @apply text-4xl text-[#5f93ee];
-  }
-  .empty-state p {
-    @apply text-sm text-[#93a0b3];
-  }
-  .visually-hidden {
-    @apply absolute h-px w-px overflow-hidden;
-  }
-  .error-banner {
-    @apply m-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700;
-  }
-}
 
-@layer components {
-  .appbar-brand strong {
-    @apply text-[18px] tracking-[0.02em];
-  }
-  .brand-mark {
-    @apply grid h-8 w-8 place-items-center rounded-[9px] bg-gradient-to-br from-[#6d52f5] to-[#2c8cff] text-white shadow-[0_6px_14px_rgba(61,110,247,0.24)];
-  }
-  .app-search {
-    @apply transition focus-within:border-[#9fc1ff] focus-within:ring-4 focus-within:ring-[#eaf2ff];
-  }
-  .app-search input {
-    @apply min-w-0 flex-1 border-0 bg-transparent text-[13px] text-[#33445f] outline-none placeholder:text-[#9aa7ba];
-  }
-  .appbar-tools button {
-    @apply text-[#263752] transition hover:text-[#2f7ef7] disabled:cursor-default disabled:opacity-30;
-  }
-  .nav-item {
-    @apply transition;
-  }
-  .nav-item svg {
-    @apply shrink-0 text-[#62728b];
-  }
-  .nav-item.active svg {
-    @apply text-[#2b7cf8];
-  }
-  .my-books-title {
-    @apply text-[#64748b];
-  }
-  .my-books-title button {
-    @apply grid h-6 w-6 place-items-center rounded-md text-[#75849b] transition hover:bg-[#eaf1ff] hover:text-[#2d7df7];
-  }
-  .mini-empty {
-    @apply rounded-lg border border-dashed border-[#dbe4f1] px-3 py-4 text-center text-[11px] text-[#94a2b7];
-  }
-  .mini-book {
-    @apply transition;
-  }
-  .mini-book:hover {
-    @apply translate-x-0.5;
-  }
-  .mini-cover {
-    @apply shadow-[0_4px_10px_rgba(39,59,91,0.12)];
-  }
-  .error-banner {
-    @apply flex items-center justify-between;
-  }
-  .error-banner button {
-    @apply border-0 bg-transparent text-red-500;
-  }
-  .page-heading {
-    @apply border-b border-[#eef1f6];
-  }
-  .page-heading h1 {
-    @apply font-semibold tracking-[-0.03em];
-  }
-  .primary {
-    @apply inline-flex items-center gap-2 shadow-[0_6px_14px_rgba(50,130,247,0.2)] transition hover:bg-[#246fdf] disabled:cursor-not-allowed disabled:opacity-50;
-  }
-  .reader-topbar button {
-    @apply rounded-md p-1.5 text-[#5e6e87] transition hover:bg-[#edf3ff] hover:text-[#2d7df7] disabled:cursor-default disabled:opacity-40;
-  }
-  .reader-topbar button.active {
-    @apply bg-[#eaf2ff] text-[#2d7df7];
-  }
-  .reader-top-tools {
-    @apply text-[#51627d];
-  }
-  .reader-workspace {
-    @apply bg-white;
-  }
-  .reader-layout {
-    @apply bg-[#fff];
-  }
-  .reader-side-tabs {
-    @apply mb-4 flex border-b border-[#e8edf4];
-  }
-  .reader-side-tabs button {
-    @apply flex flex-1 items-center justify-center gap-1.5 border-0 border-b-2 border-transparent bg-transparent py-2.5 text-[13px] text-[#8b98aa] transition hover:text-[#2d7df7];
-  }
-  .reader-side-tabs button.active {
-    @apply border-[#2d7df7] font-semibold text-[#2d7df7];
-  }
-  .chapter-button {
-    @apply transition;
-  }
-  .bookmark-panel {
-    @apply pt-2;
-  }
-  .bookmark-item {
-    @apply flex w-full items-center gap-2 rounded-lg border border-[#dfe8f6] bg-[#f6f9ff] px-3 py-3 text-left text-[13px] text-[#355071];
-  }
-  .bookmark-item span {
-    @apply ml-auto text-[11px] text-[#2d7df7];
-  }
-  .bookmark-empty {
-    @apply px-2 py-6 text-center text-xs text-[#98a5b7];
-  }
-  .reader-content {
-    @apply scroll-smooth;
-  }
-  .reader-content p {
-    @apply tracking-[0.01em];
-  }
-  .download-page {
-    @apply mx-auto w-full max-w-[920px];
-  }
-  .download-start-card {
-    @apply mb-5 flex items-center justify-between gap-5 rounded-2xl border border-[#e5ebf4] bg-white px-6 py-5 shadow-sm;
-  }
-  .download-start-card p {
-    @apply mb-1 text-xs text-[#2d7df7];
-  }
-  .download-start-card h2 {
-    @apply mb-1 text-xl;
-  }
-  .download-start-card span,
-  .download-task small {
-    @apply text-xs text-[#8290a5];
-  }
-  .download-start-card select {
-    @apply min-w-[190px] rounded-lg border border-[#dce5f2] bg-white px-3 py-2 text-sm;
-  }
-  .cache-card {
-    @apply mb-5 flex items-center gap-3 rounded-xl border border-[#e7edf6] bg-white px-5 py-3 text-sm;
-  }
-  .cache-summary {
-    @apply flex min-w-0 flex-1 flex-col;
-  }
-  .cache-summary span,
-  .cache-card label {
-    @apply text-xs text-[#8290a5];
-  }
-  .cache-card input {
-    @apply ml-1 w-20 rounded-md border border-[#dce5f2] px-2 py-1 text-sm text-[#344054];
-  }
-  .cache-card button {
-    @apply flex items-center gap-1 rounded-lg border border-[#dce5f2] bg-white px-3 py-1.5 text-xs text-[#52627a] hover:bg-[#edf4ff];
-  }
-  .cache-card button.danger {
-    @apply text-[#c53d3d] hover:bg-[#fff0f0];
-  }
-  .download-task-list {
-    @apply space-y-3;
-  }
-  .download-task {
-    @apply flex items-center gap-4 rounded-xl border border-[#e7edf6] bg-white px-5 py-4;
-  }
-  .download-task-icon {
-    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#edf4ff] text-[#2d7df7];
-  }
-  .download-task-main {
-    @apply min-w-0 flex-1;
-  }
-  .download-task-title {
-    @apply mb-2 flex items-center gap-3 text-sm;
-  }
-  .download-task-title span {
-    @apply rounded-full bg-[#f1f4f8] px-2 py-0.5 text-[11px] text-[#718096];
-  }
-  .download-task-title .status-running {
-    @apply bg-[#eaf2ff] text-[#2d7df7];
-  }
-  .download-task-title .status-completed {
-    @apply bg-[#e9f8ef] text-[#16834a];
-  }
-  .download-task-title .status-failed {
-    @apply bg-[#fff0f0] text-[#d04444];
-  }
-  .download-progress {
-    @apply mb-1 h-1.5 overflow-hidden rounded-full bg-[#edf1f7];
-  }
-  .download-progress i {
-    @apply block h-full rounded-full bg-[#2d7df7] transition-all;
-  }
-  .download-task-main em {
-    @apply mt-1 block truncate text-xs not-italic text-[#d04444];
-  }
-  .download-actions {
-    @apply flex shrink-0 gap-1;
-  }
-  .download-actions button {
-    @apply rounded-lg border-0 bg-transparent p-2 text-[#718096] hover:bg-[#edf4ff] hover:text-[#2d7df7];
-  }
-  .download-error {
-    @apply mb-4 rounded-lg bg-[#fff0f0] px-4 py-3 text-sm text-[#c53d3d];
-  }
-  .settings-panel {
-    @apply bg-[#fcfdff];
-  }
-  .settings-head button {
-    @apply rounded-md p-1 text-[#74839a] transition hover:bg-[#eef3fb] hover:text-[#2d7df7];
-  }
-  .theme-swatch {
-    @apply relative;
-  }
-  .theme-swatch::after {
-    content: '';
-    @apply absolute left-2 right-2 top-2 h-1 rounded-full bg-current opacity-20;
-  }
-  .theme-swatch::before {
-    content: '';
-    @apply absolute left-2 right-4 top-5 h-1 rounded-full bg-current opacity-20;
-  }
-  .setting-select,
-  .font-step,
-  .mode-switch,
-  .reset-settings {
-    @apply shadow-[0_1px_2px_rgba(23,42,72,0.03)];
-  }
-  .toggle {
-    @apply transition;
-  }
-  .library-page {
-    @apply min-h-0 flex-1 overflow-y-auto px-10 pb-12;
-  }
-  .library-hero {
-    @apply mt-4 flex items-center gap-4 rounded-2xl border border-[#e7edf6] bg-gradient-to-br from-[#f7faff] to-white px-6 py-5;
-  }
-  .library-hero-icon {
-    @apply grid h-12 w-12 place-items-center rounded-xl bg-[#eaf2ff] text-[#2d7df7];
-  }
-  .library-hero p {
-    @apply mb-1 text-xs text-[#8d9bb0];
-  }
-  .library-hero h1 {
-    @apply text-2xl font-semibold tracking-[-0.03em] text-[#24334d];
-  }
-  .library-hero span {
-    @apply mt-1 block text-sm text-[#77869d];
-  }
-  .library-list {
-    @apply mt-5 grid gap-2;
-  }
-  .library-book {
-    @apply flex items-center gap-3 rounded-xl border border-[#e8edf5] bg-white px-4 py-3 text-left transition hover:border-[#bcd4ff] hover:bg-[#f9fbff];
-  }
-  .library-book-cover {
-    @apply grid h-12 w-9 shrink-0 place-items-center overflow-hidden rounded bg-[#dce8fa] text-[#4a7fc9];
-  }
-  .library-book-cover img {
-    @apply h-full w-full object-cover;
-  }
-  .library-book-meta {
-    @apply min-w-0 flex-1;
-  }
-  .library-book-meta strong,
-  .library-book-meta small {
-    @apply block overflow-hidden text-ellipsis whitespace-nowrap;
-  }
-  .library-book-meta strong {
-    @apply text-sm text-[#2f405a];
-  }
-  .library-book-meta small {
-    @apply mt-1 text-xs text-[#8a98ad];
-  }
-  .library-book-arrow {
-    @apply text-[#a4b1c2];
-  }
-  .library-empty {
-    @apply grid place-items-center gap-2 px-8 py-28 text-center text-[#8b9ab0];
-  }
-  .library-empty h2 {
-    @apply max-w-[420px] text-sm font-normal leading-6;
-  }
-  .library-empty p {
-    @apply text-xs text-[#a1adbc];
-  }
-  @media (max-width: 1180px) {
-    .left-nav {
-      @apply w-[220px];
-    }
-    .settings-panel {
-      @apply w-[270px];
-    }
-    .chapter-list {
-      @apply w-[240px];
-    }
-    .reader-content {
-      @apply px-8;
-    }
-  }
-  .search-results {
-    @apply min-h-0 flex-1 overflow-y-auto px-10 pb-12;
-  }
-  .search-page-form {
-    @apply sticky top-0 z-10 -mx-1 mb-4 bg-white/95 py-1 backdrop-blur;
-  }
-  .search-page-input {
-    @apply flex h-11 items-center gap-3 rounded-xl border border-[#dfe7f2] bg-[#fbfdff] px-3 shadow-sm focus-within:border-[#91b9fa] focus-within:ring-4 focus-within:ring-[#edf4ff];
-  }
-  .search-page-input svg {
-    @apply shrink-0 text-[#7e8da2];
-  }
-  .search-page-input input {
-    @apply min-w-0 flex-1 border-0 bg-transparent text-sm text-[#33445f] outline-none placeholder:text-[#9aa7ba];
-  }
-  .search-page-input button {
-    @apply rounded-lg border-0 bg-[#3282f7] px-4 py-1.5 text-xs text-white transition hover:bg-[#246fdf] disabled:opacity-50;
-  }
-  .search-page-input .search-clear {
-    @apply grid h-7 w-7 shrink-0 place-items-center bg-transparent p-0 text-[#8b98aa] hover:bg-[#edf3fb] hover:text-[#51627b];
-  }
-  .search-toolbar {
-    @apply mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#e7edf5] bg-[#fbfdff] px-3 py-2 text-xs text-[#66758c];
-  }
-  .search-progress {
-    @apply flex min-w-[280px] flex-1 items-center gap-2;
-  }
-  .search-progress > i {
-    @apply h-1.5 min-w-[100px] flex-1 overflow-hidden rounded-full bg-[#e8eef7];
-  }
-  .search-progress > i b {
-    @apply block h-full rounded-full bg-[#2d83f7] transition-all;
-  }
-  .icon-button,
-  .toolbar-button,
-  .layout-switch button {
-    @apply inline-flex items-center gap-1.5 rounded-lg border border-[#dce5f1] bg-white px-2.5 py-1.5 text-xs text-[#52647f] transition hover:border-[#a8c7fb] hover:bg-[#f5f9ff] hover:text-[#2678f5];
-  }
-  .icon-button {
-    @apply border-0 bg-transparent px-1.5;
-  }
-  .layout-switch {
-    @apply ml-auto flex gap-1;
-  }
-  .layout-switch button {
-    @apply px-2;
-  }
-  .layout-switch button.active,
-  .search-settings-panel button.active {
-    @apply border-[#9dc2fb] bg-[#eaf3ff] text-[#2678f5];
-  }
-  .search-settings-panel {
-    @apply mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#e7edf5] bg-white px-4 py-3 text-xs text-[#5f7088];
-  }
-  .search-settings-panel strong {
-    @apply mr-2 text-[#33445f];
-  }
-  .search-settings-divider {
-    @apply mx-1 h-5 w-px bg-[#e1e7f0];
-  }
-  .search-settings-panel button {
-    @apply rounded-lg border border-transparent bg-[#f4f7fb] px-3 py-1.5 text-xs text-[#64748b];
-  }
-  .search-result-compact {
-    @apply py-3;
-  }
-  .search-result-compact .book-cover {
-    @apply h-[78px] w-[54px];
-  }
-  .search-result-tags {
-    @apply flex flex-wrap gap-1.5;
-  }
-  .search-result-tags span {
-    @apply rounded bg-[#edf5f6] px-1.5 py-0.5 text-[11px] text-[#43818b];
-  }
-  .search-result,
-  .source-editor,
-  .debug-rules,
-  .debug-output {
-    @apply rounded-2xl border border-[#e7edf5] bg-white p-5 shadow-[0_4px_18px_rgba(38,62,94,0.04)];
-  }
-  .search-result {
-    @apply mt-3 flex gap-4;
-  }
-  .search-result-meta {
-    @apply min-w-0 flex-1;
-  }
-  .search-result-meta h2 {
-    @apply text-base font-semibold text-[#2d3e58];
-  }
-  .search-result-meta p {
-    @apply mt-1 text-xs leading-5 text-[#8492a6];
-  }
-  .search-result-intro {
-    @apply line-clamp-2 max-w-3xl;
-  }
-  .search-result .book-cover {
-    @apply h-[112px] w-[76px] rounded-lg;
-  }
-  .secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-[#dce5f1] bg-white px-3 py-2 text-xs text-[#52647f] transition hover:border-[#a8c7fb] hover:bg-[#f5f9ff] hover:text-[#2678f5] disabled:cursor-not-allowed disabled:opacity-50;
-  }
-  .search-result .secondary {
-    @apply mt-3;
-  }
-  .search-empty {
-    @apply grid place-items-center rounded-2xl border border-dashed border-[#dce5f0] px-6 py-20 text-center text-sm text-[#8d9bb0];
-  }
-  .explore-heading {
-    @apply mb-4 flex items-center justify-between;
-  }
-  .explore-hint {
-    @apply text-sm text-[#74849b];
-  }
-  .explore-categories {
-    @apply mb-4 flex flex-wrap gap-2;
-  }
-  .explore-categories .active {
-    @apply border-[#8bb7fb] bg-[#edf5ff] text-[#2678f5];
-  }
-  .source-failures {
-    @apply mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800;
-  }
-  .source-failures summary {
-    @apply cursor-pointer font-medium;
-  }
-  .source-failures ul {
-    @apply mt-2 grid gap-2 pl-4;
-  }
-  .source-failures button {
-    @apply ml-2 rounded border border-amber-300 bg-transparent px-2 py-1 text-xs;
-  }
-  .source-batch-results {
-    @apply flex-wrap;
-  }
-  .source-batch-results .source-ok {
-    @apply text-[#16834a];
-  }
-  .source-batch-results .source-bad {
-    @apply text-[#c53d3d];
-  }
-  .source-editor {
-    @apply mt-3;
-  }
-  .source-editor h2 {
-    @apply text-base font-semibold text-[#2d3e58];
-  }
-  .source-editor > p {
-    @apply mt-2 max-w-4xl text-xs leading-6 text-[#7d8ca1];
-  }
-  .source-import {
-    @apply mt-4 flex flex-wrap items-center gap-2;
-  }
-  .source-import input,
-  .source-import select,
-  .source-editor input,
-  .source-editor textarea,
-  .source-editor select,
-  .debug-toolbar input,
-  .debug-toolbar select,
-  .debug-rule-field textarea {
-    @apply rounded-lg border border-[#dce5f0] bg-white px-3 py-2 text-sm text-[#33445f] outline-none transition focus:border-[#8db7fa] focus:ring-4 focus:ring-[#edf4ff];
-  }
-  .source-import input {
-    @apply min-w-[260px] flex-1;
-  }
-  .source-url-form {
-    @apply flex min-w-[320px] flex-1 gap-2;
-  }
-  .source-url-form input {
-    @apply min-w-0 flex-1;
-  }
-  .source-fields {
-    @apply mt-4 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3;
-  }
-  .source-editor form > .secondary {
-    @apply mt-4;
-  }
-  .source-list {
-    @apply mt-4 grid gap-2;
-  }
-  .source-list-item {
-    @apply flex flex-wrap items-center gap-2 rounded-xl border border-[#edf1f6] px-3 py-3 text-sm text-[#42536b];
-  }
-  .source-list-item > span,
-  .source-list-name {
-    @apply mr-auto font-medium;
-  }
-  .source-list-name {
-    @apply flex min-w-36 flex-col gap-0.5;
-  }
-  .source-list-name small {
-    @apply text-[11px] font-normal text-[#8b99ab];
-  }
-  .source-management-input {
-    @apply w-28;
-  }
-  .source-management-number {
-    @apply w-20;
-  }
-  .source-explore-toggle {
-    @apply flex items-center gap-1 text-xs;
-  }
-  .source-probe-status,
-  .source-sessions {
-    @apply mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#dceafc] bg-[#f7fbff] px-4 py-3 text-xs text-[#60738e];
-  }
-  .source-probe-status strong {
-    @apply text-[#2d4566];
-  }
-  .source-probe-status code {
-    @apply max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[#8190a5];
-  }
-  .debug-page {
-    @apply min-h-0 flex-1 overflow-y-auto px-10 pb-12;
-  }
-  .debug-toolbar {
-    @apply mb-4 flex flex-wrap items-end gap-3 rounded-2xl border border-[#e7edf5] bg-white p-4;
-  }
-  .debug-toolbar label {
-    @apply grid gap-1 text-xs text-[#718198];
-  }
-  .debug-toolbar .debug-input {
-    @apply min-w-[300px] flex-1;
-  }
-  .debug-grid {
-    @apply grid grid-cols-[minmax(260px,0.8fr)_minmax(0,1.4fr)] gap-4;
-  }
-  .debug-rule-field {
-    @apply mt-3 grid gap-1 text-xs text-[#718198];
-  }
-  .debug-rule-field textarea {
-    @apply min-h-[108px] resize-y font-mono text-xs;
-  }
-  .debug-hint {
-    @apply mt-3 text-xs leading-5 text-[#8795a8];
-  }
-  .debug-output h2,
-  .debug-rules h2 {
-    @apply text-base font-semibold text-[#2d3e58];
-  }
-  .debug-output details {
-    @apply mt-4 rounded-xl border border-[#e8edf5] p-3;
-  }
-  .debug-output summary {
-    @apply cursor-pointer text-sm font-medium text-[#50627c];
-  }
-  .debug-pre {
-    @apply mt-3 max-h-[360px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[#f7f9fc] p-3 font-mono text-xs leading-5 text-[#53647c];
-  }
-  .debug-steps {
-    @apply mt-3 w-full border-collapse text-left text-xs;
-  }
-  .debug-steps th,
-  .debug-steps td {
-    @apply border-b border-[#edf1f6] px-2 py-2 align-top;
-  }
-  .debug-steps th {
-    @apply text-[#718198];
-  }
-  .debug-steps code {
-    @apply break-all text-[#60738e];
-  }
-  .settings-panel input[type='range'] {
-    @apply my-1;
-  }
-  @media (max-width: 980px) {
-    .debug-grid {
-      @apply grid-cols-1;
-    }
-    .search-results,
-    .debug-page,
-    .library-page {
-      @apply px-5;
-    }
+  .reader-toolbar {
+    @apply mb-4 flex flex-wrap items-center justify-end gap-2 text-xs;
+  }
+  .reader-toolbar button,
+  .reader-toolbar input {
+    @apply rounded border bg-card px-2 py-1 text-xs text-foreground;
+  }
+  .reader-mode-toggle,
+  .reader-page-actions,
+  .reader-tools {
+    @apply flex items-center gap-1.5;
+  }
+  .reader-mode-toggle button.active {
+    @apply bg-accent font-medium;
+  }
+  .reader-search-count {
+    @apply text-muted-foreground;
   }
 }

@@ -1,4 +1,3 @@
-/* global Blob, URL, document */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -78,7 +77,7 @@ export function useSourceDebug(
     sourceId.value = id
     loadRules(id)
     input.value = ''
-    void router.push({ name: 'sources' })
+    void router.push({ name: 'source-debug', query: { source: String(id) } })
   }
 
   async function run() {

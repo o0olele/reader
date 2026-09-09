@@ -1,4 +1,3 @@
-/* global HTMLElement, localStorage */
 import { nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { deleteBookmark, getBookmark, getErrorMessage, saveBookmark, type Bookmark } from '../../services/api'
 

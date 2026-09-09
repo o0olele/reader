@@ -1,4 +1,3 @@
-/* global HTMLElement, localStorage, setTimeout, clearTimeout, setInterval, clearInterval, document */
 import { nextTick, reactive, ref, watch } from 'vue'
 import {
   readChapter,
@@ -18,6 +17,10 @@ import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
 
 const PROGRESS_DEBOUNCE_MS = 350
 const READING_TIME_TICK_MS = 15_000
+
+/** Page-turn animation: only the two that are actually implemented. The
+ *  prototype's six choices (仿真 / 覆盖 / 淡入 / 竖排 …) stay 未接入 (§9). */
+export type ReaderPageAnimation = 'none' | 'slide'
 
 function chapterKey(title: string): string {
   return title
@@ -47,6 +50,14 @@ export function useReader(report: (cause: unknown) => void) {
   const lineHeight = ref(Number(localStorage.getItem('reader-line-height') ?? '1.8'))
   const pageMargin = ref(Number(localStorage.getItem('reader-page-margin') ?? '32'))
   const readerMode = ref<'scroll' | 'paged'>((localStorage.getItem('reader-mode') as 'scroll' | 'paged') ?? 'scroll')
+  const paragraphSpacing = ref(Number(localStorage.getItem('reader-paragraph-spacing') ?? '1.2'))
+  const textIndent = ref(Number(localStorage.getItem('reader-text-indent') ?? '2'))
+  const justify = ref(localStorage.getItem('reader-justify') === '1')
+  const pageAnimation = ref<ReaderPageAnimation>(
+    (localStorage.getItem('reader-page-animation') as ReaderPageAnimation) ?? 'slide',
+  )
+  const brightness = ref(Number(localStorage.getItem('reader-brightness') ?? '1'))
+  const eyeCare = ref(localStorage.getItem('reader-eye-care') === '1')
 
   let saveTimer: ReturnType<typeof setTimeout> | undefined
   let readingTimer: ReturnType<typeof setInterval> | undefined
@@ -91,7 +102,13 @@ export function useReader(report: (cause: unknown) => void) {
   watch(lineHeight, (value) => localStorage.setItem('reader-line-height', String(value)))
   watch(pageMargin, (value) => localStorage.setItem('reader-page-margin', String(value)))
   watch(readerMode, (value) => localStorage.setItem('reader-mode', value))
-  watch([fontSize, fontFamily, lineHeight, pageMargin], async () => {
+  watch(paragraphSpacing, (value) => localStorage.setItem('reader-paragraph-spacing', String(value)))
+  watch(textIndent, (value) => localStorage.setItem('reader-text-indent', String(value)))
+  watch(justify, (value) => localStorage.setItem('reader-justify', value ? '1' : '0'))
+  watch(pageAnimation, (value) => localStorage.setItem('reader-page-animation', value))
+  watch(brightness, (value) => localStorage.setItem('reader-brightness', String(value)))
+  watch(eyeCare, (value) => localStorage.setItem('reader-eye-care', value ? '1' : '0'))
+  watch([fontSize, fontFamily, lineHeight, pageMargin, paragraphSpacing, textIndent], async () => {
     const element = readerContent.value
     if (!element || !selectedChapter.value) return
     const locator = captureReadingLocator(element, readerMode.value)
@@ -267,6 +284,12 @@ export function useReader(report: (cause: unknown) => void) {
     lineHeight,
     pageMargin,
     readerMode,
+    paragraphSpacing,
+    textIndent,
+    justify,
+    pageAnimation,
+    brightness,
+    eyeCare,
     openBook,
     refreshCatalogForBook,
     switchSource,

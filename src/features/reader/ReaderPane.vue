@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { Chapter } from '../../services/api'
 import { useBookmark } from './useBookmark'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Bookmark, List } from 'lucide-vue-next'
-import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import ReaderCatalog from './ReaderCatalog.vue'
+import ReaderContentToolbar from './ReaderContentToolbar.vue'
+import { useReaderPaging } from './useReaderPaging'
 
 const props = defineProps<{
   chapters: Chapter[]
@@ -13,6 +14,12 @@ const props = defineProps<{
   fontFamily: string
   lineHeight: number
   pageMargin: number
+  paragraphSpacing: number
+  textIndent: number
+  justify: boolean
+  pageAnimation: string
+  brightness: number
+  eyeCare: boolean
   readerMode: 'scroll' | 'paged'
   chapterListOpen: boolean
   loading: boolean
@@ -27,8 +34,6 @@ const emit = defineEmits<{
 }>()
 
 const contentRef = ref<HTMLElement | null>(null)
-let resizeObserver: ResizeObserver | undefined
-const activeTab = ref<'catalog' | 'bookmarks'>('catalog')
 const searchQuery = ref('')
 const {
   bookmark,
@@ -51,9 +56,6 @@ const resolvedFontFamily = computed(() => {
   return stacks[props.fontFamily] ?? stacks['系统默认']
 })
 const paragraphs = computed(() => (props.selectedChapter?.content ?? '').split(/\r?\n/))
-// Keep the scroll-mode DOM stable. Replacing paragraphs while scrolling changes
-// scrollHeight and makes the native scrollbar thumb lag or jump.
-const visibleParagraphs = computed(() => paragraphs.value)
 const searchMatches = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
   if (!query) return []
@@ -63,64 +65,15 @@ const searchMatches = computed(() => {
   }, [])
 })
 
-function onScroll() {
-  emit('scroll')
-}
-function changeMode(mode: 'scroll' | 'paged') {
-  const element = contentRef.value
-  const locator = element ? captureReadingLocator(element, props.readerMode) : undefined
-  emit('readerMode', mode)
-  void nextTick(() => {
-    if (!contentRef.value || !locator) return
-    restoreReadingLocator(contentRef.value, mode, locator)
-    emit('scroll')
-  })
-}
-function turnPage(direction: number) {
-  const element = contentRef.value
-  if (!element || props.readerMode !== 'paged') return
-  const gap = Number.parseFloat(getComputedStyle(element).columnGap || '48') || 48
-  const style = getComputedStyle(element)
-  const pageWidth =
-    Number.parseFloat(style.getPropertyValue('--reader-page-width')) ||
-    Math.max(
-      1,
-      element.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0),
-    )
-  element.scrollBy({ left: direction * (pageWidth + gap), behavior: 'smooth' })
-}
+const { turnPage, advance, changeMode } = useReaderPaging(
+  contentRef,
+  () => props.readerMode,
+  (mode) => emit('readerMode', mode),
+  () => emit('scroll'),
+)
 
-function syncPageMetrics() {
-  const element = contentRef.value
-  if (!element) return
-  // Keep the column geometry tied to the actual viewport.  A fixed CSS
-  // `column-width: calc(...)` drifts when the side panel or window changes,
-  // which is especially visible after changing font size in paged mode.
-  const style = getComputedStyle(element)
-  const horizontalPadding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0)
-  const verticalPadding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0)
-  const pageWidth = Math.max(1, element.clientWidth - horizontalPadding)
-  const pageHeight = Math.max(1, element.clientHeight - verticalPadding - 72)
-  element.style.setProperty('--reader-page-width', `${pageWidth}px`)
-  element.style.setProperty('--reader-page-height', `${pageHeight}px`)
-}
-function onKeydown(event: KeyboardEvent) {
-  if (props.readerMode !== 'paged') return
-  if (event.key === 'ArrowRight' || event.key === 'PageDown') {
-    event.preventDefault()
-    turnPage(1)
-  } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
-    event.preventDefault()
-    turnPage(-1)
-  }
-}
 onMounted(() => {
   emit('readerContent', contentRef.value)
-  syncPageMetrics()
-  if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
-    resizeObserver = new ResizeObserver(() => syncPageMetrics())
-    resizeObserver.observe(contentRef.value)
-  }
 })
 watch(contentRef, (element) => emit('readerContent', element))
 watch(
@@ -139,92 +92,64 @@ watch(searchMatches, (matches) => {
   const target = contentRef.value.querySelectorAll('.reader-paragraph')[index]
   target?.scrollIntoView({ block: 'start' })
 })
-onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown)
-  resizeObserver?.disconnect()
-})
+
+/** The bottom toolbar owns the bookmark button, so the state lives here. */
+defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage, advance })
 </script>
 
 <template>
   <div class="reader-layout">
-    <aside v-if="chapterListOpen" class="chapter-list">
-      <div class="reader-side-tabs">
-        <button :class="{ active: activeTab === 'catalog' }" type="button" @click="activeTab = 'catalog'">
-          <List :size="15" />目录</button
-        ><button :class="{ active: activeTab === 'bookmarks' }" type="button" @click="activeTab = 'bookmarks'">
-          <Bookmark :size="15" />书签
-        </button>
-      </div>
-      <template v-if="activeTab === 'catalog'">
-        <button
-          v-for="chapter in chapters"
-          :key="chapter.id"
-          type="button"
-          :class="['chapter-button', { selected: selectedChapter?.id === chapter.id }]"
-          @click="emit('selectChapter', chapter)"
-        >
-          {{ chapter.title }}
-        </button>
-      </template>
-      <div v-else class="bookmark-panel">
-        <button v-if="bookmark" type="button" class="bookmark-item" @click="jumpToBookmark">
-          <Bookmark :size="16" />{{ selectedChapter?.title }}<span>跳转</span>
-        </button>
-        <p v-else class="bookmark-empty">当前章节还没有书签。</p>
-      </div>
-    </aside>
+    <ReaderCatalog
+      v-if="chapterListOpen"
+      :chapters="chapters"
+      :selected-chapter="selectedChapter"
+      :has-bookmark="Boolean(bookmark)"
+      @select-chapter="emit('selectChapter', $event)"
+      @jump="jumpToBookmark"
+    />
+
     <article
       v-if="selectedChapter"
       ref="contentRef"
-      :class="['reader-content', `theme-${theme}`, `mode-${readerMode}`]"
+      :class="[
+        'reader-content',
+        `theme-${theme}`,
+        `mode-${readerMode}`,
+        `anim-${pageAnimation}`,
+        { 'justify-text': justify, 'eye-care': eyeCare },
+      ]"
       :style="{
         '--reader-font-size': `${fontSize}px`,
         '--reader-font-family': resolvedFontFamily,
         '--reader-line-height': lineHeight,
         '--reader-margin': `${pageMargin}px`,
+        '--reader-paragraph-spacing': `${paragraphSpacing}em`,
+        '--reader-text-indent': `${textIndent}em`,
+        '--reader-brightness': brightness,
       }"
       tabindex="0"
-      @scroll="onScroll"
+      @scroll="emit('scroll')"
     >
-      <div class="reader-toolbar">
-        <div class="reader-mode-toggle" role="group" aria-label="阅读模式">
-          <button type="button" :class="{ active: readerMode === 'scroll' }" @click="changeMode('scroll')">滚动</button>
-          <button type="button" :class="{ active: readerMode === 'paged' }" @click="changeMode('paged')">分页</button>
-        </div>
-        <div v-if="readerMode === 'paged'" class="reader-page-actions">
-          <button type="button" aria-label="上一页" @click="turnPage(-1)">上一页</button>
-          <button type="button" aria-label="下一页" @click="turnPage(1)">下一页</button>
-        </div>
-        <div class="reader-tools">
-          <input v-model="searchQuery" type="search" placeholder="搜索本章" aria-label="搜索本章" />
-          <span v-if="searchQuery.trim()" class="reader-search-count">{{ searchMatches.length }} 处</span>
-          <button
-            type="button"
-            :aria-pressed="Boolean(bookmark)"
-            :disabled="bookmarkBusy || loading"
-            @click="toggleBookmark"
-          >
-            {{ bookmark ? '移除书签' : '添加书签' }}
-          </button>
-        </div>
-      </div>
-      <p v-if="bookmarkError" role="alert">{{ bookmarkError }}</p>
+      <ReaderContentToolbar
+        v-model="searchQuery"
+        :reader-mode="readerMode"
+        :has-bookmark="Boolean(bookmark)"
+        :busy="bookmarkBusy"
+        :loading="loading"
+        :matches="searchMatches.length"
+        @mode="changeMode"
+        @turn="turnPage"
+        @toggle-bookmark="toggleBookmark"
+      />
+      <p v-if="bookmarkError" role="alert" class="text-destructive">{{ bookmarkError }}</p>
       <button v-if="bookmark" type="button" :disabled="bookmarkBusy || loading" @click="jumpToBookmark">
         跳到书签
       </button>
       <h2 class="reader-title">{{ selectedChapter.title }}</h2>
       <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
-      <p v-if="loading" class="reader-loading">正在获取正文...</p>
+      <p v-if="loading" class="reader-loading">正在获取正文…</p>
       <div v-else class="reader-flow">
-        <p
-          v-for="(paragraph, index) in visibleParagraphs"
-          :key="index"
-          class="reader-paragraph"
-          :data-reader-index="index"
-        >
+        <p v-for="(paragraph, index) in paragraphs" :key="index" class="reader-paragraph" :data-reader-index="index">
           {{ paragraph }}
         </p>
       </div>

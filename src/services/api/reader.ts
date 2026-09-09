@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Chapter, ReadingProgress, ReadingRecord } from './types'
+import type { Chapter, ReadingProgress, ReadingRecord, ReadingStats } from './types'
 
 export interface Bookmark {
   book_id: number
@@ -62,4 +62,12 @@ export function getReadingRecord(bookId: number): Promise<ReadingRecord | null> 
 
 export function addReadingTime(bookId: number, durationSeconds: number): Promise<void> {
   return invoke<void>('add_reading_time', { bookId, durationSeconds })
+}
+
+export function getReadingStats(): Promise<ReadingStats> {
+  return invoke<ReadingStats>('get_reading_stats')
+}
+
+export function setReadingGoal(minutes: number): Promise<ReadingStats> {
+  return invoke<ReadingStats>('set_reading_goal', { minutes })
 }
