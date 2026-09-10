@@ -16,7 +16,8 @@ mod report;
 #[path = "rule_audit/tests.rs"]
 mod tests;
 use input::{
-    error_category, is_metadata_url, is_parse_error, source_is_json, source_rules, TOKENS,
+    error_category, is_hook_field, is_metadata_field, is_metadata_url, is_parse_error,
+    source_is_json, source_rules, TOKENS,
 };
 use regex::Regex;
 use report::markdown;
@@ -115,9 +116,11 @@ fn run(input: &str) -> Result<Audit, AppError> {
                     .or_default()
                     .insert(source_id);
             }
-            // URL templates, headers and JS libraries are metadata rather than
-            // evaluator rules; only actual rule fields are dry-run here.
-            if path.starts_with("rule") && !is_metadata_url(&path, &raw) {
+            // URL templates, headers, JS libraries and plain configuration are
+            // metadata rather than evaluator rules; only actual rule fields are
+            // dry-run here.
+            if path.starts_with("rule") && !is_metadata_url(&path, &raw) && !is_metadata_field(&path)
+            {
                 report.executed += 1;
                 if let Some(error) = rule_failure(&raw, json_source) {
                     source_clean = false;
@@ -127,9 +130,16 @@ fn run(input: &str) -> Result<Audit, AppError> {
                         .entry(error.clone())
                         .or_default()
                         .insert(format!("source[{source_id}].{path} = {raw}"));
+                    // A hook this engine does not implement yet is not a CSS
+                    // parsing gap; keep the attribution honest.
+                    let category = if is_hook_field(&path) {
+                        "unimplemented hook"
+                    } else {
+                        error_category(&error)
+                    };
                     report
                         .blocked_by
-                        .entry(error_category(&error).to_owned())
+                        .entry(category.to_owned())
                         .or_default()
                         .insert(source_id);
                 }

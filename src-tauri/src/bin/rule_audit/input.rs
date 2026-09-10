@@ -103,6 +103,26 @@ pub(super) fn is_parse_error(error: &str) -> bool {
     matches!(error_category(error), "path parser" | "css compatibility")
 }
 
+/// Rule paths that hold configuration rather than a selector.
+///
+/// `checkKeyWord` is a keyword list and `imageStyle` an enum; dry-running them as
+/// rules only produces a fake CSS failure.
+pub(super) fn is_metadata_field(path: &str) -> bool {
+    matches!(field(path), "checkKeyWord" | "imageStyle")
+}
+
+/// Rule fields legado runs as JavaScript hooks around extraction (`init`,
+/// `preUpdateJs`, …). This engine does not implement them yet, so they get their
+/// own category instead of being blamed on the CSS parser.
+pub(super) fn is_hook_field(path: &str) -> bool {
+    let key = field(path);
+    key.ends_with("Js") || key == "init"
+}
+
+fn field(path: &str) -> &str {
+    path.rsplit('.').next().unwrap_or_default()
+}
+
 fn walk(value: &Value, path: &str, out: &mut Vec<(String, String)>) {
     match value {
         Value::String(text) if !text.trim().is_empty() => {

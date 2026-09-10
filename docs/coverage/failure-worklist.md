@@ -1,6 +1,7 @@
 # 失败归类工作清单（2026-09-10）
 
 数据：`docs/coverage/rule-audit.md`（970 源 / 22,220 规则串 / 无错误 805 = 83.0% / **受阻 165**）
+**—— 以下 §1–§3 是修复前的基线快照，最新结果见 §5。**
 方法：把该报告的「Execution errors」与「Failed rule examples」两张表与语料
 `src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json` 联表，按源 id 归并。
 分类口径与 `src-tauri/src/bin/rule_audit/input.rs::error_category` 完全一致（脚本复算出的
@@ -87,3 +88,43 @@ READER_STRICT_ENGINE=1 cargo run --bin rule-audit -- \
 
 联表脚本是一次性的（`.tmp-extract.cjs`，已删）。若需要长期复现，应把它变成
 `rule-audit` 的第二个子命令（`--worklist`），输出本表的机器可读版本 —— 这本身是一条待办。
+
+---
+
+## 5. 进展
+
+### 第一批：css-compat 规则方言（2026-09-10）
+
+**受阻源 165 → 144（无错误源 805 → 826 = 85.2%）。** 这一批全部是引擎语义修复，
+没有扩充假载荷、没有放宽判定：
+
+| 改动 | 位置 | 影响 |
+| --- | --- | --- |
+| JSoup 的正则属性选择器 `[attr~=pattern]` | `rule/jsoup/regex_attr.rs`（新增）+ `jsoup.rs` + `legacy.rs` | 从选择器里剥离为选择后的正则过滤（模式里可能含 `]`，如 `/[^/]+/`，按深度配对）；编译失败照实报错 |
+| 属性选择器容忍运算符周围的空格与带空格的值 | `rule/jsoup/legacy.rs` | `[class =a b]` / `[property~ =x]`；顺带去掉原先会二次加引号的隐患 |
+| 前导 `+` 标记（`+@css:` / `+@js:`） | `rule/analyzer.rs` | 剥离后按原方言解析；`-`（倒序）语义不变 |
+| 单花括号 JSON 显示模板 `{$.path}` | `rule/analyzer.rs` | 路由到 Json 模式交给 `jsonpath::template`；`{{$.path}}` 双花括号仍走内联模板路径，不与之混淆 |
+| 审计：`checkKeyWord` / `imageStyle` 不是规则 | `bin/rule_audit/input.rs` | 不再干跑（跳过字段 2186 → 2531） |
+| 审计：`init` / `*Js` 钩子单列一类 | `bin/rule_audit/input.rs` + `rule-audit.rs` | 新类别 `unimplemented hook`（12 源 / 7 独占）—— 是引擎没实现的钩子，不该记在 CSS 解析账上 |
+
+修复后的分类（`docs/coverage/rule-audit.md`）：
+
+| 类别 | 受阻源 | 单独修可解 | 对比修复前 |
+| --- | ---: | ---: | --- |
+| css compatibility | **23** | 14 | 77 / 41 —— 方言修复把这一桶打掉了 70% |
+| js runtime | 105 | **81** | 106 / 64 —— 现在是绝对主战场，但见 §1 的假输入说明 |
+| path parser | 16 | 13 | 未动，值得下一批看 |
+| unimplemented hook | 12 | 7 | 新类别 |
+| unsupported JVM access | 14 | 0 | 永久不可解（Rhino） |
+| harness input | 4 | 2 | — |
+
+距 v0.8.0 门槛 ≤140 还差 **4 个源**。
+
+### 下一批候选（按独立可解源排序）
+
+1. **js runtime 的绑定层**：`org.jsoup.Jsoup`、`java.HMacHex`、
+   `java.getStringList(...).toArray()/.size()/.get()` 的 Java 容器语义、
+   `java.getString('$..x')` 的 JSONPath —— 真实缺口，但见 §1：该桶里 35 个独占源是假载荷产物。
+2. **path parser（16 源 / 13 独占）**：尚未逐条看过，13 个独占源是第三大块。
+3. **`$N` 捕获组引用**（§3）：引擎 + 审计两侧一起动，触及 42 源。
+4. **`unimplemented hook`（12 源 / 7 独占）**：实现 `init` / `preUpdateJs` 钩子。

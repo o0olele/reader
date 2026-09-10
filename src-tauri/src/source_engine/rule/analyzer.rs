@@ -160,7 +160,15 @@ fn push_typed_rule(
 }
 
 fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
-    let candidate = raw.strip_prefix('-').map(str::trim_start).unwrap_or(raw);
+    // A leading `-` reverses the result order. Exported sources also carry a
+    // leading `+` (legado's list marker, for example `+@css:.bookbox`); the
+    // single-rule evaluation does not need it, and dropping it keeps dialect
+    // detection intact instead of handing `+@css:` to the CSS parser.
+    let candidate = raw
+        .strip_prefix('-')
+        .or_else(|| raw.strip_prefix('+'))
+        .map(str::trim_start)
+        .unwrap_or(raw);
     for (prefix, mode) in [
         ("@xpath:", RuleMode::XPath),
         ("@json:", RuleMode::Json),
@@ -180,6 +188,7 @@ fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
     } else if candidate.starts_with("$.")
         || candidate.starts_with("$[")
         || (json_input && looks_like_legacy_json_path(candidate))
+        || looks_like_json_template(candidate)
     {
         (RuleMode::Json, candidate)
     } else if candidate.starts_with('/') {
@@ -187,6 +196,29 @@ fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
     } else {
         (RuleMode::Default, candidate)
     }
+}
+
+/// Single-brace `{$.path}` is legado's JSON display-template spelling (for
+/// example `{$.score}分` or `连载中{$.status}已完结`). It is not a CSS selector;
+/// routing it to Json mode lets `jsonpath::template` render it.
+///
+/// The double-brace spelling `{{$.path}}` belongs to the inline-template path
+/// and must keep its own mode.
+fn looks_like_json_template(value: &str) -> bool {
+    let mut index = 0;
+    while let Some(offset) = value[index..].find('{') {
+        let start = index + offset;
+        if value[start..].starts_with("{{") {
+            index = start + 2;
+            continue;
+        }
+        let rest = &value[start + 1..];
+        if rest.starts_with("$.") || rest.starts_with("$[") {
+            return true;
+        }
+        index = start + 1;
+    }
+    false
 }
 
 fn looks_like_legacy_json_path(value: &str) -> bool {
@@ -260,5 +292,29 @@ mod tests {
         let parsed = split_rule(":chapter-(\\d+)").unwrap();
         assert_eq!(parsed[0][0].mode, RuleMode::Regex);
         assert_eq!(parsed[0][0].rule, "chapter-(\\d+)");
+    }
+
+    #[test]
+    fn strips_the_legado_list_marker_without_losing_the_dialect() {
+        let parsed = split_rule("+@css:.bookbox").unwrap();
+        assert_eq!(parsed[0][0].mode, RuleMode::Default);
+        assert_eq!(parsed[0][0].rule, ".bookbox");
+        assert!(!parsed[0][0].reverse);
+        // A leading `-` still means "reverse the result order".
+        let parsed = split_rule("-tag.a@text").unwrap();
+        assert_eq!(parsed[0][0].rule, "tag.a@text");
+        assert!(parsed[0][0].reverse);
+    }
+
+    #[test]
+    fn routes_single_brace_json_templates_to_json_mode() {
+        for raw in ["{$.score}分", "连载中{$.status}已完结", "{$[0].name}"] {
+            let parsed = split_rule(raw).unwrap();
+            assert_eq!(parsed[0][0].mode, RuleMode::Json, "{raw}");
+            assert_eq!(parsed[0][0].rule, raw);
+        }
+        // A CSS rule that merely mentions a brace is untouched.
+        let parsed = split_rule("a[href^=http]").unwrap();
+        assert_eq!(parsed[0][0].mode, RuleMode::Default);
     }
 }

@@ -1,5 +1,7 @@
 //! Legacy JSoup spelling normalization and CSS compatibility helpers.
 
+use super::regex_attr;
+
 /// Legado exports both `@attr(name)`/`:attr(name)` and the CSS-looking
 /// `::attr(name)` spelling.  Normalize those terminal forms before the
 /// `@`-chain parser sees them; otherwise scraper treats `:attr` as an
@@ -44,7 +46,10 @@ pub(super) fn normalize_rule(raw: &str) -> String {
 }
 
 pub(super) fn normalize_css_compat(css: &str) -> String {
-    let mut out = css.to_owned();
+    // JSoup's `[attr~=pattern]` is a regex match, not CSS's word match, and its
+    // pattern usually is not valid CSS at all. Drop the operator here; the
+    // filter is re-applied by `jsoup::apply_selection` after the selection.
+    let mut out = regex_attr::strip(css);
     // Legado uses an escaped pipe as a selector union in a few exported
     // sources (for example `src\|class.red`). `scraper` interprets the pipe
     // as a namespace separator, so translate it to CSS's selector-list comma
@@ -54,19 +59,22 @@ pub(super) fn normalize_css_compat(css: &str) -> String {
     }
     let pseudo = regex::Regex::new(r#":(?:contains|eq)\(\s*['"]?.*?['"]?\s*\)"#).unwrap();
     out = pseudo.replace_all(&out, "").into_owned();
-    // scraper requires quoted attribute values; JSoup accepts these legacy forms.
-    let re = regex::Regex::new(r#"\[([\w:-]+)([~|^$*]?=)([^\]"']+)\]"#).unwrap();
-    out = re
-        .replace_all(&out, |caps: &regex::Captures| {
-            format!("[{}{}'{}']", &caps[1], &caps[2], caps[3].trim())
-        })
-        .into_owned();
-    let re_space = regex::Regex::new(r#"\[([\w:-]+)=([^\]]*\s[^\]]*)\]"#).unwrap();
-    re_space
-        .replace_all(&out, |caps: &regex::Captures| {
-            format!("[{}='{}']", &caps[1], caps[2].trim())
-        })
-        .into_owned()
+    // `scraper` requires quoted attribute values and rejects whitespace around
+    // the operator; JSoup accepts `[class =a b]` and `[x~ =y]`.
+    let re = regex::Regex::new(
+        r#"\[\s*([\w:-]+)\s*([~|^$*]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\]"']+?))\s*\]"#,
+    )
+    .unwrap();
+    re.replace_all(&out, |caps: &regex::Captures| {
+        let value = caps
+            .get(3)
+            .or_else(|| caps.get(4))
+            .or_else(|| caps.get(5))
+            .map(|matched| matched.as_str().trim())
+            .unwrap_or_default();
+        format!("[{}{}'{}']", &caps[1], &caps[2], value)
+    })
+    .into_owned()
 }
 
 pub(super) fn css_contains(css: &str) -> Option<String> {

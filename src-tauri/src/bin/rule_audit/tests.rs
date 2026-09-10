@@ -104,3 +104,30 @@ fn only_parse_level_failures_ignore_the_fallback_input() {
         "source error: JavaScript 执行失败: Error: cannot read property 'x' of undefined"
     ));
 }
+
+#[test]
+fn separates_configuration_from_selectors() {
+    assert!(is_metadata_field("ruleSearch.checkKeyWord"));
+    assert!(is_metadata_field("ruleContent.imageStyle"));
+    assert!(!is_metadata_field("ruleSearch.name"));
+}
+
+#[test]
+fn reports_unimplemented_hooks_under_their_own_category() {
+    assert!(is_hook_field("ruleToc.preUpdateJs"));
+    assert!(is_hook_field("ruleBookInfo.init"));
+    assert!(!is_hook_field("ruleSearch.name"));
+    let report = run(
+        r#"[{"searchUrl":"https://example.test/api/search","ruleToc":{"preUpdateJs":"java.refreshTocUrl()"}}]"#,
+    )
+    .unwrap();
+    assert_eq!(report.clean, 0);
+    assert!(report.blocked_by.contains_key("unimplemented hook"));
+}
+
+#[test]
+fn skips_configuration_fields_instead_of_dry_running_them() {
+    let report = run(r#"[{"ruleSearch":{"checkKeyWord":"书 | 小说","name":".title"}}]"#).unwrap();
+    assert_eq!(report.clean, 1);
+    assert!(report.errors.is_empty());
+}

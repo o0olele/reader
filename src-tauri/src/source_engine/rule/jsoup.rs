@@ -22,6 +22,7 @@ use scraper::{ElementRef, Html, Selector};
 
 #[path = "jsoup/legacy.rs"]
 mod legacy;
+pub(super) mod regex_attr;
 
 use legacy::{css_contains, css_eq, normalize_css_compat, normalize_rule};
 
@@ -102,6 +103,8 @@ pub fn execute_jsoup(
 pub(super) struct Selection {
     pub matcher: Matcher,
     pub positions: PositionFilter,
+    /// JSoup's `[attr~=pattern]` constraints, lifted out of the selector.
+    pub regex_attrs: Vec<(String, regex::Regex)>,
 }
 
 pub(super) enum Matcher {
@@ -137,6 +140,14 @@ fn apply_selection<'a>(
                 }
                 if let Some(index) = css_eq(css) {
                     values = values.into_iter().nth(index).into_iter().collect();
+                }
+                for (attribute, pattern) in &selection.regex_attrs {
+                    values.retain(|element| {
+                        element
+                            .value()
+                            .attr(attribute)
+                            .is_some_and(|value| pattern.is_match(value))
+                    });
                 }
                 values
             }
@@ -332,6 +343,40 @@ mod tests {
             normalize_css_compat(r#"[src\|class='x']"#),
             r#"[src\|class='x']"#
         );
+    }
+
+    #[test]
+    fn applies_jsoup_regex_attribute_filters() {
+        let html = r#"<div class="listmain"><a href="/1/2/3.htm">一</a><a href="/other.htm">二</a><a href="/9/8/7.htm">三</a></div>"#;
+        assert_eq!(
+            run(r".listmain a[href~=/[^/]+/\d+\.htm]@text", html),
+            vec!["一", "三"]
+        );
+        assert_eq!(
+            run(r".listmain a[href~=/[^/]+/\d+\.htm]@href", html),
+            vec!["/1/2/3.htm", "/9/8/7.htm"]
+        );
+        assert_eq!(
+            run(r#".listmain a[href~='^/other']@text"#, html),
+            vec!["二"]
+        );
+    }
+
+    #[test]
+    fn quotes_attribute_values_that_contain_whitespace() {
+        let html = r#"<div class="d_post_content j_d_post_content">正文</div>"#;
+        assert_eq!(
+            run("div[class =d_post_content j_d_post_content]@text", html),
+            vec!["正文"]
+        );
+    }
+
+    #[test]
+    fn reports_regex_attributes_that_cannot_compile() {
+        assert!(matches!(
+            execute_jsoup(&rule(r"a[href~=*bad]@text"), LIST, Extraction::Values),
+            Err(RuleExecutionError::UnsupportedJsoup(_))
+        ));
     }
 
     #[test]
