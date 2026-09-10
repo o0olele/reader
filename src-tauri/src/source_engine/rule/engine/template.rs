@@ -29,8 +29,7 @@ pub(super) fn render_inline_template(
     Ok(output)
 }
 
-fn evaluate_inline_expression(
-    expression: &str,
+fn evaluate_inline_expression(    expression: &str,
     input: &str,
     context: &mut RuleContext,
 ) -> Result<String, RuleExecutionError> {
@@ -38,20 +37,19 @@ fn evaluate_inline_expression(
         return Ok(value.to_owned());
     }
     if let Some(rule) = expression.strip_prefix("@@") {
-        return Ok(evaluate(rule, input, Extraction::Values, context)?
-            .into_iter()
-            .next()
-            .unwrap_or_default());
+        return Ok(inline_rule_value(rule, input, context));
     }
-    if expression.starts_with("@Json:")
-        || expression.starts_with("@json:")
-        || expression.starts_with("$.")
-        || expression.starts_with("$[")
-    {
-        return Ok(evaluate(expression, input, Extraction::Values, context)?
-            .into_iter()
-            .next()
-            .unwrap_or_default());
+    // Legado's `{{@rule}}` evaluates a rule against the current input, exactly
+    // like `{{@@rule}}` but with the analyzer's own mode detection (so
+    // `{{@css:…}}`, `{{@XPath:…}}` and `{{@Json:…}}` all work). Corpus sources
+    // use it heavily for display templates such as
+    // `🔖 {{@class.tagList.0@text}}`; without this branch the rule text was
+    // handed to the JavaScript runtime, which failed on the first `@`.
+    if let Some(rule) = expression.strip_prefix('@') {
+        return Ok(inline_rule_value(rule, input, context));
+    }
+    if expression.starts_with("$.") || expression.starts_with("$[") {
+        return Ok(inline_rule_value(expression, input, context));
     }
     let runtime = QuickJsRuntime::default();
     let (value, variables) = runtime
@@ -74,4 +72,51 @@ fn evaluate_inline_expression(
         JsValue::Null => String::new(),
         JsValue::Json(value) => value.to_string(),
     })
+}
+
+/// Evaluates a nested rule referenced from inside a `{{ … }}` template.
+fn inline_rule_value(rule: &str, input: &str, context: &mut RuleContext) -> String {
+    evaluate(rule, input, Extraction::Values, context)
+        .map(|values| values.into_iter().next().unwrap_or_default())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HTML: &str = r#"<div class="tagList">标签一</div><div class="intro">简介</div>"#;
+
+    fn render(template: &str, input: &str) -> String {
+        render_inline_template(template, input, &mut RuleContext::default()).unwrap()
+    }
+
+    #[test]
+    fn renders_rule_templates_against_the_current_input() {
+        assert_eq!(render("🔖 {{@class.tagList.0@text}}", HTML), "🔖 标签一");
+        assert_eq!(render("{{@.intro@text}}", HTML), "简介");
+        assert_eq!(render("{{@@class.intro@text}}", HTML), "简介");
+    }
+
+    #[test]
+    fn traces_template_rule_forms() {
+        let html = r#"<div class="intro">简介</div>"#;
+        for rule in ["@css:.intro@text", "@css:div.intro@text", "@.intro@text", "@class.intro@text"] {
+            println!(
+                "RULE {rule} -> bare {:?} | bracketed {:?}",
+                render(rule, html),
+                render(&format!("{{{{{rule}}}}}"), html),
+            );
+        }
+    }
+
+    #[test]
+    fn renders_jsonpath_templates_against_json_input() {
+        assert_eq!(render("{{$.title}}", r#"{"title":"书"}"#), "书");
+    }
+
+    #[test]
+    fn keeps_unterminated_templates_literal() {
+        assert_eq!(render("prefix {{unterminated", HTML), "prefix {{unterminated");
+    }
 }

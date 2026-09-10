@@ -4,6 +4,35 @@ use super::scanner::find_ignore_ascii_case;
 use regex::Regex;
 use std::collections::HashMap;
 
+/// Finds `needle` at or after `from`, skipping `{{ … }}` template regions.
+///
+/// Directives are recognized by a case-insensitive substring search, so a
+/// display template such as `{{@css:div.intro@text}}` would otherwise look like
+/// an `@get:` directive (`css`…`get:` overlaps `get:`) and lose the rest of the
+/// rule. Template braces come first in legado's grammar, so text inside them is
+/// never a directive.
+fn find_outside_templates(raw: &str, from: usize, needle: &str) -> Option<usize> {
+    let mut cursor = from;
+    loop {
+        let candidate = find_ignore_ascii_case(raw, cursor, needle)?;
+        if !inside_template(raw, candidate) {
+            return Some(candidate);
+        }
+        cursor = candidate + 1;
+        if cursor >= raw.len() {
+            return None;
+        }
+    }
+}
+
+fn inside_template(raw: &str, index: usize) -> bool {
+    let before = &raw[..index];
+    let Some(open) = before.rfind("{{") else {
+        return false;
+    };
+    before[open + 2..].find("}}").is_none()
+}
+
 pub(super) fn extract_replacement(
     raw: &str,
 ) -> Result<(String, Option<RuleReplacement>), RuleParseError> {
@@ -37,7 +66,7 @@ pub(super) fn extract_put(raw: &str) -> Result<(HashMap<String, String>, String)
     let mut values = HashMap::new();
     let mut output = String::with_capacity(raw.len());
     let mut cursor = 0;
-    while let Some(relative) = find_ignore_ascii_case(raw, cursor, "@put:") {
+    while let Some(relative) = find_outside_templates(raw, cursor, "@put:") {
         output.push_str(&raw[cursor..relative]);
         let object_start = relative + 5;
         if raw.as_bytes().get(object_start) != Some(&b'{') {
@@ -59,7 +88,7 @@ pub(super) fn extract_get(raw: &str) -> (Vec<String>, String) {
     let mut result = Vec::new();
     let mut cleaned = String::with_capacity(raw.len());
     let mut cursor = 0;
-    while let Some(start) = find_ignore_ascii_case(raw, cursor, "@get:") {
+    while let Some(start) = find_outside_templates(raw, cursor, "@get:") {
         cleaned.push_str(&raw[cursor..start]);
         let value_start = start + 5;
         if raw.as_bytes().get(value_start) == Some(&b'{') {
@@ -212,5 +241,21 @@ mod tests {
         let (get, rule) = extract_get(&format!("@get:{{bid}}{rule}"));
         assert_eq!(get, vec!["bid"]);
         assert_eq!(rule, ".body");
+    }
+
+    #[test]
+    fn ignores_directive_lookalikes_inside_templates() {
+        // `{{@css:div.intro@text}}` contains `get:` across `…css:`/`get:` and
+        // must survive as a template instead of becoming a variable lookup.
+        let (get, rule) = extract_get("标签：{{@css:div.intro@text}}");
+        assert!(get.is_empty(), "{get:?}");
+        assert_eq!(rule, "标签：{{@css:div.intro@text}}");
+        let (put, rule) = extract_put("{{@put:{a:1}}}").unwrap();
+        assert!(put.is_empty(), "{put:?}");
+        assert_eq!(rule, "{{@put:{a:1}}}");
+        // A real directive next to a template is still picked up.
+        let (get, rule) = extract_get("@get:{bid}{{.cls}}");
+        assert_eq!(get, vec!["bid"]);
+        assert_eq!(rule, "{{.cls}}");
     }
 }

@@ -236,6 +236,14 @@ mod tests {
     }
 
     #[test]
+    fn renders_rule_templates_without_treating_them_as_directives() {
+        let html = r#"<div class="intro">简介</div>"#;
+        assert_eq!(run("标签：{{@class.intro@text}}", html), vec!["标签：简介"]);
+        assert_eq!(run("{{@.intro@text}}", html), vec!["简介"]);
+        assert_eq!(run("{{@@class.intro@text}}", html), vec!["简介"]);
+    }
+
+    #[test]
     fn passes_variables_from_put_to_get() {
         let mut context = RuleContext::default();
         evaluate(
@@ -265,6 +273,13 @@ mod tests {
             .unwrap(),
             vec!["第一章"]
         );
+    }
+
+    #[test]
+    fn expands_context_variables_inside_rule_templates() {
+        // Nested `{{ … {{x}} … }}` is not a legado form (the corpus has none).
+        let context = RuleContext::new([(String::from("label"), String::from("简介"))]);
+        assert_eq!(expand_template("标签：{{label}}", &context), "标签：简介");
     }
 
     #[test]
