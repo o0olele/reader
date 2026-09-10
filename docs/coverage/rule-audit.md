@@ -2,12 +2,12 @@
 
 - Sources: **970**
 - Rule strings: **22220**
-- No errors on dummy input: **806 / 970 (83.1%)**
-- Blocked sources: **164**
+- No errors on dummy input: **805 / 970 (83.0%)**
+- Blocked sources: **165**
 - Executed rule fields: **20034**
 - Skipped metadata fields: **2186**
 
-Input types are inferred from source metadata. Every rule is dry-run against both the HTML and the JSON dummy payload, and only counts as failing when neither of them lets it execute — a rule that merely needs a key the dummy does not carry is an artefact, not an engine gap. Empty matches count as successful execution; this report does not establish extraction correctness or online availability. JSON field paths and display templates are executed by the production engine. Failure locations use zero-based corpus array indexes.
+Input types are inferred from source metadata. Every rule is dry-run against both the HTML and the JSON dummy payload, and only counts as failing when neither of them lets it execute — a rule that merely needs a key the dummy does not carry is an artefact, not an engine gap. That fallback is not accepted as evidence when the preferred dialect could not even *parse* the rule: there it can only report an empty match. Empty matches count as successful execution; this report does not establish extraction correctness or online availability. JSON field paths and display templates are executed by the production engine. Failure locations use zero-based corpus array indexes.
 
 ## Syntax tokens
 
@@ -49,6 +49,8 @@ Input types are inferred from source metadata. Every rule is dry-run against bot
 | `default-mode rule is not supported: &#96;-https://api.bilibili.com/x/article/view?id=34980384,{"js":"book?result:'https://www.bilibili.com/opus/937892609776418850?spm_id_from=333.1365.0.0'"}&#96; is not a CSS selector: Expected identity for pseudoelement, got "/" instead` | 1 |
 | `default-mode rule is not supported: &#96;. Gap_size-4s__F67Nf Gap_direction-x__RsHk8&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>ClassNeedsIdent(<br>    WhiteSpace(<br>        " ",<br>    ),<br>)` | 2 |
 | `default-mode rule is not supported: &#96;.listmain a[href~=/[^/]+/\d+.htm]&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>DanglingCombinator` | 5 |
+| `default-mode rule is not supported: &#96;.rows[*]&#96; is not a CSS selector: Unexpected EOL` | 1 |
+| `default-mode rule is not supported: &#96;0&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector` | 1 |
 | `default-mode rule is not supported: &#96;3-7+3*5*2*(2+(4+3*2*4*2-2-8+1)*2*2)-2*2+(1/2.5+1)*3&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector` | 1 |
 | `default-mode rule is not supported: &#96;7号基地&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector` | 1 |
 | `default-mode rule is not supported: &#96;&lt;br&gt;{$.introduction}&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector` | 1 |
@@ -60,6 +62,7 @@ Input types are inferred from source metadata. Every rule is dry-run against bot
 | `default-mode rule is not supported: &#96;book.canUpdate=false&#96; is not a CSS selector: Token "=" was not expected` | 1 |
 | `default-mode rule is not supported: &#96;book_tag_list[*].title&#96; is not a CSS selector: Unexpected EOL` | 2 |
 | `default-mode rule is not supported: &#96;cat[*]&#96; is not a CSS selector: Unexpected EOL` | 2 |
+| `default-mode rule is not supported: &#96;category_tag.*.*&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>ClassNeedsIdent(<br>    Delim(<br>        '*',<br>    ),<br>)` | 2 |
 | `default-mode rule is not supported: &#96;div.forum-content.mt-3,div[class =d_post_content j_d_post_content]&#96; is not a CSS selector: Token "j_d_post_content" was not expected` | 1 |
 | `default-mode rule is not supported: &#96;div&gt;div&gt;div[class=card-ep mt-2], .book-ep a&#96; is not a CSS selector: Token "card-ep" was not expected` | 1 |
 | `default-mode rule is not supported: &#96;href&amp;lt;js&gt;<br>var id = result.match(/_(\d+)/)[1];<br>var iid = parseInt(id/1000);<br>'http://www.biquge.info/files/article/image/'+iid+'/'+id+'/'+id+'s.jpg';<br>&amp;lt;/js&gt;&#96; is not a CSS selector: Token "&amp;" was not expected` | 1 |
@@ -218,6 +221,8 @@ Input types are inferred from source metadata. Every rule is dry-run against bot
 | default-mode rule is not supported: &#96;-https://api.bilibili.com/x/article/view?id=34980384,{"js":"book?result:'https://www.bilibili.com/opus/937892609776418850?spm_id_from=333.1365.0.0'"}&#96; is not a CSS selector: Expected identity for pseudoelement, got "/" instead | source[217].ruleSearch.checkKeyWord = --https://api.bilibili.com/x/article/view?id=34980384,{"js":"book?result:'https://www.bilibili.com/opus/937892609776418850?spm_id_from=333.1365.0.0'"} |
 | default-mode rule is not supported: &#96;. Gap_size-4s__F67Nf Gap_direction-x__RsHk8&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>ClassNeedsIdent(<br>    WhiteSpace(<br>        " ",<br>    ),<br>) | source[281].ruleSearch.bookUrl = class. Gap_size-4s__F67Nf Gap_direction-x__RsHk8@tag.a@href<br>source[281].ruleSearch.name = class. Gap_size-4s__F67Nf Gap_direction-x__RsHk8@text |
 | default-mode rule is not supported: &#96;.listmain a[href~=/[^/]+/\d+.htm]&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>DanglingCombinator | source[199].ruleToc.chapterList = @css:.listmain a[href~=/[^/]+/\d+.htm]<br>source[523].ruleToc.chapterList = @css:.listmain a[href~=/[^/]+/\d+.htm]<br>source[585].ruleToc.chapterList = @css:.listmain a[href~=/[^/]+/\d+.htm]<br>source[602].ruleToc.chapterList = @css:.listmain a[href~=/[^/]+/\d+.htm]<br>source[809].ruleToc.chapterList = @css:.listmain a[href~=/[^/]+/\d+.htm] |
+| default-mode rule is not supported: &#96;.rows[*]&#96; is not a CSS selector: Unexpected EOL | source[555].ruleToc.chapterList = .rows[*] |
+| default-mode rule is not supported: &#96;0&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector | source[528].ruleContent.imageStyle = 0.0 |
 | default-mode rule is not supported: &#96;3-7+3*5*2*(2+(4+3*2*4*2-2-8+1)*2*2)-2*2+(1/2.5+1)*3&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector | source[128].ruleSearch.checkKeyWord = 3-7+3*5*2*(2+(4+3*2*4*2-2-8+1)*2*2)-2*2+(1/2.5+1)*3 |
 | default-mode rule is not supported: &#96;7号基地&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector | source[468].ruleSearch.checkKeyWord = 7号基地 |
 | default-mode rule is not supported: &#96;&lt;br&gt;{$.introduction}&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>EmptySelector | source[29].ruleBookInfo.intro = &lt;br&gt;{$.introduction} |
@@ -229,6 +234,7 @@ Input types are inferred from source metadata. Every rule is dry-run against bot
 | default-mode rule is not supported: &#96;book.canUpdate=false&#96; is not a CSS selector: Token "=" was not expected | source[85].ruleToc.preUpdateJs = book.canUpdate=false |
 | default-mode rule is not supported: &#96;book_tag_list[*].title&#96; is not a CSS selector: Unexpected EOL | source[162].ruleBookInfo.kind = book_tag_list[*].title##\s##，<br>source[4].ruleBookInfo.kind = book_tag_list[*].title##\s##， |
 | default-mode rule is not supported: &#96;cat[*]&#96; is not a CSS selector: Unexpected EOL | source[33].ruleExplore.kind = .book-extra@text&amp;&amp;.book-tag@text&amp;&amp;cat[*]##^[^丨]+丨\s*&#124;\s.*<br>source[79].ruleExplore.kind = .book-extra@text&amp;&amp;.book-tag@text&amp;&amp;cat[*]##^[^丨]+丨\s*&#124;\s.* |
+| default-mode rule is not supported: &#96;category_tag.*.*&#96; is not a CSS selector: Unexpected error occurred. Please report this to the developer<br>ClassNeedsIdent(<br>    Delim(<br>        '*',<br>    ),<br>) | source[531].ruleBookInfo.kind = category_tag.*.*&amp;&amp;status&amp;&amp;unit_price<br>source[604].ruleBookInfo.kind = category_tag.*.*&amp;&amp;status&amp;&amp;unit_price |
 | default-mode rule is not supported: &#96;div.forum-content.mt-3,div[class =d_post_content j_d_post_content]&#96; is not a CSS selector: Token "j_d_post_content" was not expected | source[26].ruleContent.content = @css:div.forum-content.mt-3,div[class =d_post_content j_d_post_content]@all<br>@js:<br>java.t2s(result) |
 | default-mode rule is not supported: &#96;div&gt;div&gt;div[class=card-ep mt-2], .book-ep a&#96; is not a CSS selector: Token "card-ep" was not expected | source[26].ruleSearch.lastChapter = @css:div&gt;div&gt;div[class=card-ep mt-2], .book-ep a@text<br>@js:<br>java.t2s(result) |
 | default-mode rule is not supported: &#96;href&amp;lt;js&gt;<br>var id = result.match(/_(\d+)/)[1];<br>var iid = parseInt(id/1000);<br>'http://www.biquge.info/files/article/image/'+iid+'/'+id+'/'+id+'s.jpg';<br>&amp;lt;/js&gt;&#96; is not a CSS selector: Token "&amp;" was not expected | source[93].ruleExplore.coverUrl = class.s2@a@href&amp;lt;js&gt;<br>var id = result.match(/_(\d+)/)[1];<br>var iid = parseInt(id/1000);<br>'http://www.biquge.info/files/article/image/'+iid+'/'+id+'/'+id+'s.jpg';<br>&amp;lt;/js&gt; |
@@ -374,7 +380,7 @@ Input types are inferred from source metadata. Every rule is dry-run against bot
 | Category | Rule count |
 | --- | ---: |
 | js runtime | 160 |
-| css compatibility | 121 |
+| css compatibility | 125 |
 | unsupported JVM access | 24 |
 | path parser | 18 |
 | harness input | 13 |
@@ -447,7 +453,7 @@ Input types are inferred from source metadata. Every rule is dry-run against bot
 | Category | Blocked sources | Unblocked by fixing only this category |
 | --- | ---: | ---: |
 | js runtime | 106 | 64 |
-| css compatibility | 73 | 40 |
-| path parser | 16 | 14 |
+| css compatibility | 77 | 41 |
+| path parser | 16 | 11 |
 | unsupported JVM access | 14 | 0 |
 | harness input | 4 | 2 |

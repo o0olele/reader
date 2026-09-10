@@ -15,7 +15,9 @@ mod report;
 #[cfg(test)]
 #[path = "rule_audit/tests.rs"]
 mod tests;
-use input::{error_category, is_metadata_url, source_is_json, source_rules, TOKENS};
+use input::{
+    error_category, is_metadata_url, is_parse_error, source_is_json, source_rules, TOKENS,
+};
 use regex::Regex;
 use report::markdown;
 use serde_json::Value;
@@ -46,13 +48,19 @@ struct Audit {
 /// dummy payload has no such field". The returned message lists the error seen
 /// for each input, which keeps genuine engine gaps (invalid CSS, undeclared JS
 /// variables) distinguishable from payload-shape artefacts.
+///
+/// The fallback dialect is only allowed to excuse a *runtime* failure of the
+/// preferred dialect. When the preferred dialect cannot even parse the rule, a
+/// success on the other dialect means no more than "the selector matched
+/// nothing", so the parse error stays reported.
 fn rule_failure(raw: &str, json_source: bool) -> Option<String> {
-    let mut errors = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
     for input in dummy::inputs_for(raw, json_source) {
         match evaluate(raw, input, Extraction::Values, &mut RuleContext::default()) {
             // `evaluate` surfaces an error only when every `||` alternative
             // failed, so a success here means the rule executed.
-            Ok(_) => return None,
+            Ok(_) if !errors.first().is_some_and(|error| is_parse_error(error)) => return None,
+            Ok(_) => break,
             Err(error) => errors.push(error.to_string()),
         }
     }

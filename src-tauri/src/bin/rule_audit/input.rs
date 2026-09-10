@@ -91,6 +91,18 @@ pub(super) fn error_category(error: &str) -> &'static str {
     }
 }
 
+/// Whether the failing text is the rule's own syntax rather than the dummy
+/// payload's shape.
+///
+/// The audit excuses a failing rule when the other dummy dialect lets it run, on
+/// the grounds that a deterministic payload cannot carry every key a source
+/// expects. That excuse does not hold for a parse-level failure: the other
+/// dialect then "executes" the rule only by matching nothing, which is not
+/// evidence that the rule runs.
+pub(super) fn is_parse_error(error: &str) -> bool {
+    matches!(error_category(error), "path parser" | "css compatibility")
+}
+
 fn walk(value: &Value, path: &str, out: &mut Vec<(String, String)>) {
     match value {
         Value::String(text) if !text.trim().is_empty() => {

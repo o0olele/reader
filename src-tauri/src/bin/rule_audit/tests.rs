@@ -85,3 +85,22 @@ fn classifies_nested_json_path_errors() {
         "path parser"
     );
 }
+
+#[test]
+fn only_parse_level_failures_ignore_the_fallback_input() {
+    // The preferred dialect could not parse the rule, so letting the other
+    // dialect report "no match" would hide a real engine gap.
+    assert!(is_parse_error(
+        "source error: json path is invalid: unexpected character at 14"
+    ));
+    assert!(is_parse_error(
+        "default-mode rule is not supported: `a.` is not a CSS selector: EmptySelector"
+    ));
+    // A script that ran and failed on the payload's shape is still excused.
+    assert!(!is_parse_error(
+        "source error: JavaScript 执行失败: Error: not a function"
+    ));
+    assert!(!is_parse_error(
+        "source error: JavaScript 执行失败: Error: cannot read property 'x' of undefined"
+    ));
+}
