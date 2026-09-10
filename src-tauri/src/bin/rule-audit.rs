@@ -5,7 +5,7 @@
 //! deterministic dummy document; it never performs network requests.
 
 use reader_desktop_lib::error::AppError;
-use reader_desktop_lib::source_engine::rule::{evaluate, Extraction, RuleContext};
+use reader_desktop_lib::source_engine::rule::{evaluate, evaluate_url, Extraction, RuleContext};
 #[path = "rule_audit/dummy.rs"]
 mod dummy;
 #[path = "rule_audit/input.rs"]
@@ -17,7 +17,7 @@ mod report;
 mod tests;
 use input::{
     error_category, is_hook_field, is_metadata_field, is_metadata_url, is_parse_error,
-    source_is_json, source_rules, TOKENS,
+    is_url_field, source_is_json, source_rules, TOKENS,
 };
 use regex::Regex;
 use report::markdown;
@@ -54,10 +54,20 @@ struct Audit {
 /// preferred dialect. When the preferred dialect cannot even parse the rule, a
 /// success on the other dialect means no more than "the selector matched
 /// nothing", so the parse error stays reported.
-fn rule_failure(raw: &str, json_source: bool) -> Option<String> {
+///
+/// URL-valued fields are judged through [`evaluate_url`], which is what the
+/// pipeline uses for them: legado resolves `bookUrl` / `chapterUrl` / … with
+/// `AnalyzeUrl`, so a relative URL is rendered instead of being parsed as an
+/// XPath expression.
+fn rule_failure(path: &str, raw: &str, json_source: bool) -> Option<String> {
     let mut errors: Vec<String> = Vec::new();
     for input in dummy::inputs_for(raw, json_source) {
-        match evaluate(raw, input, Extraction::Values, &mut RuleContext::default()) {
+        let outcome = if is_url_field(path) {
+            evaluate_url(raw, input, &mut RuleContext::default()).map(|_| Vec::new())
+        } else {
+            evaluate(raw, input, Extraction::Values, &mut RuleContext::default())
+        };
+        match outcome {
             // `evaluate` surfaces an error only when every `||` alternative
             // failed, so a success here means the rule executed.
             Ok(_) if !errors.first().is_some_and(|error| is_parse_error(error)) => return None,
@@ -122,7 +132,7 @@ fn run(input: &str) -> Result<Audit, AppError> {
             if path.starts_with("rule") && !is_metadata_url(&path, &raw) && !is_metadata_field(&path)
             {
                 report.executed += 1;
-                if let Some(error) = rule_failure(&raw, json_source) {
+                if let Some(error) = rule_failure(&path, &raw, json_source) {
                     source_clean = false;
                     *report.errors.entry(error.clone()).or_default() += 1;
                     report

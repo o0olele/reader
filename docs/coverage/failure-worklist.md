@@ -120,6 +120,27 @@ READER_STRICT_ENGINE=1 cargo run --bin rule-audit -- \
 
 距 v0.8.0 门槛 ≤140 还差 **4 个源**。
 
+### 第二批：URL 字段语义（2026-09-10）
+
+**受阻源 144 → 133（无错误源 826 → 837 = 86.3%）—— 已过 v0.8.0 门槛。**
+
+**改动**：URL 值字段（`bookUrl` / `chapterUrl` / `coverUrl` / `tocUrl` / `nextContentUrl`）
+改走 legado 的 `AnalyzeUrl` 语义 —— 字面 URL（相对或绝对）**渲染**而不是当规则求值，
+其余值仍按规则求值。新增 `rule::evaluate_url`，管线里的 URL 字段统一走 `pipeline::url_in`；
+审计同步用同一入口判定 URL 字段。
+
+**为什么不能在方言检测里改**：`rule/analyzer/mode.rs` 里「前导 `/` = XPath」是 legado 的
+**成文语法**，`src-tauri/tests/fixtures/rules/legado_rules.jsonl`（85 例基线）明确钉住了
+`/search?key={{key}}&page={{page}}` → `CX:`。第一版把 URL 判断塞进 `detect_mode`，
+fixture 立刻变红 —— 说明真正的缺陷在 URL 字段的**入口**，不在方言检测。这正是 fixture 的价值。
+
+| 类别 | 修复前 | 修复后 |
+| --- | ---: | ---: |
+| path parser | 16 源 / 13 独占 | **2 源 / 2 独占**（剩下 2 个是 `//注释行\n$.isFree` 形式） |
+| css compatibility | 23 源 | 23 源（独占 17，因 path parser 退出独占集合而上升） |
+| js runtime | 105 源 / 81 独占 | 105 源 / 81 独占（未动） |
+| unimplemented hook | 12 源 / 7 独占 | 12 源 / 7 独占（未动） |
+
 ### 下一批候选（按独立可解源排序）
 
 1. **js runtime 的绑定层**：`org.jsoup.Jsoup`、`java.HMacHex`、

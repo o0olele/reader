@@ -5,7 +5,7 @@ use crate::{
     error::AppError,
     source_engine::{
         legado_rules::LegadoRules,
-        pipeline::{first_in, joined_in},
+        pipeline::{first_in, joined_in, url_in},
         rule::RuleContext,
         url::absolutize,
     },
@@ -19,7 +19,7 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppE
             title: first_in(source, rules.name.as_ref(), html, &mut context)?,
             author: first_in(source, rules.author.as_ref(), html, &mut context)?,
             intro: joined_in(source, rules.intro.as_ref(), html, &mut context)?,
-            cover: first_in(source, rules.cover_url.as_ref(), html, &mut context)?
+            cover: url_in(source, rules.cover_url.as_ref(), html, &mut context)?
                 .map(|value| absolutize(&source.base_url, &value)),
             kind: first_in(source, rules.kind.as_ref(), html, &mut context)?,
             latest_chapter: first_in(source, rules.last_chapter.as_ref(), html, &mut context)?,

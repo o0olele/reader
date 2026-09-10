@@ -1,8 +1,10 @@
 use super::directive::{extract_get, extract_put, extract_replacement, extract_templates};
 use super::model::{RuleAlternatives, RuleContext, RuleJoin, RuleMode, RuleParseError, SourceRule};
-use super::scanner::{
-    find_ignore_ascii_case, split_top_level, starts_ignore_ascii_case, Separator,
-};
+use super::scanner::{find_ignore_ascii_case, split_top_level, starts_ignore_ascii_case, Separator};
+
+mod mode;
+
+use mode::detect_mode;
 
 pub fn split_rule(raw: &str) -> Result<RuleAlternatives, RuleParseError> {
     split_rule_for_input(raw, false)
@@ -157,81 +159,6 @@ fn push_typed_rule(
         templates,
     });
     Ok(())
-}
-
-fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
-    // A leading `-` reverses the result order. Exported sources also carry a
-    // leading `+` (legado's list marker, for example `+@css:.bookbox`); the
-    // single-rule evaluation does not need it, and dropping it keeps dialect
-    // detection intact instead of handing `+@css:` to the CSS parser.
-    let candidate = raw
-        .strip_prefix('-')
-        .or_else(|| raw.strip_prefix('+'))
-        .map(str::trim_start)
-        .unwrap_or(raw);
-    for (prefix, mode) in [
-        ("@xpath:", RuleMode::XPath),
-        ("@json:", RuleMode::Json),
-        ("@css:", RuleMode::Default),
-    ] {
-        if starts_ignore_ascii_case(candidate, 0, prefix) {
-            return (mode, &candidate[prefix.len()..]);
-        }
-    }
-    if let Some(rule) = candidate.strip_prefix("@@") {
-        (RuleMode::Default, rule)
-    } else if candidate.starts_with("##") || candidate.starts_with(':') {
-        (
-            RuleMode::Regex,
-            candidate.strip_prefix(':').unwrap_or(candidate),
-        )
-    } else if candidate.starts_with("$.")
-        || candidate.starts_with("$[")
-        || (json_input && looks_like_legacy_json_path(candidate))
-        || looks_like_json_template(candidate)
-    {
-        (RuleMode::Json, candidate)
-    } else if candidate.starts_with('/') {
-        (RuleMode::XPath, candidate)
-    } else {
-        (RuleMode::Default, candidate)
-    }
-}
-
-/// Single-brace `{$.path}` is legado's JSON display-template spelling (for
-/// example `{$.score}分` or `连载中{$.status}已完结`). It is not a CSS selector;
-/// routing it to Json mode lets `jsonpath::template` render it.
-///
-/// The double-brace spelling `{{$.path}}` belongs to the inline-template path
-/// and must keep its own mode.
-fn looks_like_json_template(value: &str) -> bool {
-    let mut index = 0;
-    while let Some(offset) = value[index..].find('{') {
-        let start = index + offset;
-        if value[start..].starts_with("{{") {
-            index = start + 2;
-            continue;
-        }
-        let rest = &value[start + 1..];
-        if rest.starts_with("$.") || rest.starts_with("$[") {
-            return true;
-        }
-        index = start + 1;
-    }
-    false
-}
-
-fn looks_like_legacy_json_path(value: &str) -> bool {
-    let value = value.trim();
-    !value.is_empty()
-        && !value.contains("{{")
-        && !value.contains('@')
-        && !value.contains(' ')
-        && !value.contains(':')
-        && (value.contains("[*]") || value.contains("[-") || value.split('.').count() >= 2)
-        && value
-            .chars()
-            .all(|c| c.is_alphanumeric() || ".[]*_-'\"".contains(c))
 }
 
 fn find_tail_js(raw: &str, from: usize) -> Option<usize> {

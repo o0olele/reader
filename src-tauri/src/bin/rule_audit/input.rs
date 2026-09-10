@@ -111,6 +111,15 @@ pub(super) fn is_metadata_field(path: &str) -> bool {
     matches!(field(path), "checkKeyWord" | "imageStyle")
 }
 
+/// Whether a rule field holds a URL.
+///
+/// URL-valued fields are resolved through `rule::evaluate_url` (legado's
+/// `AnalyzeUrl`), not through the rule analyzer, so the audit has to judge them
+/// the same way — otherwise a relative URL is reported as a broken XPath rule.
+pub(super) fn is_url_field(path: &str) -> bool {
+    field(path).to_ascii_lowercase().ends_with("url")
+}
+
 /// Rule fields legado runs as JavaScript hooks around extraction (`init`,
 /// `preUpdateJs`, …). This engine does not implement them yet, so they get their
 /// own category instead of being blamed on the CSS parser.

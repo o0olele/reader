@@ -6,7 +6,7 @@ use crate::{
     source_engine::{
         html_text::html_to_text,
         legado_rules::LegadoRules,
-        pipeline::{first_in, values_in},
+        pipeline::{url_in, values_in},
         rule::{Extraction, RuleContext},
     },
 };
@@ -29,7 +29,7 @@ pub fn parse_content_page(
             if !content.trim().is_empty() {
                 return Ok((
                     content,
-                    first_in(source, rules.next_content_url.as_ref(), html, &mut context)?,
+                    url_in(source, rules.next_content_url.as_ref(), html, &mut context)?,
                 ));
             }
         }

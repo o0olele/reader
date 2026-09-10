@@ -5,7 +5,7 @@ use crate::{
     error::AppError,
     source_engine::{
         legado_rules::LegadoRules,
-        pipeline::{first_in, joined_in, values_in},
+        pipeline::{first_in, joined_in, url_in, values_in},
         rule::{Extraction, RuleContext},
         url::absolutize,
     },
@@ -37,7 +37,7 @@ pub fn parse_explore(
         let Some(title) = first_in(source, rules.name.as_ref(), item, &mut context)? else {
             continue;
         };
-        let Some(url) = first_in(source, rules.book_url.as_ref(), item, &mut context)? else {
+        let Some(url) = url_in(source, rules.book_url.as_ref(), item, &mut context)? else {
             continue;
         };
         results.push(BookSearchResult {
@@ -45,7 +45,7 @@ pub fn parse_explore(
             source_name: source.name.clone(),
             title,
             author: first_in(source, rules.author.as_ref(), item, &mut context)?,
-            cover: first_in(source, rules.cover_url.as_ref(), item, &mut context)?
+            cover: url_in(source, rules.cover_url.as_ref(), item, &mut context)?
                 .map(|value| absolutize(&source.base_url, &value)),
             url: absolutize(&source.base_url, &url),
             intro: joined_in(source, rules.intro.as_ref(), item, &mut context)?,

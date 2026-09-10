@@ -10,7 +10,7 @@ pub use stages::{
 use crate::{
     domain::source::BookSource,
     error::AppError,
-    source_engine::rule::{evaluate, evaluate_first, Extraction, RuleContext},
+    source_engine::rule::{evaluate, evaluate_first, evaluate_url, Extraction, RuleContext},
 };
 
 fn strict_engine_value(value: Option<&str>) -> bool {
@@ -58,6 +58,32 @@ fn first_in(
         Err(error) if strict_engine() => Err(engine_error(source, rule, error)),
         Err(error) => {
             tracing::debug!(target: "source", source = %source.name, rule = %rule, %error, "rule engine could not execute rule");
+            Ok(None)
+        }
+    }
+}
+
+/// Resolves a URL-valued rule field (`bookUrl`, `chapterUrl`, `coverUrl`,
+/// `nextTocUrl`, `nextContentUrl`).
+///
+/// Legado reads these through `AnalyzeUrl`, not through the rule analyzer: a
+/// literal URL — relative (`/novel/{{$.novelId}}?isSearch=1`) or absolute — is
+/// rendered, while a selector / JSONPath / JS value is evaluated as a rule.
+/// Sending a relative URL through the analyzer turns it into an XPath
+/// expression (legado's documented meaning for a leading `/`) and fails on the
+/// first `?`.
+fn url_in(
+    source: &BookSource,
+    rule: Option<&String>,
+    input: &str,
+    context: &mut RuleContext,
+) -> Result<Option<String>, AppError> {
+    let Some(rule) = rule else { return Ok(None) };
+    match evaluate_url(rule, input, context) {
+        Ok(value) => Ok(value),
+        Err(error) if strict_engine() => Err(engine_error(source, rule, error)),
+        Err(error) => {
+            tracing::debug!(target: "source", source = %source.name, rule = %rule, %error, "rule engine could not execute URL rule");
             Ok(None)
         }
     }

@@ -5,7 +5,7 @@ use crate::{
     error::AppError,
     source_engine::{
         legado_rules::{LegadoRules, LegadoTocRule},
-        pipeline::{first_in, values_in},
+        pipeline::{first_in, url_in, values_in},
         rule::{Extraction, RuleContext},
         url::absolutize,
     },
@@ -31,7 +31,7 @@ fn engine_catalog(
         let Some(name) = first_in(source, rules.chapter_name.as_ref(), item, &mut context)? else {
             continue;
         };
-        let Some(url) = first_in(source, rules.chapter_url.as_ref(), item, &mut context)? else {
+        let Some(url) = url_in(source, rules.chapter_url.as_ref(), item, &mut context)? else {
             continue;
         };
         chapters.push((name, absolutize(&source.base_url, &url)));
@@ -50,7 +50,7 @@ pub fn parse_catalog_page(
             context.with_http(source.http_context());
             return Ok((
                 chapters,
-                first_in(source, rules.next_toc_url.as_ref(), html, &mut context)?,
+                url_in(source, rules.next_toc_url.as_ref(), html, &mut context)?,
             ));
         }
     }

@@ -60,6 +60,41 @@ pub fn evaluate_first(
         .find(|value| !value.trim().is_empty()))
 }
 
+/// Evaluates a URL-valued rule field the way legado's `AnalyzeUrl` does.
+///
+/// A literal URL — relative (`/novel/{{$.novelId}}?isSearch=1`) or absolute —
+/// is *rendered* against the current input; anything else is evaluated as a
+/// rule. Legacy sources put such URLs in `bookUrl` / `chapterUrl` / `tocUrl` /
+/// `nextContentUrl`, and the generic analyzer would hand them to the XPath
+/// parser, because legado's documented syntax makes a leading `/` XPath.
+pub fn evaluate_url(
+    raw: &str,
+    input: &str,
+    context: &mut RuleContext,
+) -> Result<Option<String>, RuleExecutionError> {
+    let trimmed = raw.trim();
+    if !is_literal_url(trimmed) {
+        return evaluate_first(raw, input, context);
+    }
+    let expanded = expand_template(trimmed, context);
+    let rendered = render_inline_template(&expanded, input, context)?;
+    Ok((!rendered.trim().is_empty()).then_some(rendered))
+}
+
+/// Whether a rule value is a literal URL rather than an XPath expression.
+///
+/// This deliberately does not feed [`evaluate`]: legado's documented syntax
+/// makes a leading `/` an XPath expression, and `rules/legado_rules.jsonl`
+/// pins that. Only the URL-field entry point below treats it as a URL.
+fn is_literal_url(value: &str) -> bool {
+    if value.starts_with("//") {
+        return false;
+    }
+    value.starts_with("http://")
+        || value.starts_with("https://")
+        || (value.starts_with('/') && (value.contains("{{") || value.contains('?')))
+}
+
 pub fn execute_alternatives(
     alternatives: &RuleAlternatives,
     input: &str,
@@ -338,6 +373,41 @@ mod tests {
         )
         .unwrap();
         assert_eq!(value, vec!["前中后"]);
+    }
+
+    #[test]
+    fn recognizes_literal_urls_for_url_fields() {
+        for raw in [
+            "/novel/{{$.novelId}}?isSearch=1",
+            "/api/ximalaya/maoer_app.php?soundid={{$.soundid}}",
+            "http://example.test/x?a=1",
+            "https://example.test/x",
+        ] {
+            assert!(is_literal_url(raw), "{raw}");
+        }
+        for raw in ["//div/a", "/html/body", "a.0@href", "$.url", "@css:a@href"] {
+            assert!(!is_literal_url(raw), "{raw}");
+        }
+    }
+
+    #[test]
+    fn renders_url_fields_instead_of_parsing_them_as_xpath() {
+        let mut context = RuleContext::default();
+        assert_eq!(
+            evaluate_url(
+                "/novel/{{$.novelId}}?isSearch=1",
+                r#"{"novelId":42}"#,
+                &mut context
+            )
+            .unwrap(),
+            Some("/novel/42?isSearch=1".to_owned())
+        );
+        // A real selector in a URL field is still evaluated as a rule.
+        let html = r#"<a class="next" href="/two">下一章</a>"#;
+        assert_eq!(
+            evaluate_url("class.next@href", html, &mut context).unwrap(),
+            Some("/two".to_owned())
+        );
     }
 
     #[test]
