@@ -94,6 +94,30 @@ params['sign']=paramSign
 }
 
 #[tokio::test]
+async fn executes_pretty_printed_comma_declarations() {
+    // Real corpus shape (source[260].ruleToc.chapterList): a declaration is
+    // split across two lines by a comma, and the whole script used to abort
+    // with "variable name expected" before the rule's intent was ever reached.
+    // The element API itself (`d.select`/`push`) is a separate gap (E0/Jsoup),
+    // so this test pins the *statement* the declaration produced.
+    let script = "\nvar list = [],\nd = java.getElement('.item');\nlist.push(d)\nlist.length + ':' + (typeof d)\n";
+    let value = QuickJsRuntime::default()
+        .execute(
+            script,
+            JsContext {
+                result: r#"<div class="item"><a class="name">audit</a></div>"#.into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    match value {
+        JsValue::String(value) => assert!(value.starts_with("1:"), "{value}"),
+        other => panic!("unexpected result: {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn executes_real_qimao_search_script() {
     let script = r#"
 sign_key='d3dGiJc651gSQ8w1'
