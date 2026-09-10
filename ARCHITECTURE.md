@@ -27,6 +27,8 @@ The UI never accesses SQLite directly. Commands stay thin and return structured 
 
 Online search follows `search URL -> reqwest client (15s timeout, redirects, User-Agent) -> scraper CSS selectors -> normalized BookSearchResult`. Search URLs use `{{key}}` (or `{key}`) as the URL-encoded query placeholder. Results can be added to the bookshelf, refreshed into a local catalog, and read through persistent chapter caching.
 
+Single-chapter reading warms its neighbours instead of downloading one chapter per open: `service/reader_service/prefetch.rs` ports the reference app's `ReadBook.preDownload()` — a forward window of `reader_prefetch_num` chapters (default 10, `0` disables it, editable under 设置 → 下载缓存) plus at most five backwards, two concurrent lanes under one semaphore, a per-chapter failure cap of three, and cancel-on-next-chapter. `prefetch_chapters` / `cancel_prefetch` sit behind the reader's post-load hook (`useReader.ts`). Local books and catalogs with nothing missing do no network work at all.
+
 The reference project at `D:\Code\chatting\legado-with-MD3` informed the initial boundaries: bookshelf items, chapter catalogs, and reader content are separate concerns. Its Android/Compose implementation is not copied into this Tauri core.
 
 ## Logging

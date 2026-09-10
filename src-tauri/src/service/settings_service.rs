@@ -1,5 +1,12 @@
 use crate::error::AppError;
 
+/// How many chapters ahead of the open one are pulled into the cache while
+/// reading. The reference app defaults to the same number (legado
+/// `ReadSettings.preDownloadNum`).
+pub const DEFAULT_PREFETCH_CHAPTERS: i64 = 10;
+/// Upper bound for the same setting; the reference exposes a 0–50 slider.
+pub const MAX_PREFETCH_CHAPTERS: i64 = 50;
+
 #[derive(Clone)]
 pub struct SettingsService {
     pool: sqlx::SqlitePool,
@@ -101,5 +108,38 @@ impl SettingsService {
         }
         sqlx::query("INSERT INTO app_settings (key, value) VALUES ('reading_daily_goal_minutes', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
             .bind(minutes.to_string()).execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
+    }
+
+    /// Chapters prefetched ahead of the open one; `0` disables prefetching.
+    /// Unset means the reference default, so an existing database gains the new
+    /// behaviour without a migration.
+    pub async fn reader_prefetch_num(&self) -> Result<i64, AppError> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT value FROM app_settings WHERE key = 'reader_prefetch_num'",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::database)?
+        .map(|value| {
+            value
+                .parse()
+                .map_err(|error| AppError::Parse(format!("预下载章节数设置无效: {error}")))
+        })
+        .transpose()
+        .map(|value| {
+            value
+                .unwrap_or(DEFAULT_PREFETCH_CHAPTERS)
+                .clamp(0, MAX_PREFETCH_CHAPTERS)
+        })
+    }
+
+    pub async fn save_reader_prefetch_num(&self, chapters: i64) -> Result<(), AppError> {
+        if !(0..=MAX_PREFETCH_CHAPTERS).contains(&chapters) {
+            return Err(AppError::InvalidArgument(format!(
+                "预下载章节数须在 0 到 {MAX_PREFETCH_CHAPTERS} 之间"
+            )));
+        }
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES ('reader_prefetch_num', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+            .bind(chapters.to_string()).execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
     }
 }

@@ -414,6 +414,12 @@ F3 阅读器重建
 - [x] 底部：可拖动章节进度轨道 + 12 个工具按钮
 - [x] 沉浸模式（顶底栏 height→0 折叠，非 display:none）
 - [x] 接入已有能力：书签、正文搜索、净化替换规则、阅读时长
+- [x] **单章阅读时预下载附近章节**（对位参考项目 `ReadBook.preDownload()`，`legado-with-MD3` `ReadBook.kt:1745`）
+      —— 后端 `service/reader_service/prefetch.rs`：向前 `reader_prefetch_num` 章（默认 10，设置「下载缓存」
+      `#/settings/cache` 可改，0 关闭）/向后至多 5 章，两路 `tokio::join!` + `Semaphore(2)`、单章失败 3 次放弃、
+      翻章即令旧窗口失效；命令 `prefetch_chapters` / `cancel_prefetch`（`command/reader.rs`）由
+      `useReader.ts` 在每次正文加载完成后触发、关书时取消。已缓存 / 无地址 / 本地书都在计划期就被剔除。
+      窗口规则的 11 条单测见 `cargo test prefetch`（网络路径需真实书源，见 `docs/manual-acceptance.md` §C10）
 - [x] 听书 / AI / 翻译 / 文本处理：未接入态（纪律 F0）
 
 **F3 明确未做的三小块（不计入上面的勾）：**

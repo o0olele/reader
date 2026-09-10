@@ -208,6 +208,28 @@ Set-Content -Path "$env:USERPROFILE\Desktop\百万字单章.txt" -Encoding UTF8 
 | C9.2 | 把窗口最小化/切到别的应用停留 40 秒 | **不应**计时（`document.visibilityState` 检查） | | |
 | C9.3 | 关闭阅读器再重新打开 | 进度恢复到上次位置 | | |
 
+### C10 · 预下载附近章节（对位 `ReadBook.preDownload()`）
+
+前置：`#/settings/cache` 里把「预下载章节数」保持在默认 10；用一本**真实在线书**（见 D4）。
+缓存章数以设置页「正文缓存」的「N 章」为准，日志看 `%APPDATA%\com.reader.desktop\logs\reader-desktop.log`
+（`target: reader`）。**自动化的部分只有窗口规则**（`cargo test prefetch`，11 条），下面全是真机项。
+
+| # | 步骤 | 期望 | 实测 | 结论 |
+| ---: | --- | --- | --- | --- |
+| C10.1 | 打开第 10 章，记下打开瞬间的缓存章数，静置 10 秒 | 缓存章数按「向前 10 + 向后至多 5」增长；日志出现 `chapter prefetch finished`（`planned` 与实际新增一致） | | |
+| C10.2 | 打开第 1 章 | 向前不越界（目录头即停）；向后为空，不报错 | | |
+| C10.3 | 打开最后一章 | 向前为空；向后至多 5 章 | | |
+| C10.4 | 连续快速点「下一章」8 次 | 只有最后一次窗口继续（旧窗口日志 `chapter prefetch cancelled`）；同一域名同时最多 2 个请求，不出现卡顿 | | |
+| C10.5 | 把「预下载章节数」改成 0 → 保存 → 换一章 | 缓存章数不再增长（`chapter_contents` 无新行） | | |
+| C10.6 | 改回 10 → 打开一个从未读过的章节两次（第二次应为缓存命中） | 第二次进入该章无网络等待；日志 `chapter cache hit` | | |
+| C10.7 | 打开本地 TXT 书并翻章 | 完全无预取（本地书无书源），日志无 `chapter prefetch` | | |
+| C10.8 | 预取进行中点顶栏关闭按钮 | 日志出现 `chapter prefetch cancelled`，缓存章数停止增长 | | |
+
+> 一键核对缓存增量（装过 `sqlite3` 才可用；`<user>` 换成你的账户名）：
+> ```powershell
+> sqlite3 "$env:APPDATA\com.reader.desktop\app.db" "SELECT COUNT(*) FROM chapter_contents;"
+> ```
+
 ---
 
 ## D. F3 性能与端到端验收（v2 遗留项）
