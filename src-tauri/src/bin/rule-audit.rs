@@ -38,6 +38,28 @@ struct Audit {
     failed_rules: BTreeMap<String, BTreeSet<String>>,
 }
 
+/// Dry-runs one rule against every candidate dummy input and reports the
+/// failure only when none of them lets the rule execute.
+///
+/// A deterministic corpus can never contain every key a source expects, so a
+/// single-input judgement mixes "the engine cannot run this rule" with "this
+/// dummy payload has no such field". The returned message lists the error seen
+/// for each input, which keeps genuine engine gaps (invalid CSS, undeclared JS
+/// variables) distinguishable from payload-shape artefacts.
+fn rule_failure(raw: &str, json_source: bool) -> Option<String> {
+    let mut errors = Vec::new();
+    for input in dummy::inputs_for(raw, json_source) {
+        match evaluate(raw, input, Extraction::Values, &mut RuleContext::default()) {
+            // `evaluate` surfaces an error only when every `||` alternative
+            // failed, so a success here means the rule executed.
+            Ok(_) => return None,
+            Err(error) => errors.push(error.to_string()),
+        }
+    }
+    errors.dedup();
+    Some(errors.join(" || "))
+}
+
 fn corpus_file(path: &Path) -> Result<PathBuf, AppError> {
     if path.is_file() {
         return Ok(path.to_owned());
@@ -89,23 +111,17 @@ fn run(input: &str) -> Result<Audit, AppError> {
             // evaluator rules; only actual rule fields are dry-run here.
             if path.starts_with("rule") && !is_metadata_url(&path, &raw) {
                 report.executed += 1;
-                let dummy_input = dummy::input_for(&raw, json_source);
-                if let Err(error) = evaluate(
-                    &raw,
-                    dummy_input,
-                    Extraction::Values,
-                    &mut RuleContext::default(),
-                ) {
+                if let Some(error) = rule_failure(&raw, json_source) {
                     source_clean = false;
-                    *report.errors.entry(error.to_string()).or_default() += 1;
+                    *report.errors.entry(error.clone()).or_default() += 1;
                     report
                         .failed_rules
-                        .entry(error.to_string())
+                        .entry(error.clone())
                         .or_default()
                         .insert(format!("source[{source_id}].{path} = {raw}"));
                     report
                         .blocked_by
-                        .entry(error_category(&error.to_string()).to_owned())
+                        .entry(error_category(&error).to_owned())
                         .or_default()
                         .insert(source_id);
                 }
