@@ -1,4 +1,3 @@
-/* global HTMLInputElement, Event */
 import { reactive, ref } from 'vue'
 import {
   clearBookSourceSession,

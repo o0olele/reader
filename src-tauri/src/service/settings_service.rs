@@ -77,4 +77,29 @@ impl SettingsService {
         sqlx::query("INSERT INTO app_settings (key, value) VALUES ('webview_user_agent', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
             .bind(user_agent).execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
     }
+
+    /// Daily reading goal in minutes; `0` means "no goal set" (ROADMAP-v3 E1).
+    pub async fn reading_goal_minutes(&self) -> Result<i64, AppError> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT value FROM app_settings WHERE key = 'reading_daily_goal_minutes'",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::database)?
+        .map(|value| {
+            value
+                .parse()
+                .map_err(|error| AppError::Parse(format!("每日阅读目标设置无效: {error}")))
+        })
+        .transpose()
+        .map(|value| value.unwrap_or(0))
+    }
+
+    pub async fn save_reading_goal_minutes(&self, minutes: i64) -> Result<(), AppError> {
+        if minutes < 0 {
+            return Err(AppError::InvalidArgument("每日阅读目标不能为负数".into()));
+        }
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES ('reading_daily_goal_minutes', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+            .bind(minutes.to_string()).execute(&self.pool).await.map(|_| ()).map_err(AppError::database)
+    }
 }

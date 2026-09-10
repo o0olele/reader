@@ -10,4 +10,4 @@ pub mod source;
 pub use book::{Book, BookshelfGroup};
 pub use download::DownloadTask;
 pub use reader::{Chapter, ReadingProgress};
-pub use reading_record::ReadingRecord;
+pub use reading_record::{ReadingRecord, ReadingStats};

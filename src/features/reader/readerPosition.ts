@@ -1,5 +1,3 @@
-/* global HTMLElement, getComputedStyle */
-
 export interface ReadingLocator {
   index: number
   ratio: number

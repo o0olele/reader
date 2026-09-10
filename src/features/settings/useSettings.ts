@@ -37,7 +37,10 @@ export function useSettings(report: (cause: unknown) => void, notify: (message: 
   }
 
   async function backup() {
-    const path = await saveDialog({ defaultPath: 'reader-desktop-backup.json', filters: [{ name: 'JSON backup', extensions: ['json'] }] })
+    const path = await saveDialog({
+      defaultPath: 'reader-desktop-backup.json',
+      filters: [{ name: 'JSON backup', extensions: ['json'] }],
+    })
     if (!path) return
     try {
       const result = await exportBackup(path)
@@ -48,7 +51,11 @@ export function useSettings(report: (cause: unknown) => void, notify: (message: 
   }
 
   async function restore() {
-    const path = await open({ multiple: false, directory: false, filters: [{ name: 'JSON backup', extensions: ['json'] }] })
+    const path = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'JSON backup', extensions: ['json'] }],
+    })
     if (!path || Array.isArray(path)) return
     if (!window.confirm('恢复备份会覆盖当前本地数据，确定继续吗？')) return
     try {

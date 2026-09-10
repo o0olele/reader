@@ -1,61 +1,130 @@
 <script setup lang="ts">
-import { inject } from 'vue'
-import { settingsKey } from '../../app/shellKeys'
+import { computed, defineAsyncComponent, type Component } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Blocks, Database, Filter, Image, Languages, Palette, Save, Sparkles, Type, Wifi } from 'lucide-vue-next'
+import NotConnected from '@/components/NotConnected.vue'
+import PageBody from '@/components/PageBody.vue'
+import PageHeader from '@/components/PageHeader.vue'
 import ReplaceRulesPanel from './ReplaceRulesPanel.vue'
+import { cn } from '@/lib/utils'
 
-const settings = inject(settingsKey)!
+interface Pane {
+  key: string
+  label: string
+  icon: Component
+  component?: Component
+  missing?: { title: string; description: string; capabilities: string[] }
+}
+
+const PANES: Pane[] = [
+  {
+    key: 'theme',
+    label: '主题',
+    icon: Palette,
+    component: defineAsyncComponent(() => import('./panes/ThemePane.vue')),
+  },
+  {
+    key: 'reading',
+    label: '阅读',
+    icon: Type,
+    component: defineAsyncComponent(() => import('./panes/ReadingPane.vue')),
+  },
+  { key: 'replace', label: '净化替换', icon: Filter, component: ReplaceRulesPanel },
+  {
+    key: 'cover',
+    label: '封面',
+    icon: Image,
+    missing: {
+      title: '封面规则',
+      description: '原型设置页的封面规则管理；后端没有封面规则 CRUD 命令。',
+      capabilities: ['封面规则 CRUD 命令（ROADMAP-v3 E1）'],
+    },
+  },
+  {
+    key: 'cache',
+    label: '下载缓存',
+    icon: Database,
+    component: defineAsyncComponent(() => import('./panes/CachePane.vue')),
+  },
+  {
+    key: 'backup',
+    label: '备份恢复',
+    icon: Save,
+    component: defineAsyncComponent(() => import('./panes/BackupPane.vue')),
+  },
+  {
+    key: 'network',
+    label: '其他',
+    icon: Wifi,
+    component: defineAsyncComponent(() => import('./panes/NetworkPane.vue')),
+  },
+  {
+    key: 'ai',
+    label: 'AI',
+    icon: Sparkles,
+    missing: {
+      title: 'AI',
+      description: 'AI 对话 / 本章总结 / 人物关系 / 知识卡片 / 事件时间线都需要新的子系统。',
+      capabilities: ['AI 子系统与模型配置（ROADMAP-v3 S）'],
+    },
+  },
+  {
+    key: 'translate',
+    label: '翻译',
+    icon: Languages,
+    missing: {
+      title: '翻译',
+      description: '阅读器工具按钮与 RSS 正文翻译都依赖翻译服务接入。',
+      capabilities: ['翻译服务接入（ROADMAP-v3 S）'],
+    },
+  },
+  {
+    key: 'lab',
+    label: '实验室',
+    icon: Blocks,
+    missing: {
+      title: '实验室',
+      description: '多窗口阅读 / 全局快捷键 / AI 人物关系图 —— 路线图 §9 明确默认关闭、不排期。',
+      capabilities: ['按 §9「明确不做」处理，不排期'],
+    },
+  },
+]
+
+const route = useRoute()
+const router = useRouter()
+const active = computed(() => PANES.find((pane) => pane.key === route.params.pane) ?? PANES[0])
 </script>
 
 <template>
-  <div class="search-results">
-    <ReplaceRulesPanel />
-    <section class="source-editor">
-      <h2>备份与恢复</h2>
-      <p>将书架、阅读进度、书源、净化规则和下载任务导出为 JSON；恢复时会覆盖当前本地数据。备份包含已保存的书源认证信息，请勿外传。</p>
-      <div class="source-import">
-        <button type="button" class="primary" @click="settings.backup">导出备份</button>
-        <button type="button" class="secondary" @click="settings.restore">恢复备份</button>
-      </div>
-    </section>
-
-    <section class="source-editor">
-      <h2>网络代理</h2>
-      <p>所有书源请求默认使用此代理，书源单独配置的代理会覆盖这里的设置。</p>
-      <form class="source-import" @submit.prevent="settings.save()">
-        <input
-          v-model="settings.proxyUrl"
-          placeholder="如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
-          aria-label="全局代理 URL"
-        />
-        <button type="submit" class="primary" :disabled="settings.saving">
-          {{ settings.saving ? '保存中...' : '保存代理' }}
+  <div class="flex h-full flex-col">
+    <PageHeader title="设置" :subtitle="active.label" />
+    <div class="flex min-h-0 flex-1">
+      <nav class="w-48 shrink-0 overflow-y-auto border-r bg-card p-2">
+        <button
+          v-for="pane in PANES"
+          :key="pane.key"
+          type="button"
+          :class="
+            cn(
+              'mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent',
+              active.key === pane.key && 'bg-accent font-medium',
+            )
+          "
+          @click="router.push({ name: 'settings', params: { pane: pane.key } })"
+        >
+          <component :is="pane.icon" :size="15" class="shrink-0 text-muted-foreground" />
+          <span class="truncate">{{ pane.label }}</span>
         </button>
-        <button type="button" class="secondary" @click="settings.clear()">清空</button>
-      </form>
-    </section>
-
-    <section class="source-editor">
-      <h2>User-Agent</h2>
-      <p>
-        留空即跟随内置浏览器，这是推荐值：Cloudflare 会把通过验证后发放的
-        <code>cf_clearance</code> 绑定到 User-Agent，只有认证窗口与后续请求完全一致时该 Cookie
-        才有效。填写此项会改写请求头，但改不了认证窗口发出的 <code>Sec-CH-UA</code>，两者反而会不一致 ——
-        只在站点明确拒绝当前 UA 时才需要设置。
-      </p>
-      <form class="source-import" @submit.prevent="settings.save()">
-        <input
-          v-model="settings.userAgent"
-          placeholder="留空 = 跟随内置浏览器（推荐）"
-          aria-label="User-Agent 覆盖值"
+      </nav>
+      <PageBody>
+        <component :is="active.component" v-if="active.component" />
+        <NotConnected
+          v-else-if="active.missing"
+          :title="active.missing.title"
+          :description="active.missing.description"
+          :capabilities="active.missing.capabilities"
         />
-        <button type="submit" class="primary" :disabled="settings.saving">
-          {{ settings.saving ? '保存中...' : '保存 UA' }}
-        </button>
-        <button type="button" class="secondary" @click="settings.userAgent = ''">恢复默认</button>
-      </form>
-      <p v-if="settings.effectiveUserAgent">
-        当前生效：<code>{{ settings.effectiveUserAgent }}</code>
-      </p>
-    </section>
+      </PageBody>
+    </div>
   </div>
 </template>

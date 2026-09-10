@@ -328,52 +328,71 @@ F3 阅读器重建
 
 **没有这一步，后续每个页面都会继续往 `AppShell.vue` 里堆。**
 
-- [ ] 装 shadcn-vue：`reka-ui` `cva` `clsx` `tailwind-merge` `tw-animate-css`，
+- [x] 装 shadcn-vue：`reka-ui` `cva` `clsx` `tailwind-merge` `tw-animate-css`，
       `components.json`，`@/` alias 进 `vite.config.ts` + `tsconfig.json`，`lib/utils.ts` 的 `cn()`
-- [ ] 令牌迁移：按 §3.2 把 `desktop-ui.html:1045–1121` 写成 `@theme inline` 的 light/dark 两套
-- [ ] 拆 `AppShell.vue`（439 行）→ `AppTitlebar` / `AppRail` / `AppBreadcrumb` / `<RouterView>`；
-      阅读器顶栏与阅读设置面板移入 `features/reader/`
-- [ ] **路由真实化**：9 条路由各自指向真实组件，删除 `useAppShell.view` 双轨状态；
-      支持 `#page=read&...` 形式的深链接（原型 :2778–2794 已定义）
-- [ ] 处置死代码：`SourceManager.vue` 接回 `/sources` 或删除（二选一，不留导出不引用状态）
-- [ ] **删除 `LibraryTabPage.vue` 的假数据三页**，换成未接入空状态（纪律 F0）
-- [ ] 生成首批组件：`button card input tabs badge separator switch slider select
+- [x] 令牌迁移：按 §3.2 把 `desktop-ui.html:1045–1121` 写成 `@theme inline` 的 light/dark 两套
+- [x] 拆 `AppShell.vue`（439 行）→ `AppLayout` / `AppTitlebar` / `AppRail` / `AppBreadcrumb` / `<RouterView>`；
+      阅读器顶栏与阅读设置面板移入 `features/reader/`（`ReaderPage` / `ReaderTopbar` / `ReaderSettingsPanel` / `ReaderCatalog`）
+- [x] **路由真实化**：13 条路由各自指向真实组件，删除 `useAppShell.view` 双轨状态；
+      支持 `#/read/<bookId>?toc=0&panel=1` 形式的深链接（原型 :2778–2794 已定义）
+- [x] 处置死代码：`SourceManager.vue` 删除，重建为 `SourceManagerPage.vue` 接回 `/sources`
+- [x] **删除 `LibraryTabPage.vue` 的假数据三页**，换成 `NotConnected.vue` 未接入空状态（纪律 F0）
+- [x] 生成首批组件：`button card input textarea tabs badge separator switch slider select
       dropdown-menu context-menu dialog sheet tooltip toggle-group scroll-area
-      sonner progress skeleton sidebar command resizable`
+      sonner progress skeleton sidebar command resizable`（144 个文件，`src/components/ui/`）
 
 验收：
-- `npm run build` 通过；`grep -c 'component: AppShell' src/router/index.ts` 为 0
-- 全部 `.vue` ≤ 200 行：`find src -name '*.vue' -exec wc -l {} + | sort -rn | head -3`
-- `grep -rn 'props.books.slice' src/features` 无结果
+- [x] `npm run build` 通过；`grep -c 'component: AppShell' src/router/index.ts` 为 0
+- [x] 全部 `.vue` ≤ 200 行：`find src -name '*.vue' -exec wc -l {} + | sort -rn | head -3`
+- [x] `grep -rn 'props.books.slice' src/features` 无结果
+
+**F0 实测（2026-09-09）**：`npm run lint` / `npm run format:check` / `npm run build` 三者全绿；
+最大 SFC 190 行（`ReaderPane.vue` 拆分后）；`src/styles.css` 1,032 → **319 行、硬编码十六进制 0**；
+`features/*/index.ts` 五个 barrel 全部无人 import，已删除（§6.1 #3）。
 
 ### F1 · 壳层与导航
 
-- [ ] 可折叠 rail（shadcn `Sidebar`）：分组标签「浏览 / 阅读」、角标、底部用户卡、Ctrl+B
-- [ ] titlebar：品牌 + 面包屑 + 主题切换 + 真实 Tauri 窗口按钮（现有 `windowAction` 已可用）
-- [ ] 快捷键层：`Esc` `Ctrl+B` `Ctrl+K` `D` `1–5`，阅读器内 `→/Space` `←` `T` `F`；
+- [x] 可折叠 rail：分组标签「浏览 / 检索 / 阅读」、角标、底部用户卡、Ctrl+B
+- [x] titlebar：品牌 + 面包屑 + 主题切换 + 真实 Tauri 窗口按钮（`windowAction` 已可用）
+- [x] 快捷键层：`Esc` `Ctrl+B` `Ctrl+K` `D` `1–5`，阅读器内 `→/Space` `←` `T` `F`；
       输入框内跳过（原型 :2757–2776）
-- [ ] `Ctrl+K` 全局搜索 → shadcn `Command` palette，接 `search_books`
-- [ ] `error-banner` → `Sonner` toast
+- [x] `Ctrl+K` 全局搜索 → shadcn `Command` palette，接 `search_books`
+- [x] `error-banner` → `Sonner` toast
 
-验收：九组快捷键逐一手测通过；rail 折叠态宽度 56px、展开态 220px
+验收：
+- [ ] 九组快捷键逐一手测通过 —— **未手测**（本机无 GUI 会话，只有静态构建）
+- [x] rail 折叠态宽度 56px、展开态 220px
+
+> **F1 偏差登记**：`.rail` 没有直接用 shadcn `Sidebar` 的定位/宽度实现 —— 它的折叠态是 48px
+> （`3rem`）、展开态 256px（`16rem`），与本版验收要求的 56px / 220px 不符，且 `fixed inset-y-0`
+> 会盖住 titlebar。改为：宽度用原型令牌 `--rail-w` / `--rail-w-ext` 自己控制，内部菜单项复用
+> shadcn `SidebarHeader/Content/Group/GroupLabel/GroupContent/Menu/MenuItem/MenuBadge/Footer`
+> 与 `sidebarMenuButtonVariants`。§3.3 的「直接对位」按**结构对位、宽度按原型**落实。
 
 ### F2 · 已有后端能力的页面重建
 
 按后端就绪度排序，全部只用 §2 中标 ✅ 的命令：
 
-1. **书架页** —— 分组侧栏 / sticky 工具条（搜索·排序·筛选·刷新·网格列表切换）/
-   书卡（封面·徽标·未读角标·hover 三按钮）/ 多选 + 浮动批量条 / 右键菜单九项
-2. **书源页** —— 重建 `SourceManager`：列表、分组、自定义排序、权重、启停、
-   批量校验（8 并发）、导入导出、登录、浏览器认证
-3. **书源调试页** —— 四阶段 + 最终请求展示 + 认证态展示 + 一键导出 fixture（v2 §4 遗留，按钮未接）
-4. **发现页** —— 书源侧栏（状态圆点）+ 分类 chip + 书卡列表
-5. **搜索页** —— 沿用现有分层排序逻辑，套新组件
-6. **下载 / 缓存页** —— 任务列表 + 暂停/继续/取消 + 缓存占用与配额
-7. **设置页** —— 左导航 + 9 pane 骨架；先填 **主题 / 阅读 / 其他 / 下载缓存 / 备份恢复** 五个；
+1. [x] **书架页** —— 分组侧栏 / sticky 工具条（搜索·排序·筛选·刷新·网格列表切换）/
+   书卡（封面·徽标·hover 三按钮）/ 多选 + 浮动批量条 / 右键菜单七项
+   （原型九项中的「详情」「换源」需要 E1 的书籍详情命令与换源入口，暂缺）
+2. [x] **书源页** —— 重建 `SourceManagerPage`：列表、分组、自定义排序、权重、启停、
+   批量校验、导入导出、登录、浏览器认证
+3. [x] **书源调试页** —— 四阶段 + 最终请求展示 + 认证态展示 + 一键导出 fixture
+   （v2 §4 遗留按钮已接，`DebugOutput.vue` 用 Tabs 分「中间步骤 / 最终 JSON / 原始 HTML / 请求响应头」）
+4. [x] **发现页** —— 书源侧栏（状态圆点）+ 分类 chip + 书卡列表
+5. [x] **搜索页** —— 沿用现有分层排序逻辑，套新组件（`useSearchView.ts` + `SearchResultCard.vue`）
+6. [x] **下载 / 缓存页** —— 任务列表 + 暂停/继续/取消 + 缓存占用与配额
+7. [x] **设置页** —— 左导航 + **10 个 pane**；已填 **主题 / 阅读 / 净化替换 / 下载缓存 / 备份恢复 / 其他（代理·UA）** 六个；
    封面 / AI / 翻译 / 实验室四个按纪律 F0 显示未接入
-8. **「我的」页** —— 规则入口组 + 其他入口组；Web 服务卡未接入态
+8. [x] **「我的」页** —— 规则入口组 + 其他入口组；Web 服务卡未接入态
+9. [x] **首页** —— 最近在读接真实 `list_books`；统计 / 每日目标 / WebDAV 按纪律 F0 显示未接入（等 E1）
 
-验收：每页与 `desktop-ui.html` 对应 section 并排截图比对；无一处渲染非本模块数据
+验收：
+- [ ] 每页与 `desktop-ui.html` 对应 section 并排截图比对 —— **未做**（本机无法截图比对）
+- [x] 无一处渲染非本模块数据：`grep -rn 'props.books.slice' src/features` 无结果；
+      未接入模块一律走 `NotConnected.vue` 并列出所需能力
+
 
 ### F3 · 阅读器重建（不使用 shadcn 正文层，§3.4）
 

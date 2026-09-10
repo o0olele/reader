@@ -1,132 +1,99 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
-import { sourceDebugKey } from '../../app/shellKeys'
+import { computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { Play, Save, Upload } from 'lucide-vue-next'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import DebugOutput from './DebugOutput.vue'
+import PageBody from '@/components/PageBody.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import { useShellContext } from '@/app/shellKeys'
 
-const debug = inject(sourceDebugKey)!
+const route = useRoute()
+const { sourceDebug: debug } = useShellContext()
 
 const stageHint = computed(() => debug.stages.find((item) => item.value === debug.stage)?.hint ?? '输入 URL 或关键词')
-const finalText = computed(() =>
-  debug.result?.final_json === null || debug.result?.final_json === undefined
-    ? ''
-    : JSON.stringify(debug.result.final_json, null, 2),
+
+// `/sources/debug?source=12` deep link from the source list.
+watch(
+  () => route.query.source,
+  (value) => {
+    const id = Number(value)
+    if (id && debug.sourceId !== id) debug.sourceId = id
+  },
+  { immediate: true },
 )
 </script>
 
 <template>
-  <div class="debug-page">
-    <div class="debug-toolbar">
-      <label>
-        书源
-        <select v-model.number="debug.sourceId" aria-label="调试书源">
-          <option :value="0">选择书源</option>
-          <option v-for="source in debug.sourceOptions" :key="source.id" :value="source.id">
+  <div class="flex h-full flex-col">
+    <PageHeader
+      title="书源调试"
+      :subtitle="debug.currentSource ? `当前：${debug.currentSource.name}` : '四阶段单步执行'"
+    >
+      <Button variant="outline" size="sm" :disabled="debug.savingRules || !debug.sourceId" @click="debug.saveRules()">
+        <Save /> {{ debug.savingRules ? '保存中…' : '保存规则' }}
+      </Button>
+      <Button variant="outline" size="sm" :disabled="!debug.result" @click="debug.exportFixture()">
+        <Upload /> 导出 fixture
+      </Button>
+    </PageHeader>
+
+    <div class="flex shrink-0 flex-wrap items-center gap-2 border-b bg-card px-6 py-2.5">
+      <Select :model-value="String(debug.sourceId ?? '')" @update:model-value="debug.sourceId = Number($event)">
+        <SelectTrigger class="h-8 w-52"><SelectValue placeholder="选择书源" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem v-for="source in debug.sourceOptions" :key="source.id" :value="String(source.id)">
             {{ source.name }}
-          </option>
-        </select>
-      </label>
-      <label>
-        阶段
-        <select v-model="debug.stage" aria-label="调试阶段">
-          <option v-for="item in debug.stages" :key="item.value" :value="item.value">
-            {{ item.label }}
-          </option>
-        </select>
-      </label>
-      <input v-model="debug.input" class="debug-input" :placeholder="stageHint" aria-label="调试输入" />
-      <button type="button" class="primary" :disabled="debug.running || !debug.sourceId" @click="debug.run()">
-        {{ debug.running ? '执行中...' : '单步执行' }}
-      </button>
-      <button
-        type="button"
-        class="secondary"
-        :disabled="debug.savingRules || !debug.sourceId"
-        @click="debug.saveRules()"
+          </SelectItem>
+        </SelectContent>
+      </Select>
+
+      <ToggleGroup
+        type="single"
+        :model-value="debug.stage"
+        variant="outline"
+        size="sm"
+        @update:model-value="debug.stage = ($event as typeof debug.stage) || debug.stage"
       >
-        {{ debug.savingRules ? '保存中...' : '保存规则' }}
-      </button>
-      <button type="button" class="secondary" :disabled="!debug.result" @click="debug.exportFixture()">
-        导出 fixture
-      </button>
+        <ToggleGroupItem v-for="item in debug.stages" :key="item.value" :value="item.value">
+          {{ item.label }}
+        </ToggleGroupItem>
+      </ToggleGroup>
+
+      <Input v-model="debug.input" class="h-8 w-80" :placeholder="stageHint" aria-label="调试输入" />
+      <Button size="sm" :disabled="debug.running || !debug.sourceId" @click="debug.run()">
+        <Play /> {{ debug.running ? '执行中…' : '单步执行' }}
+      </Button>
     </div>
 
-    <div class="debug-grid">
-      <section class="debug-rules">
-        <h2>规则编辑</h2>
-        <label v-for="item in debug.stages" :key="item.value" class="debug-rule-field">
-          {{ item.label }}
-          <textarea v-model="debug.rules[item.value]" rows="5" spellcheck="false" :aria-label="`${item.label}规则`" />
+    <div class="flex min-h-0 flex-1">
+      <section class="w-80 shrink-0 overflow-y-auto border-r bg-card p-4">
+        <h2 class="mb-3 text-sm font-semibold">规则编辑</h2>
+        <label v-for="item in debug.stages" :key="item.value" class="mb-3 grid gap-1.5 text-xs">
+          <span class="text-muted-foreground">{{ item.label }}</span>
+          <textarea
+            v-model="debug.rules[item.value]"
+            rows="5"
+            spellcheck="false"
+            :aria-label="`${item.label}规则`"
+            class="w-full resize-y rounded-md border bg-background px-2 py-1.5 font-mono text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
         </label>
-        <p class="debug-hint">先“保存规则”写回书源，再“单步执行”按新规则执行并查看结果。</p>
+        <p class="text-xs text-muted-foreground">先「保存规则」写回书源，再「单步执行」按新规则执行并查看结果。</p>
       </section>
 
-      <section class="debug-output">
-        <h2>执行结果</h2>
-        <div v-if="debug.running && !debug.result" class="search-empty">
-          正在执行「{{ debug.stageLabel }}」阶段（{{
-            debug.progressState === 'started' ? '已收到进度' : '等待进度'
-          }}）...
+      <PageBody>
+        <div v-if="debug.running && !debug.result" class="py-12 text-center text-xs text-muted-foreground">
+          正在执行「{{ debug.stageLabel }}」阶段（{{ debug.progressState === 'started' ? '已收到进度' : '等待进度' }}）…
         </div>
-        <div v-else-if="!debug.result" class="search-empty">选择书源和输入后点击「单步执行」</div>
-        <template v-else>
-          <div v-if="debug.result.error" class="error-banner">{{ debug.result.error }}</div>
-          <details v-if="debug.result.steps.length" :open="!finalText && !debug.result.raw_html">
-            <summary>每步中间结果（{{ debug.result.steps.length }}）</summary>
-            <table class="debug-steps">
-              <thead>
-                <tr>
-                  <th>规则</th>
-                  <th>输入片段</th>
-                  <th>匹配节点</th>
-                  <th>输出值</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(step, index) in debug.result.steps" :key="`${step.field}-${index}`">
-                  <td>
-                    <code>{{ step.field }}</code>
-                  </td>
-                  <td>
-                    <code>{{ step.input_preview }}</code>
-                  </td>
-                  <td>{{ step.node_count }}</td>
-                  <td>
-                    <code>{{ step.error ?? step.output_preview }}</code>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </details>
-          <details v-if="debug.result.raw_html">
-            <summary>原始 HTML</summary>
-            <pre class="debug-pre">{{ debug.result.raw_html }}</pre>
-          </details>
-          <details v-if="finalText" :open="true">
-            <summary>最终解析结果（JSON）</summary>
-            <pre class="debug-pre">{{ finalText }}</pre>
-          </details>
-          <div v-if="debug.result.request" class="source-probe-status" role="status">
-            <strong>{{ debug.result.request.method }} {{ debug.result.request.url }}</strong>
-            <span v-if="debug.result.status !== undefined">HTTP {{ debug.result.status }}</span>
-            <span>耗时：{{ debug.result.duration_ms }} ms</span>
-            <span>会话：{{ debug.result.session_state }}</span>
-            <span v-if="debug.result.request.auth_attached">已附加认证</span>
-          </div>
-          <details v-if="debug.result.request" :open="false">
-            <summary>请求 Header / Body</summary>
-            <pre class="debug-pre">{{
-              debug.result.request.headers.map(([key, value]) => `${key}: ${value}`).join('\n')
-            }}</pre>
-            <pre v-if="debug.result.request.body" class="debug-pre">{{ debug.result.request.body }}</pre>
-          </details>
-          <details v-if="debug.result.response_headers.length">
-            <summary>响应 Header</summary>
-            <pre class="debug-pre">{{
-              debug.result.response_headers.map(([key, value]) => `${key}: ${value}`).join('\n')
-            }}</pre>
-          </details>
-          <div v-if="!debug.result.request && !debug.result.error" class="search-empty">该阶段没有发起网络请求</div>
-        </template>
-      </section>
+        <div v-else-if="!debug.result" class="py-12 text-center text-xs text-muted-foreground">
+          选择书源和输入后点击「单步执行」
+        </div>
+        <DebugOutput v-else :result="debug.result" />
+      </PageBody>
     </div>
   </div>
 </template>

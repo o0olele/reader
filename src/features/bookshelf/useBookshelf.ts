@@ -1,4 +1,3 @@
-/* global HTMLInputElement, HTMLSelectElement, Event */
 import { computed, reactive, ref } from 'vue'
 import {
   createGroup,
