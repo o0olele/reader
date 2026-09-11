@@ -2,7 +2,7 @@ use crate::{
     app::AppState,
     domain::{Chapter, ReadingProgress, ReadingRecord, ReadingStats},
     error::AppError,
-    service::reader_service::ReaderService,
+    service::{reader_service::ReaderService, settings_service::SettingsService},
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -14,6 +14,50 @@ pub async fn read_chapter_cmd(
     ReaderService::new(state.database()?)
         .read_chapter(chapter_id)
         .await
+}
+
+/// Warms the chapters around the open one (`legado` `ReadBook.preDownload`).
+/// Deliberately fire-and-forget: reading must never wait on a prefetch, and a
+/// book without a source simply has nothing to download.
+#[tauri::command(rename = "prefetch_chapters")]
+pub async fn prefetch_chapters_cmd(
+    state: State<'_, AppState>,
+    book_id: i64,
+    chapter_id: i64,
+) -> Result<(), AppError> {
+    let pool = state.database()?;
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = ReaderService::new(pool)
+            .prefetch_around(book_id, chapter_id)
+            .await
+        {
+            tracing::warn!(target: "reader", book_id, chapter_id, %error, "chapter prefetch aborted");
+        }
+    });
+    Ok(())
+}
+
+/// Stops the window in flight when the reader closes the book.
+#[tauri::command(rename = "cancel_prefetch")]
+pub async fn cancel_prefetch_cmd(book_id: i64) -> Result<(), AppError> {
+    crate::service::reader_service::cancel_prefetch(book_id)
+}
+
+#[tauri::command(rename = "get_reader_prefetch_num")]
+pub async fn get_reader_prefetch_num_cmd(state: State<'_, AppState>) -> Result<i64, AppError> {
+    SettingsService::new(state.database()?)
+        .reader_prefetch_num()
+        .await
+}
+
+#[tauri::command(rename = "set_reader_prefetch_num")]
+pub async fn set_reader_prefetch_num_cmd(
+    state: State<'_, AppState>,
+    chapters: i64,
+) -> Result<i64, AppError> {
+    let settings = SettingsService::new(state.database()?);
+    settings.save_reader_prefetch_num(chapters).await?;
+    settings.reader_prefetch_num().await
 }
 
 #[tauri::command(rename = "list_chapters")]

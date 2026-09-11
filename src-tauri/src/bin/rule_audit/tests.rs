@@ -85,3 +85,62 @@ fn classifies_nested_json_path_errors() {
         "path parser"
     );
 }
+
+#[test]
+fn only_parse_level_failures_ignore_the_fallback_input() {
+    // The preferred dialect could not parse the rule, so letting the other
+    // dialect report "no match" would hide a real engine gap.
+    assert!(is_parse_error(
+        "source error: json path is invalid: unexpected character at 14"
+    ));
+    assert!(is_parse_error(
+        "default-mode rule is not supported: `a.` is not a CSS selector: EmptySelector"
+    ));
+    // A script that ran and failed on the payload's shape is still excused.
+    assert!(!is_parse_error(
+        "source error: JavaScript 执行失败: Error: not a function"
+    ));
+    assert!(!is_parse_error(
+        "source error: JavaScript 执行失败: Error: cannot read property 'x' of undefined"
+    ));
+}
+
+#[test]
+fn separates_configuration_from_selectors() {
+    assert!(is_metadata_field("ruleSearch.checkKeyWord"));
+    assert!(is_metadata_field("ruleContent.imageStyle"));
+    assert!(!is_metadata_field("ruleSearch.name"));
+}
+
+#[test]
+fn reports_unimplemented_hooks_under_their_own_category() {
+    assert!(is_hook_field("ruleToc.preUpdateJs"));
+    assert!(is_hook_field("ruleBookInfo.init"));
+    assert!(!is_hook_field("ruleSearch.name"));
+    let report = run(
+        r#"[{"searchUrl":"https://example.test/api/search","ruleToc":{"preUpdateJs":"java.refreshTocUrl()"}}]"#,
+    )
+    .unwrap();
+    assert_eq!(report.clean, 0);
+    assert!(report.blocked_by.contains_key("unimplemented hook"));
+}
+
+#[test]
+fn skips_configuration_fields_instead_of_dry_running_them() {
+    let report = run(r#"[{"ruleSearch":{"checkKeyWord":"书 | 小说","name":".title"}}]"#).unwrap();
+    assert_eq!(report.clean, 1);
+    assert!(report.errors.is_empty());
+}
+
+#[test]
+fn judges_url_fields_the_way_the_engine_resolves_them() {
+    assert!(is_url_field("ruleSearch.bookUrl"));
+    assert!(is_url_field("ruleBookInfo.tocUrl"));
+    assert!(!is_url_field("ruleSearch.name"));
+    let report = run(
+        r#"[{"ruleSearch":{"bookUrl":"/novel/{{$.novelId}}?isSearch=1","name":".title"}}]"#,
+    )
+    .unwrap();
+    assert_eq!(report.clean, 1);
+    assert!(report.errors.is_empty());
+}

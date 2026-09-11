@@ -2,10 +2,12 @@ import { nextTick, reactive, ref, watch } from 'vue'
 import {
   readChapter,
   addReadingTime,
-  getReadingRecord,
+  cancelPrefetch,
   fetchBookInfo,
   getReadingProgress,
+  getReadingRecord,
   listChapters,
+  prefetchChapters,
   refreshCatalog,
   saveReadingProgress,
   searchBooks,
@@ -34,6 +36,8 @@ export function useReader(report: (cause: unknown) => void) {
   const selectedBook = ref<Book>()
   const chapters = ref<Chapter[]>([])
   const selectedChapter = ref<Chapter>()
+  /** Persisted reading position: everything before it renders as 已读 in the catalog. */
+  const lastReadChapterId = ref<number>()
   const readingSeconds = ref(0)
   const loadingChapter = ref(false)
   const refreshingCatalog = ref(false)
@@ -136,6 +140,7 @@ export function useReader(report: (cause: unknown) => void) {
       }
       const progress = await getReadingProgress(book.id).catch(() => null)
       selectedChapter.value = chapters.value.find((chapter) => chapter.id === progress?.chapter_id) ?? chapters.value[0]
+      lastReadChapterId.value = progress?.chapter_id ?? selectedChapter.value?.id
       await loadChapterContent(selectedChapter.value)
       await nextTick()
       if (readerContent.value && progress && selectedChapter.value?.id === progress.chapter_id) {
@@ -223,12 +228,27 @@ export function useReader(report: (cause: unknown) => void) {
     loadingChapter.value = true
     try {
       const processed = await readChapter(chapter.id)
-      if (request === chapterRequest && selectedChapter.value?.id === chapter.id) selectedChapter.value = processed
+      if (request === chapterRequest && selectedChapter.value?.id === chapter.id) {
+        selectedChapter.value = processed
+        warmNeighbourChapters(chapter.id)
+      }
     } catch (cause) {
       if (request === chapterRequest) report(cause)
     } finally {
       if (request === chapterRequest) loadingChapter.value = false
     }
+  }
+
+  /**
+   * Downloads the chapters around the one just opened while the reader stays on
+   * it — the reference app's `ReadBook.preDownload()`. The backend owns the
+   * window, the concurrency and the cancel-on-next-chapter; failures stay quiet
+   * because a prefetch that cannot run must never interrupt reading.
+   */
+  function warmNeighbourChapters(chapterId: number) {
+    const book = selectedBook.value
+    if (!book || !isOnline(book)) return
+    void prefetchChapters(book.id, chapterId).catch(() => undefined)
   }
 
   function scheduleProgressSave() {
@@ -251,6 +271,7 @@ export function useReader(report: (cause: unknown) => void) {
 
   async function selectChapter(chapter: Chapter) {
     selectedChapter.value = chapter
+    lastReadChapterId.value = chapter.id
     await loadChapterContent(chapter)
     await nextTick()
     scheduleProgressSave()
@@ -259,6 +280,7 @@ export function useReader(report: (cause: unknown) => void) {
   async function closeBook() {
     chapterRequest++
     loadingChapter.value = false
+    if (selectedBook.value) void cancelPrefetch(selectedBook.value.id).catch(() => undefined)
     scheduleProgressSave()
     await stopReadingTimer()
     // Let the debounced write land before the refs it reads are cleared.
@@ -266,6 +288,7 @@ export function useReader(report: (cause: unknown) => void) {
     selectedBook.value = undefined
     readingSeconds.value = 0
     selectedChapter.value = undefined
+    lastReadChapterId.value = undefined
     chapters.value = []
   }
 
@@ -273,6 +296,7 @@ export function useReader(report: (cause: unknown) => void) {
     selectedBook,
     chapters,
     selectedChapter,
+    lastReadChapterId,
     readingSeconds,
     loadingChapter,
     refreshingCatalog,

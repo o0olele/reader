@@ -2,12 +2,17 @@
 import { computed, ref } from 'vue'
 import { Bookmark, List } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
+import { volumeLabel } from './readerTypography'
 import type { Chapter } from '@/services/api'
 
 const props = defineProps<{
   chapters: Chapter[]
   selectedChapter?: Chapter
   hasBookmark: boolean
+  /** Persisted reading position — everything before it is 已读 (prototype :1978–1981). */
+  readUpToChapterId?: number
+  /** Live in-chapter progress for the chapter being read. */
+  currentPercent: number
 }>()
 
 const emit = defineEmits<{ selectChapter: [chapter: Chapter]; jump: [] }>()
@@ -15,20 +20,26 @@ const emit = defineEmits<{ selectChapter: [chapter: Chapter]; jump: [] }>()
 const activeTab = ref<'catalog' | 'bookmarks'>('catalog')
 const keyword = ref('')
 
+const readUpToIndex = computed(() => props.chapters.findIndex((chapter) => chapter.id === props.readUpToChapterId))
+
+function status(index: number): string {
+  const chapter = props.chapters[index]
+  if (!chapter) return ''
+  if (chapter.id === props.selectedChapter?.id) return `${props.currentPercent}%`
+  return readUpToIndex.value >= 0 && index < readUpToIndex.value ? '已读' : ''
+}
+
 /** Group by the 卷/部/篇 prefix when a title carries one; otherwise 「正文」. */
 const groups = computed(() => {
   const needle = keyword.value.trim().toLowerCase()
-  const filtered = needle
-    ? props.chapters.filter((chapter) => chapter.title.toLowerCase().includes(needle))
-    : props.chapters
-  const buckets = new Map<string, Chapter[]>()
-  for (const chapter of filtered) {
-    const match = /^(第[零一二三四五六七八九十百千万0-9]+[卷部篇])/.exec(chapter.title.trim())
-    const label = match ? match[1] : '正文'
+  const buckets = new Map<string, { index: number; chapter: Chapter }[]>()
+  props.chapters.forEach((chapter, index) => {
+    if (needle && !chapter.title.toLowerCase().includes(needle)) return
+    const label = volumeLabel(chapter.title)
     const bucket = buckets.get(label)
-    if (bucket) bucket.push(chapter)
-    else buckets.set(label, [chapter])
-  }
+    if (bucket) bucket.push({ index, chapter })
+    else buckets.set(label, [{ index, chapter }])
+  })
   return [...buckets.entries()].map(([label, items]) => ({ label, items }))
 })
 </script>
@@ -47,15 +58,16 @@ const groups = computed(() => {
     <template v-if="activeTab === 'catalog'">
       <Input v-model="keyword" class="mb-3 h-8" placeholder="搜索章节" aria-label="搜索章节" />
       <div v-for="group in groups" :key="group.label" class="mb-3">
-        <div class="mb-1 px-1 text-[11px] font-medium tracking-wide text-muted-foreground">{{ group.label }}</div>
+        <div class="reader-toc-volume">{{ group.label }}</div>
         <button
-          v-for="chapter in group.items"
-          :key="chapter.id"
+          v-for="item in group.items"
+          :key="item.chapter.id"
           type="button"
-          :class="['chapter-button', { selected: selectedChapter?.id === chapter.id }]"
-          @click="emit('selectChapter', chapter)"
+          :class="['chapter-button', { selected: selectedChapter?.id === item.chapter.id }]"
+          @click="emit('selectChapter', item.chapter)"
         >
-          {{ chapter.title }}
+          <span>{{ item.chapter.title }}</span>
+          <span v-if="status(item.index)" class="chapter-status">{{ status(item.index) }}</span>
         </button>
       </div>
       <p v-if="!groups.length" class="px-2 py-6 text-center text-xs text-muted-foreground">没有匹配的章节。</p>

@@ -75,10 +75,10 @@ pub(super) fn error_category(error: &str) -> &'static str {
         || l.contains("java.security")
     {
         "unsupported JVM access"
-    } else if l.contains("cannot read property")
-        || l.contains("cannot read properties")
-        || l.contains("is not defined")
-    {
+    } else if l.contains("is not defined") {
+        // Only a missing *variable* is blamed on the dummy harness input.
+        // `cannot read property of null` is a real script failure, not a
+        // harness artefact, so it falls through to `js runtime` below.
         "harness input"
     } else if l.contains("source error") || l.contains("javascript") || l.contains("quickjs") {
         "js runtime"
@@ -89,6 +89,47 @@ pub(super) fn error_category(error: &str) -> &'static str {
     } else {
         "other"
     }
+}
+
+/// Whether the failing text is the rule's own syntax rather than the dummy
+/// payload's shape.
+///
+/// The audit excuses a failing rule when the other dummy dialect lets it run, on
+/// the grounds that a deterministic payload cannot carry every key a source
+/// expects. That excuse does not hold for a parse-level failure: the other
+/// dialect then "executes" the rule only by matching nothing, which is not
+/// evidence that the rule runs.
+pub(super) fn is_parse_error(error: &str) -> bool {
+    matches!(error_category(error), "path parser" | "css compatibility")
+}
+
+/// Rule paths that hold configuration rather than a selector.
+///
+/// `checkKeyWord` is a keyword list and `imageStyle` an enum; dry-running them as
+/// rules only produces a fake CSS failure.
+pub(super) fn is_metadata_field(path: &str) -> bool {
+    matches!(field(path), "checkKeyWord" | "imageStyle")
+}
+
+/// Whether a rule field holds a URL.
+///
+/// URL-valued fields are resolved through `rule::evaluate_url` (legado's
+/// `AnalyzeUrl`), not through the rule analyzer, so the audit has to judge them
+/// the same way — otherwise a relative URL is reported as a broken XPath rule.
+pub(super) fn is_url_field(path: &str) -> bool {
+    field(path).to_ascii_lowercase().ends_with("url")
+}
+
+/// Rule fields legado runs as JavaScript hooks around extraction (`init`,
+/// `preUpdateJs`, …). This engine does not implement them yet, so they get their
+/// own category instead of being blamed on the CSS parser.
+pub(super) fn is_hook_field(path: &str) -> bool {
+    let key = field(path);
+    key.ends_with("Js") || key == "init"
+}
+
+fn field(path: &str) -> &str {
+    path.rsplit('.').next().unwrap_or_default()
 }
 
 fn walk(value: &Value, path: &str, out: &mut Vec<(String, String)>) {

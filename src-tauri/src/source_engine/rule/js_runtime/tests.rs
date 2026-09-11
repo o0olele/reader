@@ -94,6 +94,30 @@ params['sign']=paramSign
 }
 
 #[tokio::test]
+async fn executes_pretty_printed_comma_declarations() {
+    // Real corpus shape (source[260].ruleToc.chapterList): a declaration is
+    // split across two lines by a comma, and the whole script used to abort
+    // with "variable name expected" before the rule's intent was ever reached.
+    // The element API itself (`d.select`/`push`) is a separate gap (E0/Jsoup),
+    // so this test pins the *statement* the declaration produced.
+    let script = "\nvar list = [],\nd = java.getElement('.item');\nlist.push(d)\nlist.length + ':' + (typeof d)\n";
+    let value = QuickJsRuntime::default()
+        .execute(
+            script,
+            JsContext {
+                result: r#"<div class="item"><a class="name">audit</a></div>"#.into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    match value {
+        JsValue::String(value) => assert!(value.starts_with("1:"), "{value}"),
+        other => panic!("unexpected result: {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn executes_real_qimao_search_script() {
     let script = r#"
 sign_key='d3dGiJc651gSQ8w1'
@@ -305,6 +329,55 @@ async fn exposes_nested_rule_helpers() {
     assert!(
         matches!(value, JsValue::String(value) if value.starts_with("2:") && value.contains("<li>一</li>"))
     );
+}
+
+#[tokio::test]
+async fn exposes_the_jsoup_element_and_java_collection_api() {
+    let runtime = QuickJsRuntime::default();
+    let context = || JsContext {
+        result: r#"<div class="row"><a href="/one" data-id="2">一</a><a href="/two" data-id="1">二</a></div>"#
+            .into(),
+        ..Default::default()
+    };
+    // JSoup's `Elements`: size() / attr() / text() on the collection itself.
+    let value = runtime
+        .execute(
+            "java.getElements('.row a').size() + '|' + java.getElements('.row a').attr('href') + '|' + java.getElements('.row a').text()",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("2|/one|一 二".into()));
+
+    // `toArray()` yields elements, not strings, so `.attr()` keeps working.
+    let value = runtime
+        .execute(
+            "java.getElements('.row a').toArray().map(x => x.attr('data-id')).sort().join(',')",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("1,2".into()));
+
+    // Element-level `select()` / `get()`, and index access on the collection.
+    let value = runtime
+        .execute(
+            "java.getElement('.row').select('a').get(1).text() + '|' + java.getElements('.row a')[0].text()",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("二|一".into()));
+
+    // Java's `ArrayList<String>`: size() / toArray() alongside the JS array API.
+    let value = runtime
+        .execute(
+            "java.getStringList('a@href').size() + '|' + java.getStringList('a@href').toArray().join('+')",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("2|/one+/two".into()));
 }
 
 #[tokio::test]

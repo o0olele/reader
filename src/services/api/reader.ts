@@ -33,6 +33,29 @@ export function readChapter(chapterId: number): Promise<Chapter> {
   return invoke('read_chapter', { chapterId })
 }
 
+/**
+ * Warms the chapters around the open one, the way the reference app's
+ * `ReadBook.preDownload()` does. Fire and forget: the backend answers
+ * immediately and downloads in the background.
+ */
+export function prefetchChapters(bookId: number, chapterId: number): Promise<void> {
+  return invoke<void>('prefetch_chapters', { bookId, chapterId })
+}
+
+/** Stops the prefetch window still running for this book (closing the reader). */
+export function cancelPrefetch(bookId: number): Promise<void> {
+  return invoke<void>('cancel_prefetch', { bookId })
+}
+
+/** Chapters prefetched ahead of the open one; `0` turns prefetching off. */
+export function getReaderPrefetchNum(): Promise<number> {
+  return invoke<number>('get_reader_prefetch_num')
+}
+
+export function setReaderPrefetchNum(chapters: number): Promise<number> {
+  return invoke<number>('set_reader_prefetch_num', { chapters })
+}
+
 /** Re-fetches the catalog from the book's source and returns the merged list. */
 export function refreshCatalog(bookId: number): Promise<Chapter[]> {
   return invoke<Chapter[]>('refresh_catalog', { bookId })

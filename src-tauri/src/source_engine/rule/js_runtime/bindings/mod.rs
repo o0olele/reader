@@ -2,6 +2,7 @@ mod codec;
 mod context;
 mod crypto;
 mod ctx;
+mod elements;
 mod net;
 mod objects;
 mod rule;

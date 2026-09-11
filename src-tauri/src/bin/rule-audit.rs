@@ -5,7 +5,7 @@
 //! deterministic dummy document; it never performs network requests.
 
 use reader_desktop_lib::error::AppError;
-use reader_desktop_lib::source_engine::rule::{evaluate, Extraction, RuleContext};
+use reader_desktop_lib::source_engine::rule::{evaluate, evaluate_url, Extraction, RuleContext};
 #[path = "rule_audit/dummy.rs"]
 mod dummy;
 #[path = "rule_audit/input.rs"]
@@ -15,7 +15,10 @@ mod report;
 #[cfg(test)]
 #[path = "rule_audit/tests.rs"]
 mod tests;
-use input::{error_category, is_metadata_url, source_is_json, source_rules, TOKENS};
+use input::{
+    error_category, is_hook_field, is_metadata_field, is_metadata_url, is_parse_error,
+    is_url_field, source_is_json, source_rules, TOKENS,
+};
 use regex::Regex;
 use report::markdown;
 use serde_json::Value;
@@ -36,6 +39,44 @@ struct Audit {
     java_methods: BTreeMap<String, BTreeSet<usize>>,
     blocked_by: BTreeMap<String, BTreeSet<usize>>,
     failed_rules: BTreeMap<String, BTreeSet<String>>,
+}
+
+/// Dry-runs one rule against every candidate dummy input and reports the
+/// failure only when none of them lets the rule execute.
+///
+/// A deterministic corpus can never contain every key a source expects, so a
+/// single-input judgement mixes "the engine cannot run this rule" with "this
+/// dummy payload has no such field". The returned message lists the error seen
+/// for each input, which keeps genuine engine gaps (invalid CSS, undeclared JS
+/// variables) distinguishable from payload-shape artefacts.
+///
+/// The fallback dialect is only allowed to excuse a *runtime* failure of the
+/// preferred dialect. When the preferred dialect cannot even parse the rule, a
+/// success on the other dialect means no more than "the selector matched
+/// nothing", so the parse error stays reported.
+///
+/// URL-valued fields are judged through [`evaluate_url`], which is what the
+/// pipeline uses for them: legado resolves `bookUrl` / `chapterUrl` / … with
+/// `AnalyzeUrl`, so a relative URL is rendered instead of being parsed as an
+/// XPath expression.
+fn rule_failure(path: &str, raw: &str, json_source: bool) -> Option<String> {
+    let mut errors: Vec<String> = Vec::new();
+    for input in dummy::inputs_for(raw, json_source) {
+        let outcome = if is_url_field(path) {
+            evaluate_url(raw, input, &mut RuleContext::default()).map(|_| Vec::new())
+        } else {
+            evaluate(raw, input, Extraction::Values, &mut RuleContext::default())
+        };
+        match outcome {
+            // `evaluate` surfaces an error only when every `||` alternative
+            // failed, so a success here means the rule executed.
+            Ok(_) if !errors.first().is_some_and(|error| is_parse_error(error)) => return None,
+            Ok(_) => break,
+            Err(error) => errors.push(error.to_string()),
+        }
+    }
+    errors.dedup();
+    Some(errors.join(" || "))
 }
 
 fn corpus_file(path: &Path) -> Result<PathBuf, AppError> {
@@ -85,27 +126,30 @@ fn run(input: &str) -> Result<Audit, AppError> {
                     .or_default()
                     .insert(source_id);
             }
-            // URL templates, headers and JS libraries are metadata rather than
-            // evaluator rules; only actual rule fields are dry-run here.
-            if path.starts_with("rule") && !is_metadata_url(&path, &raw) {
+            // URL templates, headers, JS libraries and plain configuration are
+            // metadata rather than evaluator rules; only actual rule fields are
+            // dry-run here.
+            if path.starts_with("rule") && !is_metadata_url(&path, &raw) && !is_metadata_field(&path)
+            {
                 report.executed += 1;
-                let dummy_input = dummy::input_for(&raw, json_source);
-                if let Err(error) = evaluate(
-                    &raw,
-                    dummy_input,
-                    Extraction::Values,
-                    &mut RuleContext::default(),
-                ) {
+                if let Some(error) = rule_failure(&path, &raw, json_source) {
                     source_clean = false;
-                    *report.errors.entry(error.to_string()).or_default() += 1;
+                    *report.errors.entry(error.clone()).or_default() += 1;
                     report
                         .failed_rules
-                        .entry(error.to_string())
+                        .entry(error.clone())
                         .or_default()
                         .insert(format!("source[{source_id}].{path} = {raw}"));
+                    // A hook this engine does not implement yet is not a CSS
+                    // parsing gap; keep the attribution honest.
+                    let category = if is_hook_field(&path) {
+                        "unimplemented hook"
+                    } else {
+                        error_category(&error)
+                    };
                     report
                         .blocked_by
-                        .entry(error_category(&error.to_string()).to_owned())
+                        .entry(category.to_owned())
                         .or_default()
                         .insert(source_id);
                 }

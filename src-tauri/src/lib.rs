@@ -26,7 +26,6 @@ fn health_check(state: tauri::State<'_, AppState>) -> Result<String, error::AppE
 }
 
 pub fn run() {
-    tracing_subscriber::fmt().with_env_filter("info").init();
     tauri::Builder::default()
         .manage(AppState::new())
         .plugin(tauri_plugin_dialog::init())
@@ -34,6 +33,9 @@ pub fn run() {
             let state = app.state::<AppState>();
             let data_dir = app.path().app_data_dir().map_err(error::AppError::io)?;
             std::fs::create_dir_all(&data_dir).map_err(error::AppError::io)?;
+            // After `data_dir` exists: release builds log to `<data_dir>/logs`,
+            // dev builds to stdout. See `app::logging`.
+            app::logging::init(&data_dir.join("logs"));
             let db_path = data_dir.join("app.db");
             tauri::async_runtime::block_on(app::bootstrap::initialize_database(&state, &db_path))
                 .map_err(error::AppError::database)?;
@@ -55,6 +57,10 @@ pub fn run() {
             command_api::book::list_books_cmd,
             command_api::reader::list_chapters_cmd,
             command_api::reader::read_chapter_cmd,
+            command_api::reader::prefetch_chapters_cmd,
+            command_api::reader::cancel_prefetch_cmd,
+            command_api::reader::get_reader_prefetch_num_cmd,
+            command_api::reader::set_reader_prefetch_num_cmd,
             command_api::reader::refresh_catalog_cmd,
             command_api::reader::get_reading_progress_cmd,
             command_api::reader::save_reading_progress_cmd,

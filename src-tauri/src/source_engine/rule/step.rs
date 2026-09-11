@@ -76,6 +76,7 @@ fn parse_selection(step: &str) -> Result<Selection, RuleExecutionError> {
         return Ok(Selection {
             matcher: Matcher::Children,
             positions,
+            regex_attrs: Vec::new(),
         });
     }
     if let Some((kind, name)) = private_kind(body) {
@@ -86,17 +87,23 @@ fn parse_selection(step: &str) -> Result<Selection, RuleExecutionError> {
             "text" => Matcher::Text(name.to_owned()),
             _ => Matcher::Children,
         };
-        return Ok(Selection { matcher, positions });
+        return Ok(Selection {
+            matcher,
+            positions,
+            regex_attrs: Vec::new(),
+        });
     }
     if body == "children" {
         return Ok(Selection {
             matcher: Matcher::Children,
             positions,
+            regex_attrs: Vec::new(),
         });
     }
     Ok(Selection {
         matcher: Matcher::Css(body.to_owned()),
         positions,
+        regex_attrs: super::jsoup::regex_attr::compile(body)?,
     })
 }
 

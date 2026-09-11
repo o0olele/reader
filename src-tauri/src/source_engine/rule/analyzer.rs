@@ -1,8 +1,10 @@
 use super::directive::{extract_get, extract_put, extract_replacement, extract_templates};
 use super::model::{RuleAlternatives, RuleContext, RuleJoin, RuleMode, RuleParseError, SourceRule};
-use super::scanner::{
-    find_ignore_ascii_case, split_top_level, starts_ignore_ascii_case, Separator,
-};
+use super::scanner::{find_ignore_ascii_case, split_top_level, starts_ignore_ascii_case, Separator};
+
+mod mode;
+
+use mode::detect_mode;
 
 pub fn split_rule(raw: &str) -> Result<RuleAlternatives, RuleParseError> {
     split_rule_for_input(raw, false)
@@ -159,49 +161,6 @@ fn push_typed_rule(
     Ok(())
 }
 
-fn detect_mode(raw: &str, json_input: bool) -> (RuleMode, &str) {
-    let candidate = raw.strip_prefix('-').map(str::trim_start).unwrap_or(raw);
-    for (prefix, mode) in [
-        ("@xpath:", RuleMode::XPath),
-        ("@json:", RuleMode::Json),
-        ("@css:", RuleMode::Default),
-    ] {
-        if starts_ignore_ascii_case(candidate, 0, prefix) {
-            return (mode, &candidate[prefix.len()..]);
-        }
-    }
-    if let Some(rule) = candidate.strip_prefix("@@") {
-        (RuleMode::Default, rule)
-    } else if candidate.starts_with("##") || candidate.starts_with(':') {
-        (
-            RuleMode::Regex,
-            candidate.strip_prefix(':').unwrap_or(candidate),
-        )
-    } else if candidate.starts_with("$.")
-        || candidate.starts_with("$[")
-        || (json_input && looks_like_legacy_json_path(candidate))
-    {
-        (RuleMode::Json, candidate)
-    } else if candidate.starts_with('/') {
-        (RuleMode::XPath, candidate)
-    } else {
-        (RuleMode::Default, candidate)
-    }
-}
-
-fn looks_like_legacy_json_path(value: &str) -> bool {
-    let value = value.trim();
-    !value.is_empty()
-        && !value.contains("{{")
-        && !value.contains('@')
-        && !value.contains(' ')
-        && !value.contains(':')
-        && (value.contains("[*]") || value.contains("[-") || value.split('.').count() >= 2)
-        && value
-            .chars()
-            .all(|c| c.is_alphanumeric() || ".[]*_-'\"".contains(c))
-}
-
 fn find_tail_js(raw: &str, from: usize) -> Option<usize> {
     [
         find_ignore_ascii_case(raw, from, "@js:"),
@@ -260,5 +219,29 @@ mod tests {
         let parsed = split_rule(":chapter-(\\d+)").unwrap();
         assert_eq!(parsed[0][0].mode, RuleMode::Regex);
         assert_eq!(parsed[0][0].rule, "chapter-(\\d+)");
+    }
+
+    #[test]
+    fn strips_the_legado_list_marker_without_losing_the_dialect() {
+        let parsed = split_rule("+@css:.bookbox").unwrap();
+        assert_eq!(parsed[0][0].mode, RuleMode::Default);
+        assert_eq!(parsed[0][0].rule, ".bookbox");
+        assert!(!parsed[0][0].reverse);
+        // A leading `-` still means "reverse the result order".
+        let parsed = split_rule("-tag.a@text").unwrap();
+        assert_eq!(parsed[0][0].rule, "tag.a@text");
+        assert!(parsed[0][0].reverse);
+    }
+
+    #[test]
+    fn routes_single_brace_json_templates_to_json_mode() {
+        for raw in ["{$.score}分", "连载中{$.status}已完结", "{$[0].name}"] {
+            let parsed = split_rule(raw).unwrap();
+            assert_eq!(parsed[0][0].mode, RuleMode::Json, "{raw}");
+            assert_eq!(parsed[0][0].rule, raw);
+        }
+        // A CSS rule that merely mentions a brace is untouched.
+        let parsed = split_rule("a[href^=http]").unwrap();
+        assert_eq!(parsed[0][0].mode, RuleMode::Default);
     }
 }

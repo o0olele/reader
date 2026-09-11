@@ -11,7 +11,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   mode: [mode: 'scroll' | 'paged']
-  turn: [direction: number]
   toggleBookmark: []
 }>()
 </script>
@@ -21,10 +20,6 @@ const emit = defineEmits<{
     <div class="reader-mode-toggle" role="group" aria-label="阅读模式">
       <button type="button" :class="{ active: readerMode === 'scroll' }" @click="emit('mode', 'scroll')">滚动</button>
       <button type="button" :class="{ active: readerMode === 'paged' }" @click="emit('mode', 'paged')">分页</button>
-    </div>
-    <div v-if="readerMode === 'paged'" class="reader-page-actions">
-      <button type="button" aria-label="上一页" @click="emit('turn', -1)">上一页</button>
-      <button type="button" aria-label="下一页" @click="emit('turn', 1)">下一页</button>
     </div>
     <div class="reader-tools">
       <input

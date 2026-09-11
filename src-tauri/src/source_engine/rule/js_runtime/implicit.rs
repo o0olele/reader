@@ -98,33 +98,20 @@ pub(super) fn declare_implicit_assignments(script: &str) -> String {
     }
 }
 
-pub(super) fn declare_implicit_assignment(line: &str) -> String {
-    let trimmed = line.trim_start();
-    let Some(equal) = trimmed.find('=') else {
-        return line.to_owned();
-    };
-    if trimmed
-        .as_bytes()
-        .get(equal + 1)
-        .is_some_and(|next| matches!(next, b'=' | b'>'))
-    {
-        return line.to_owned();
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn declares_every_implicitly_assigned_name_once() {
+        let script = declare_implicit_assignments("total = 1;\ntotal = 2;\nurl + total");
+        assert!(script.starts_with("var total;\n"), "{script}");
     }
-    let name = trimmed[..equal].trim_end();
-    if name.ends_with(['!', '<', '>']) {
-        return line.to_owned();
-    }
-    let known_global = matches!(name, "result" | "url" | "key" | "baseUrl" | "page" | "java");
-    let identifier = !name.is_empty()
-        && name.chars().enumerate().all(|(index, character)| {
-            character == '_'
-                || character == '$'
-                || character.is_ascii_alphanumeric() && (index > 0 || !character.is_ascii_digit())
-        });
-    if !known_global && identifier {
-        let indent = &line[..line.len() - trimmed.len()];
-        format!("{indent}var {trimmed}")
-    } else {
-        line.to_owned()
+
+    #[test]
+    fn leaves_known_globals_and_reassignments_alone() {
+        let script = declare_implicit_assignments("result = result.trim()\njava.put('a', 1)");
+        assert!(!script.contains("var result"), "{script}");
+        assert!(!script.contains("var java"), "{script}");
     }
 }
