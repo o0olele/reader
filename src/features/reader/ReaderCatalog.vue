@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Bookmark, List } from 'lucide-vue-next'
 import { Input } from '@/components/ui/input'
 import { volumeLabel } from './readerTypography'
@@ -19,6 +19,31 @@ const emit = defineEmits<{ selectChapter: [chapter: Chapter]; jump: [] }>()
 
 const activeTab = ref<'catalog' | 'bookmarks'>('catalog')
 const keyword = ref('')
+const listRef = ref<HTMLElement | null>(null)
+
+/**
+ * Opening the catalog should land on the chapter being read. Scroll the catalog's
+ * own box (`.chapter-list` is the `overflow-y-scroll` container) instead of calling
+ * `scrollIntoView`, which would also drag the reader stage along.
+ */
+function revealSelected() {
+  void nextTick(() => {
+    const container = listRef.value
+    const target = container?.querySelector<HTMLElement>('.chapter-button.selected')
+    if (!container || !target) return
+    const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top
+    // Already fully in view (e.g. the user just clicked it): leave the list alone.
+    if (offset >= 0 && offset + target.clientHeight <= container.clientHeight) return
+    container.scrollTop += offset - (container.clientHeight - target.clientHeight) / 2
+  })
+}
+
+onMounted(revealSelected)
+// A deep link resolves the chapter after the catalog mounts, so re-centre when it lands.
+watch(() => props.selectedChapter?.id, revealSelected)
+watch(activeTab, (tab) => {
+  if (tab === 'catalog') revealSelected()
+})
 
 const readUpToIndex = computed(() => props.chapters.findIndex((chapter) => chapter.id === props.readUpToChapterId))
 
@@ -45,7 +70,7 @@ const groups = computed(() => {
 </script>
 
 <template>
-  <aside class="chapter-list">
+  <aside ref="listRef" class="chapter-list">
     <div class="reader-side-tabs">
       <button type="button" :class="{ active: activeTab === 'catalog' }" @click="activeTab = 'catalog'">
         <List :size="15" />目录
