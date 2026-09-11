@@ -1,0 +1,6 @@
+# sqlx hashes migration files byte-for-byte (SHA-384) at compile time and stores
+# that hash in the database. A CRLF checkout therefore changes every migration's
+# checksum and makes an existing database fail with
+# "migration N was previously applied but has been modified".
+# Migrations must always be checked out with LF endings.
+src-tauri/migrations/*.sql text eol=lf
