@@ -141,6 +141,28 @@ fixture 立刻变红 —— 说明真正的缺陷在 URL 字段的**入口**，�
 | js runtime | 105 源 / 81 独占 | 105 源 / 81 独占（未动） |
 | unimplemented hook | 12 源 / 7 独占 | 12 源 / 7 独占（未动） |
 
+### 第三批：Java 容器语义（2026-09-10）
+
+**受阻源 133 → 131（无错误源 839 = 86.5%），js runtime 105 → 103 源。**
+
+**改动**：`java.getElements` / `java.getElement` / `java.getStringList` 不再返回裸字符串或裸
+数组，而是对位 legado 的 Java 容器：
+
+| 返回 | 提供的 API |
+| --- | --- |
+| `getElements` → JSoup `Elements` | 真数组（`length` / 下标 / `map` / `forEach` / `sort` / `concat`）+ `attr` / `text` / `html` / `size` / `get(i)` / `first()` / `last()` / `toArray()` / `select(css)` |
+| `getElement` → JSoup `Element` | `attr` / `text` / `html` / `select(css)`；`toString` / `valueOf` / `toJSON` 都返回自身标记，字符串拼接与 `JSON.stringify` 行为不变 |
+| `getStringList` → `ArrayList<String>` | 真数组 + `size` / `get(i)` / `first()` / `last()` / `toArray()` |
+
+`.select()` 按 JSoup 语义走**标准 CSS**（`a` 是标签选择器），不是 legado 规则方言 ——
+用规则引擎会把裸 `a` 当成属性名。
+
+**踩到的坑（值得记）**：第一版在闭包里捕获安装期的 `Ctx`，于是 JS 函数 → Rust 闭包 → `Ctx` →
+上下文形成 GC 看不见的环，QuickJS 在 `JS_FreeRuntime` 断言 `list_empty(&rt->gc_obj_list)` 失败
+（进程 0xc0000409），**任何创建 JS 运行时的测试都会崩**，与是否调用 `getElements` 无关。
+修法是所有需要构造 JS 值的闭包把 `Ctx` 作为**第一个参数**（rquickjs 的 `FromParam for Ctx` 每次
+调用注入），而不是捕获它。
+
 ### 下一批候选（按独立可解源排序）
 
 1. **js runtime 的绑定层**：`org.jsoup.Jsoup`、`java.HMacHex`、

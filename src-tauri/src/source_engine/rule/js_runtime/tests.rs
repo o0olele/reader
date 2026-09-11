@@ -332,6 +332,55 @@ async fn exposes_nested_rule_helpers() {
 }
 
 #[tokio::test]
+async fn exposes_the_jsoup_element_and_java_collection_api() {
+    let runtime = QuickJsRuntime::default();
+    let context = || JsContext {
+        result: r#"<div class="row"><a href="/one" data-id="2">一</a><a href="/two" data-id="1">二</a></div>"#
+            .into(),
+        ..Default::default()
+    };
+    // JSoup's `Elements`: size() / attr() / text() on the collection itself.
+    let value = runtime
+        .execute(
+            "java.getElements('.row a').size() + '|' + java.getElements('.row a').attr('href') + '|' + java.getElements('.row a').text()",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("2|/one|一 二".into()));
+
+    // `toArray()` yields elements, not strings, so `.attr()` keeps working.
+    let value = runtime
+        .execute(
+            "java.getElements('.row a').toArray().map(x => x.attr('data-id')).sort().join(',')",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("1,2".into()));
+
+    // Element-level `select()` / `get()`, and index access on the collection.
+    let value = runtime
+        .execute(
+            "java.getElement('.row').select('a').get(1).text() + '|' + java.getElements('.row a')[0].text()",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("二|一".into()));
+
+    // Java's `ArrayList<String>`: size() / toArray() alongside the JS array API.
+    let value = runtime
+        .execute(
+            "java.getStringList('a@href').size() + '|' + java.getStringList('a@href').toArray().join('+')",
+            context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(value, JsValue::String("2|/one+/two".into()));
+}
+
+#[tokio::test]
 async fn normalizes_chapter_numbers_and_ignores_android_toasts() {
     let value = QuickJsRuntime::default()
         .execute(

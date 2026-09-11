@@ -1,5 +1,6 @@
 use super::super::js_error;
 use super::super::JsHttpContext;
+use super::elements;
 use crate::error::AppError;
 use crate::source_engine::rule::{engine::evaluate, jsoup::Extraction, model::RuleContext};
 use rquickjs::{Ctx, Function, Object};
@@ -38,15 +39,16 @@ pub(super) fn install<'js>(
     let get_elements_input = rule_input.clone();
     java.set(
         "getElements",
-        Function::new(ctx.clone(), move |rule: String| {
-            nested_rule_values(
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>, rule: String| {
+            let nodes = nested_rule_values(
                 &rule,
                 &get_elements_input,
                 Extraction::Nodes,
                 &get_elements_values,
                 get_elements_http.clone(),
             )
-            .map_err(rule_js_error)
+            .map_err(rule_js_error)?;
+            elements::collection(&ctx, nodes).map_err(rule_js_error)
         }),
     )
     .map_err(js_error)?;
@@ -55,8 +57,8 @@ pub(super) fn install<'js>(
     let get_element_input = rule_input.clone();
     java.set(
         "getElement",
-        Function::new(ctx.clone(), move |rule: String| {
-            nested_rule_values(
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>, rule: String| {
+            let node = nested_rule_values(
                 &rule,
                 &get_element_input,
                 Extraction::Nodes,
@@ -64,22 +66,24 @@ pub(super) fn install<'js>(
                 get_element_http.clone(),
             )
             .map(|values| values.into_iter().next().unwrap_or_default())
-            .map_err(rule_js_error)
+            .map_err(rule_js_error)?;
+            elements::element(&ctx, node).map_err(rule_js_error)
         }),
     )
     .map_err(js_error)?;
     let list_values = Arc::clone(variables);
     java.set(
         "getStringList",
-        Function::new(ctx.clone(), move |rule: String| {
-            nested_rule_values(
+        Function::new(ctx.clone(), move |ctx: Ctx<'js>, rule: String| {
+            let values = nested_rule_values(
                 &rule,
                 &rule_input,
                 Extraction::Values,
                 &list_values,
                 http.clone(),
             )
-            .map_err(rule_js_error)
+            .map_err(rule_js_error)?;
+            elements::string_list(&ctx, values).map_err(rule_js_error)
         }),
     )
     .map_err(js_error)?;
