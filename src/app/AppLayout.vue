@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
 import { Toaster } from '@/components/ui/sonner'
+// vue-sonner v2 ships its base stylesheet separately; without it the toasts fall
+// back to an unstyled full-width block at the bottom of the page.
+import 'vue-sonner/style.css'
 import AppRail from './AppRail.vue'
 import AppTitlebar from './AppTitlebar.vue'
 import CommandPalette from './CommandPalette.vue'
@@ -25,6 +28,6 @@ useGlobalKeys()
       </main>
     </div>
     <CommandPalette />
-    <Toaster position="bottom-right" :duration="3200" />
+    <Toaster position="bottom-right" :duration="3200" :theme="isDark ? 'dark' : 'light'" />
   </div>
 </template>
