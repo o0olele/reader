@@ -22,9 +22,9 @@ const keyword = ref('')
 const listRef = ref<HTMLElement | null>(null)
 
 /**
- * Opening the catalog should land on the chapter being read. Scroll the catalog's
- * own box (`.chapter-list` is the `overflow-y-scroll` container) instead of calling
- * `scrollIntoView`, which would also drag the reader stage along.
+ * Opening the catalog should land on the chapter being read. Scroll the list's own
+ * box (`.chapter-list-scroll` sits below the fixed tab / search header) instead of
+ * calling `scrollIntoView`, which would also drag the reader stage along.
  */
 function revealSelected() {
   void nextTick(() => {
@@ -70,18 +70,27 @@ const groups = computed(() => {
 </script>
 
 <template>
-  <aside ref="listRef" class="chapter-list">
-    <div class="reader-side-tabs">
-      <button type="button" :class="{ active: activeTab === 'catalog' }" @click="activeTab = 'catalog'">
-        <List :size="15" />目录
-      </button>
-      <button type="button" :class="{ active: activeTab === 'bookmarks' }" @click="activeTab = 'bookmarks'">
-        <Bookmark :size="15" />书签
-      </button>
+  <aside class="chapter-list">
+    <div class="chapter-list-head">
+      <div class="reader-side-tabs">
+        <button type="button" :class="{ active: activeTab === 'catalog' }" @click="activeTab = 'catalog'">
+          <List :size="15" />目录
+        </button>
+        <button type="button" :class="{ active: activeTab === 'bookmarks' }" @click="activeTab = 'bookmarks'">
+          <Bookmark :size="15" />书签
+        </button>
+      </div>
+
+      <Input
+        v-if="activeTab === 'catalog'"
+        v-model="keyword"
+        class="mb-3 h-8"
+        placeholder="搜索章节"
+        aria-label="搜索章节"
+      />
     </div>
 
-    <template v-if="activeTab === 'catalog'">
-      <Input v-model="keyword" class="mb-3 h-8" placeholder="搜索章节" aria-label="搜索章节" />
+    <div v-if="activeTab === 'catalog'" ref="listRef" class="chapter-list-scroll">
       <div v-for="group in groups" :key="group.label" class="mb-3">
         <div class="reader-toc-volume">{{ group.label }}</div>
         <button
@@ -96,9 +105,9 @@ const groups = computed(() => {
         </button>
       </div>
       <p v-if="!groups.length" class="px-2 py-6 text-center text-xs text-muted-foreground">没有匹配的章节。</p>
-    </template>
+    </div>
 
-    <div v-else class="bookmark-panel">
+    <div v-else class="bookmark-panel chapter-list-scroll">
       <button v-if="hasBookmark" type="button" class="bookmark-item" @click="emit('jump')">
         <Bookmark :size="16" />{{ selectedChapter?.title }}<span>跳转</span>
       </button>
