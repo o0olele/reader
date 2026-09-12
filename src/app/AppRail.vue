@@ -24,7 +24,7 @@ import { useShellContext } from './shellKeys'
 const route = useRoute()
 const { extended, toggle } = useRail()
 const { openPalette } = useCommandPalette()
-const { bookshelf, appVersion } = useShellContext()
+const { bookshelf } = useShellContext()
 
 const badgeCount = (item: ShellNavItem) => (item.badge === 'books' ? bookshelf.books.length : 0)
 const isActive = (item: ShellNavItem) => route.path === item.to
@@ -101,10 +101,6 @@ const itemClass = computed(() => cn('h-9', !extended.value && 'justify-center'))
           </SidebarMenuButtonChild>
         </SidebarMenuItem>
       </SidebarMenu>
-      <div v-if="extended" class="rounded-md border bg-card px-2 py-1.5 text-[11px] text-muted-foreground">
-        <div class="font-semibold text-foreground">本地书友</div>
-        <div>{{ bookshelf.books.length }} 本 · v{{ appVersion }}</div>
-      </div>
     </SidebarFooter>
   </aside>
 </template>
