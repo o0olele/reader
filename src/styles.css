@@ -349,9 +349,12 @@
     font-weight: 600;
     line-height: 0.9;
   }
+  /* 原型 `.dialog-line` (:868) 用 `padding-left: 2em` 做整段左缩进；padding 属于盒子，
+     换行后的每一行都会跟着内缩，长对话段第二行起会凭空多出 2em 空白。
+     改为与普通段落一致的首行缩进：首行位置不变，换行行回到左边距。 */
   .reader-content .reader-flow .dialog-line {
-    padding-left: 2em;
-    text-indent: 0;
+    padding-left: 0;
+    text-indent: var(--reader-text-indent, 2em);
   }
   .reader-content .reader-flow mark {
     padding: 0 2px;

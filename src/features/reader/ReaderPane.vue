@@ -58,7 +58,7 @@ const resolvedFontFamily = computed(() => {
   return stacks[props.fontFamily] ?? stacks['系统默认']
 })
 const paragraphs = computed(() => splitParagraphs(props.selectedChapter?.content ?? ''))
-/** Prototype :851–868 — first paragraph is the drop cap, quoted lines lose the indent. */
+/** Prototype :851–868 — first paragraph is the drop cap; quoted lines keep the shared first-line indent. */
 function paragraphClass(index: number) {
   return { lead: index === 0, 'dialog-line': isDialogueLine(paragraphs.value[index] ?? '') }
 }

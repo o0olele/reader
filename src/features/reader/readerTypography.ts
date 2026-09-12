@@ -14,9 +14,10 @@ export function volumeLabel(title: string): string {
 }
 
 /**
- * Prototype `.dialog-line` — spoken paragraphs lose the first-line indent and
- * gain a 2em left inset. Detection is structural (leading quote or dash), never
- * a guess about the text itself.
+ * Prototype `.dialog-line` — spoken paragraphs are tagged by a structural cue
+ * (leading quote or dash), never by a guess about the text itself. The tag no
+ * longer changes the inset: the prototype's `padding-left: 2em` also pushed
+ * every wrapped line right, so it now shares the normal first-line indent.
  */
 export function isDialogueLine(text: string): boolean {
   return /^["“「『—]/.test(text.trim())
