@@ -21,6 +21,15 @@ import {
 
 export type SourceForm = Record<string, string>
 
+/** Per-row group/order/weight edits, held by the store rather than the row: the
+ *  source list only mounts the rows near the viewport, so a row that scrolls
+ *  away must not take an unsaved edit with it. */
+export interface SourceManagementDraft {
+  group: string
+  order: number
+  weight: number
+}
+
 function emptyForm(): SourceForm {
   return {
     name: '',
@@ -58,6 +67,7 @@ function describeReport(report: SourceImportReport): string {
 /** Owns book source management: CRUD, legado import, login and connectivity tests. */
 export function useSources(report: (cause: unknown) => void, notify: (message: string) => void) {
   const sources = ref<BookSource[]>([])
+  const managementDrafts = reactive<Record<number, SourceManagementDraft>>({})
   const form = ref<SourceForm>(emptyForm())
   const saving = ref(false)
   const sourceUrl = ref('')
@@ -216,15 +226,31 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     }
   }
 
+  /** Seeds a row's draft from what is persisted; later edits stay in the store.
+   *  The draft is read back through the reactive record so the row binds to the
+   *  proxy, not to the raw object the seed created. */
+  function managementDraft(source: BookSource): SourceManagementDraft {
+    if (!managementDrafts[source.id]) {
+      managementDrafts[source.id] = {
+        group: source.source_group ?? '',
+        order: source.custom_order,
+        weight: source.weight,
+      }
+    }
+    return managementDrafts[source.id]
+  }
+
   async function saveManagement(source: BookSource) {
+    const draft = managementDraft(source)
     try {
       await updateBookSourceManagement(
         source.id,
-        source.source_group || undefined,
-        Number(source.custom_order) || 0,
-        Number(source.weight) || 0,
+        draft.group || undefined,
+        Number(draft.order) || 0,
+        Number(draft.weight) || 0,
         source.enabled_explore,
       )
+      delete managementDrafts[source.id]
       await refresh()
       notify(`${source.name} 的分组与排序已保存`)
     } catch (cause) {
@@ -324,6 +350,7 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     test,
     batchTest,
     toggle,
+    managementDraft,
     saveManagement,
     exportTo,
     login,

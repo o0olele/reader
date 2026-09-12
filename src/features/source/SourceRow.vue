@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { Globe, Loader2, MoreHorizontal } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
@@ -19,12 +18,9 @@ const props = defineProps<{ source: BookSource; query: string }>()
 const { sources } = useShellContext()
 const router = useRouter()
 
-// Local draft: `vue/no-mutating-props` — the row edits a copy and saves it back.
-const draft = reactive({
-  group: props.source.source_group ?? '',
-  order: props.source.custom_order,
-  weight: props.source.weight,
-})
+// The draft lives in the store, not the row: the list only keeps the rows near
+// the viewport mounted, so scrolling away must not drop an unsaved edit.
+const draft = sources.managementDraft(props.source)
 
 function sessionLabel(source: BookSource) {
   if (!source.access_token && !source.session_cookie) return '未认证'
@@ -37,12 +33,7 @@ function sessionLabel(source: BookSource) {
 }
 
 function saveManagement() {
-  return sources.saveManagement({
-    ...props.source,
-    source_group: draft.group || undefined,
-    custom_order: Number(draft.order) || 0,
-    weight: Number(draft.weight) || 0,
-  })
+  return sources.saveManagement(props.source)
 }
 
 async function openDebug() {
@@ -52,6 +43,7 @@ async function openDebug() {
 
 <template>
   <div
+    data-source-row
     class="grid grid-cols-[minmax(180px,1fr)_120px_64px_64px_auto_auto] items-center gap-2 rounded-md border bg-card px-3 py-2"
   >
     <div class="min-w-0">

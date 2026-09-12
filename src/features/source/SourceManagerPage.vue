@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import PageBody from '@/components/PageBody.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SourceEditorDialog from './SourceEditorDialog.vue'
-import SourceRow from './SourceRow.vue'
+import SourceList from './SourceList.vue'
 import { useShellContext } from '@/app/shellKeys'
 
 const { sources } = useShellContext()
@@ -71,8 +71,8 @@ async function exportSources() {
       @change="sources.importFromFile"
     />
 
-    <PageBody>
-      <div class="mb-4 flex flex-wrap items-center gap-2">
+    <PageBody :scroll="false">
+      <div class="mb-4 flex shrink-0 flex-wrap items-center gap-2">
         <Input v-model="keyword" class="h-8 w-56" placeholder="筛选书源" aria-label="筛选书源" />
         <Input v-model="probeQuery" class="h-8 w-40" placeholder="探测关键词" aria-label="探测关键词" />
         <form class="flex items-center gap-2" @submit.prevent="sources.importFromUrl()">
@@ -86,7 +86,7 @@ async function exportSources() {
         </form>
       </div>
 
-      <div v-if="sources.lastProbe" class="mb-4 rounded-md border bg-card p-3 text-xs">
+      <div v-if="sources.lastProbe" class="mb-4 shrink-0 rounded-md border bg-card p-3 text-xs">
         <div class="mb-1 font-semibold">{{ sources.lastProbe.source_name }} 最近一次探测</div>
         <div class="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
           <span>HTTP {{ sources.lastProbe.status }}</span>
@@ -101,7 +101,12 @@ async function exportSources() {
         <code class="mt-1 block truncate text-[11px] text-muted-foreground">{{ sources.lastProbe.request_url }}</code>
       </div>
 
-      <div v-if="sources.batchResults.length" class="mb-4 rounded-md border bg-card p-3 text-xs">
+      <!-- One line per source is a lot of nodes at 500+ sources, so the panel
+           keeps a bounded height instead of pushing the list off screen. -->
+      <div
+        v-if="sources.batchResults.length"
+        class="mb-4 max-h-32 shrink-0 overflow-y-auto rounded-md border bg-card p-3 text-xs"
+      >
         <div class="mb-1 font-semibold">
           批量验证：{{ sources.batchResults.length - badBatchResults }} 个可用 · {{ badBatchResults }} 个需处理
         </div>
@@ -122,12 +127,7 @@ async function exportSources() {
         </div>
       </div>
 
-      <div v-if="filtered.length" class="grid gap-2">
-        <SourceRow v-for="source in filtered" :key="source.id" :source="source" :query="probeQuery" />
-      </div>
-      <p v-else class="rounded-md border border-dashed p-8 text-center text-xs text-muted-foreground">
-        还没有书源。导入 legado JSON 或手动新增一个。
-      </p>
+      <SourceList :sources="filtered" :query="probeQuery" />
     </PageBody>
 
     <SourceEditorDialog v-model:open="editorOpen" />
