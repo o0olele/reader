@@ -6,7 +6,6 @@ import { useBookmark } from './useBookmark'
 import { useReaderPaging } from './useReaderPaging'
 import { isDialogueLine, splitParagraphs, volumeLabel } from './readerTypography'
 import ReaderCatalog from './ReaderCatalog.vue'
-import ReaderContentToolbar from './ReaderContentToolbar.vue'
 import ReaderPager from './ReaderPager.vue'
 
 const props = defineProps<{
@@ -38,7 +37,6 @@ const emit = defineEmits<{
 
 const { reader } = useShellContext()
 const contentRef = ref<HTMLElement | null>(null)
-const searchQuery = ref('')
 const {
   bookmark,
   busy: bookmarkBusy,
@@ -64,16 +62,8 @@ const paragraphs = computed(() => splitParagraphs(props.selectedChapter?.content
 function paragraphClass(index: number) {
   return { lead: index === 0, 'dialog-line': isDialogueLine(paragraphs.value[index] ?? '') }
 }
-const searchMatches = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase()
-  if (!query) return []
-  return paragraphs.value.reduce<number[]>((matches, paragraph, index) => {
-    if (paragraph.toLocaleLowerCase().includes(query)) matches.push(index)
-    return matches
-  }, [])
-})
 
-const { turnPage, advance, changeMode, spreadEligible, pageIndex, pageCount, chapterPercent } = useReaderPaging(
+const { turnPage, advance, spreadEligible, pageIndex, pageCount, chapterPercent } = useReaderPaging(
   contentRef,
   () => props.readerMode,
   (mode) => emit('readerMode', mode),
@@ -94,12 +84,6 @@ watch(
     })
   },
 )
-watch(searchMatches, (matches) => {
-  const index = matches[0]
-  if (index === undefined || !contentRef.value || props.readerMode !== 'scroll') return
-  const target = contentRef.value.querySelectorAll('.reader-paragraph')[index]
-  target?.scrollIntoView({ block: 'start' })
-})
 
 /** The bottom toolbar owns the bookmark button, so the state lives here. */
 defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage, advance })
@@ -119,17 +103,6 @@ defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage,
     />
 
     <div class="reader-stage">
-      <ReaderContentToolbar
-        v-model="searchQuery"
-        class="shrink-0"
-        :reader-mode="readerMode"
-        :has-bookmark="Boolean(bookmark)"
-        :busy="bookmarkBusy"
-        :loading="loading"
-        :matches="searchMatches.length"
-        @mode="changeMode"
-        @toggle-bookmark="toggleBookmark"
-      />
       <article
         v-if="selectedChapter"
         ref="contentRef"

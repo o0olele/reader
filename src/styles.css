@@ -146,21 +146,21 @@
 
 /* WebView2 can ignore layered scrollbar pseudo-element rules. Keep these
    reader-pane overrides unlayered so native arrow buttons are always removed. */
-.chapter-list::-webkit-scrollbar-button,
+.chapter-list-scroll::-webkit-scrollbar-button,
 .reader-content::-webkit-scrollbar-button,
-.chapter-list::-webkit-scrollbar-button:vertical,
+.chapter-list-scroll::-webkit-scrollbar-button:vertical,
 .reader-content::-webkit-scrollbar-button:vertical,
 .reader-content::-webkit-scrollbar-button:horizontal,
-.chapter-list::-webkit-scrollbar-button:single-button,
+.chapter-list-scroll::-webkit-scrollbar-button:single-button,
 .reader-content::-webkit-scrollbar-button:single-button,
-.chapter-list::-webkit-scrollbar-button:vertical:decrement,
-.chapter-list::-webkit-scrollbar-button:vertical:increment,
+.chapter-list-scroll::-webkit-scrollbar-button:vertical:decrement,
+.chapter-list-scroll::-webkit-scrollbar-button:vertical:increment,
 .reader-content::-webkit-scrollbar-button:vertical:decrement,
 .reader-content::-webkit-scrollbar-button:vertical:increment,
 .reader-content::-webkit-scrollbar-button:horizontal:decrement,
 .reader-content::-webkit-scrollbar-button:horizontal:increment,
-.chapter-list::-webkit-scrollbar-button:start:decrement,
-.chapter-list::-webkit-scrollbar-button:end:increment,
+.chapter-list-scroll::-webkit-scrollbar-button:start:decrement,
+.chapter-list-scroll::-webkit-scrollbar-button:end:increment,
 .reader-content::-webkit-scrollbar-button:start:decrement,
 .reader-content::-webkit-scrollbar-button:end:increment {
   display: none !important;
@@ -238,8 +238,15 @@
   .reader-stage {
     @apply flex min-w-0 flex-1 flex-col;
   }
+  /* 目录侧栏：tab 栏与搜索框固定在顶部，只有 `.chapter-list-scroll` 滚动 */
   .chapter-list {
-    @apply w-[288px] shrink-0 overflow-y-scroll border-r bg-card px-5 py-5;
+    @apply flex w-[288px] shrink-0 flex-col overflow-hidden border-r bg-card py-5;
+  }
+  .chapter-list-head {
+    @apply shrink-0 px-5;
+  }
+  .chapter-list-scroll {
+    @apply min-h-0 flex-1 overflow-y-scroll px-5;
     scrollbar-gutter: stable both-edges;
   }
   .reader-side-tabs {
@@ -390,23 +397,8 @@
     contain-intrinsic-size: auto 3.5em;
   }
 
-  .reader-toolbar {
-    @apply flex shrink-0 flex-wrap items-center justify-end gap-2 border-b bg-card px-4 py-1.5 text-xs;
-  }
-  .reader-toolbar button,
-  .reader-toolbar input {
-    @apply rounded border bg-card px-2 py-1 text-xs text-foreground;
-  }
-  .reader-mode-toggle,
-  .reader-page-actions,
-  .reader-tools {
+  .reader-page-actions {
     @apply flex items-center gap-1.5;
-  }
-  .reader-mode-toggle button.active {
-    @apply bg-accent font-medium;
-  }
-  .reader-search-count {
-    @apply text-muted-foreground;
   }
   /* 原型 `.reader__pager` (:887–894) */
   .reader-pager {
