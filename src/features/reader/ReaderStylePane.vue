@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useShellContext } from '@/app/shellKeys'
+import { defaultFullJustification } from './readerTypography'
 
 const { reader } = useShellContext()
 const THEMES = [
@@ -22,7 +23,7 @@ function reset() {
   reader.pageMargin = 32
   reader.paragraphSpacing = 1.2
   reader.textIndent = 2
-  reader.justify = false
+  reader.justify = defaultFullJustification(reader.selectedChapter?.content)
   reader.brightness = 1
   reader.eyeCare = false
   reader.pageAnimation = 'slide'

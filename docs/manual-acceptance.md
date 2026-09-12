@@ -187,6 +187,8 @@ Set-Content -Path "$env:USERPROFILE\Desktop\百万字单章.txt" -Encoding UTF8 
 | C7.2 | 观察普通段落 | 首行缩进 2em | | |
 | C7.3 | 切换四种背景（浅色/护眼/深色/黑夜） | 文字与背景对比度都够；分栏竖线可见 | | |
 | C7.4 | 调亮度 + 开护眼 | 亮度生效；护眼叠加 sepia | | |
+| C7.5 | 删掉 localStorage 的 `reader-justify` 后分别打开中文书与英文书 | 中文书默认**开**两端对齐（行尾禁则留白被摊进字距），英文书默认关；拨过开关后一律以开关为准 | | |
+| C7.6 | 在 macOS / Linux（WebKit）上看行尾的 `。”` | 标点悬挂到版心外，前一个字不再被挤到下一行；Windows（WebView2）不生效，属已知平台差异 | | |
 
 ### C8 · 沉浸模式与其余控件
 

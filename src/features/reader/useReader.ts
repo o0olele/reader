@@ -16,6 +16,7 @@ import {
   type Chapter,
 } from '../../services/api'
 import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
+import { defaultFullJustification } from './readerTypography'
 
 const PROGRESS_DEBOUNCE_MS = 350
 const READING_TIME_TICK_MS = 15_000
@@ -56,7 +57,10 @@ export function useReader(report: (cause: unknown) => void) {
   const readerMode = ref<'scroll' | 'paged'>((localStorage.getItem('reader-mode') as 'scroll' | 'paged') ?? 'scroll')
   const paragraphSpacing = ref(Number(localStorage.getItem('reader-paragraph-spacing') ?? '1.2'))
   const textIndent = ref(Number(localStorage.getItem('reader-text-indent') ?? '2'))
-  const justify = ref(localStorage.getItem('reader-justify') === '1')
+  /** 两端对齐：用户拨过开关（localStorage 里有值）就听用户的，否则按正文/系统语言
+   *  给默认值 —— 中文默认开，好把行尾禁则留下的空白摊进字距里。 */
+  const storedJustify = localStorage.getItem('reader-justify')
+  const justify = ref(storedJustify === null ? defaultFullJustification() : storedJustify === '1')
   const pageAnimation = ref<ReaderPageAnimation>(
     (localStorage.getItem('reader-page-animation') as ReaderPageAnimation) ?? 'slide',
   )
@@ -230,6 +234,8 @@ export function useReader(report: (cause: unknown) => void) {
       const processed = await readChapter(chapter.id)
       if (request === chapterRequest && selectedChapter.value?.id === chapter.id) {
         selectedChapter.value = processed
+        // 正文到手才谈得上"按正文语言定默认"；用户拨过开关（storedJustify 有值）就不插手。
+        if (storedJustify === null) justify.value = defaultFullJustification(processed.content)
         warmNeighbourChapters(chapter.id)
       }
     } catch (cause) {

@@ -294,6 +294,9 @@
     background: var(--reader-paper);
     color: var(--reader-ink);
     filter: brightness(var(--reader-brightness, 1));
+    /* 行尾标点悬挂（该属性可继承，写在容器上一次即可）：放不下的 。” 挂到版心外，
+       不再把前一个字一起挤到下一行。目前只有 WebKit 生效，Chromium/WebView2 会忽略。 */
+    hanging-punctuation: allow-end last;
   }
   .reader-content.eye-care {
     filter: brightness(var(--reader-brightness, 1)) sepia(0.22);

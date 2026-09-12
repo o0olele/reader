@@ -23,6 +23,26 @@ export function isDialogueLine(text: string): boolean {
   return /^["“「『—]/.test(text.trim())
 }
 
+/** Han / kana / Hangul — the scripts whose lines break by 禁则: a closing
+ *  punctuation may not start a line, so the unit that carries it moves down and
+ *  leaves a blank at the end of the previous line. */
+const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+
+/** The runtime locale is CJK — the fallback before any chapter text is loaded. */
+export function isCJKLocale(): boolean {
+  return /^(zh|ja|ko)/i.test(navigator.language ?? '')
+}
+
+/**
+ * Default of the 两端对齐 switch, following the reference reader: CJK text is
+ * justified because justification spreads that ragged edge into the character
+ * spacing, while everything else only follows the locale. An explicit
+ * `reader-justify` entry in localStorage always wins over this.
+ */
+export function defaultFullJustification(text = ''): boolean {
+  return CJK_SCRIPT.test(text) || isCJKLocale()
+}
+
 /** Paragraph list of a chapter body; blank lines are dropped, not rendered. */
 export function splitParagraphs(content: string): string[] {
   return content
