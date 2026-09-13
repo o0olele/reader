@@ -1,0 +1,210 @@
+# =============================================================================
+# Reader Desktop —— GitLab CI
+#
+# 触发：向默认分支（main）推送 → 构建 Windows 版 → 打 tag 并发布 GitLab Release
+# 试跑：Web UI 上的 "Run pipeline" 只跑构建、不发布，方便合并前先验证
+#
+# 编写时依据的项目事实：
+#   * src-tauri/tauri.conf.json 里的 version 是版本号唯一来源
+#   * 同文件 bundle.active = false，所以只产出裸 exe，不做安装包
+#   * 包管理器用 npm（package-lock.json 已入库，tauri.conf.json 的
+#     beforeBuildCommand 也是 npm run build）
+#   * Cargo 包名 reader-desktop = 产物文件名
+# =============================================================================
+
+stages:
+  - build
+  - release
+
+variables:
+  # 产物名 = Cargo 包名（见 src-tauri/Cargo.toml）
+  APP_BINARY: "reader-desktop.exe"
+  # 缓存目录放在项目内，才能被 GitLab cache 收集
+  npm_config_cache: "$CI_PROJECT_DIR/.npm-cache"
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo-home"
+  CARGO_TERM_COLOR: "always"
+  # GitLab 托管 Windows Runner 的镜像自带 Node.js 21.7.3，而 Vite 7 要求
+  # 20.19+ / 22.12+（21.x 不在范围内，会被 Vite 直接拒绝），所以下面另装
+  # 一份官方 LTS Node，不去动系统里那份。可写主版本号（"22"）或精确版本
+  # （"22.23.2"）。
+  NODE_VERSION: "22"
+
+default:
+  interruptible: true
+
+workflow:
+  rules:
+    # 手工打 tag 和 MR 都不触发流水线：Release 由 main 的流水线自己去打 tag
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    # 主角：默认分支（main）有推送就构建 + 发布
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    # 兜底：Web UI 手动 Run pipeline（任意分支）只跑构建，方便先验证
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - when: never
+
+# -----------------------------------------------------------------------------
+# 1. Windows 构建
+# -----------------------------------------------------------------------------
+build-windows:
+  stage: build
+  tags:
+    - saas-windows-medium-amd64
+  timeout: 2h
+  # Windows 托管 Runner 是 beta，偶发机器故障/排队超时；重试一次比重新推代码省事
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  cache:
+    key: reader-desktop-windows
+    paths:
+      - .npm-cache/
+      - .cargo-home/registry/
+      - .cargo-home/git/
+  script:
+    - |
+      $ErrorActionPreference = "Stop"
+      $ProgressPreference    = "SilentlyContinue"
+      # Runner 用的是 Windows PowerShell 5.1，显式钉住 TLS 1.2 以免拉清单时握手失败
+      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+      Write-Host "===== 1/4 准备 Node.js ====="
+      $index = Invoke-RestMethod "https://nodejs.org/dist/index.json"
+      $want  = $env:NODE_VERSION
+      if ($want -match '^\d+$') {
+        $rel = $index | Where-Object { $_.version -like "v$want.*" } | Select-Object -First 1
+      } else {
+        $rel = $index | Where-Object { $_.version -eq "v$want" } | Select-Object -First 1
+      }
+      if (-not $rel) { throw "nodejs.org 上没有匹配 NODE_VERSION=$want 的版本" }
+
+      $ver     = $rel.version
+      $zip     = Join-Path $env:TEMP "node-$ver.zip"
+      $nodeDir = Join-Path $env:TEMP "node-$ver-win-x64"
+      Write-Host "使用 Node.js $ver"
+
+      curl.exe -sSfL -o $zip "https://nodejs.org/dist/$ver/node-$ver-win-x64.zip"
+      if ($LASTEXITCODE -ne 0) { throw "下载 Node.js 失败（curl 退出码 $LASTEXITCODE）" }
+      if (Test-Path $nodeDir) { Remove-Item $nodeDir -Recurse -Force }
+      Expand-Archive -Path $zip -DestinationPath $env:TEMP -Force
+
+      $env:PATH = "$nodeDir;$env:PATH"
+      node --version
+      npm --version
+    - |
+      Write-Host "===== 2/4 准备 Rust 工具链 ====="
+      $rustup = Join-Path $env:TEMP "rustup-init.exe"
+      curl.exe -sSfL -o $rustup "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
+      if ($LASTEXITCODE -ne 0) { throw "下载 rustup-init 失败（curl 退出码 $LASTEXITCODE）" }
+
+      & $rustup -y --no-modify-path --profile minimal --default-toolchain stable
+      if ($LASTEXITCODE -ne 0) { throw "rustup 安装失败（退出码 $LASTEXITCODE）" }
+
+      $env:PATH = "$env:CARGO_HOME\bin;$env:PATH"
+      rustc -vV
+      cargo -vV
+    - |
+      Write-Host "===== 3/4 安装前端依赖 ====="
+      npm ci --no-audit --no-fund
+      if ($LASTEXITCODE -ne 0) { throw "npm ci 失败（退出码 $LASTEXITCODE）" }
+    - |
+      Write-Host "===== 4/4 构建 Tauri ====="
+      # bundle.active 已经是 false，这里再用 --no-bundle 把「只出裸 exe」写死，
+      # 免得以后有人打开 bundle 之后 CI 悄悄开始产安装包。
+      npm run tauri -- build --ci --no-bundle
+      if ($LASTEXITCODE -ne 0) { throw "tauri build 失败（退出码 $LASTEXITCODE）" }
+    - |
+      Write-Host "===== 收集产物 / 计算版本号 ====="
+      $built = Join-Path $env:CI_PROJECT_DIR "src-tauri\target\release\$env:APP_BINARY"
+      if (-not (Test-Path $built)) { throw "没有找到构建产物：$built" }
+
+      # 复制到仓库根目录，让 Release 的资源下载地址干净（不带子目录）
+      Copy-Item $built (Join-Path $env:CI_PROJECT_DIR $env:APP_BINARY) -Force
+      $sizeMb = [math]::Round((Get-Item $built).Length / 1MB, 1)
+      Write-Host "$env:APP_BINARY = $sizeMb MB"
+
+      $conf = Get-Content (Join-Path $env:CI_PROJECT_DIR "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json
+      $tag  = "v$($conf.version)-build.$env:CI_PIPELINE_IID"
+      Write-Host "Release tag = $tag"
+
+      # 用 dotenv 交给 release 阶段；写 ASCII 以免 BOM 影响解析
+      @(
+        "TAG=$tag"
+        "APP_VERSION=$($conf.version)"
+        "EXE_SIZE_MB=$sizeMb"
+        "BUILD_JOB_ID=$env:CI_JOB_ID"
+      ) | Set-Content -Path (Join-Path $env:CI_PROJECT_DIR "build.env") -Encoding ASCII
+  artifacts:
+    name: "reader-desktop-windows-$CI_PIPELINE_IID"
+    paths:
+      - reader-desktop.exe
+    reports:
+      dotenv: build.env
+    # 裸 exe 是 Release 页面上唯一的下载入口，别让它 30 天后过期
+    expire_in: never
+
+# -----------------------------------------------------------------------------
+# 2. 打 tag + 发布 Release
+#
+# 这一步不需要 Windows，放在官方 glab 镜像上跑最省事：镜像里的 glab 版本足够新
+# （托管 Windows 镜像自带的 glab 是 1.53.0，低于 release 关键字要求的 1.58.0）。
+# 如果这个仓库没有可用的 Docker Runner，把 image 去掉、tags 换成 Windows，
+# 并在 Windows 那步把 glab 升到 1.58.0+ 即可。
+# -----------------------------------------------------------------------------
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  # 别让新推送把跑到一半的发布掐掉
+  interruptible: false
+  needs:
+    - job: build-windows
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    # needs 会把构建产物下载到工作目录，顺手确认产物真的传上来了
+    - ls -lh "reader-desktop.exe"
+    - echo "准备创建 Release $TAG（tag 会打在 $CI_COMMIT_SHORT_SHA 上）"
+  release:
+    name: "Reader Desktop $TAG"
+    tag_name: "$TAG"
+    # tag 由本流水线创建，必须给 ref
+    ref: "$CI_COMMIT_SHA"
+    description: |
+      Windows x64 单文件可执行程序，免安装，双击即可运行。
+
+      - 应用版本：$APP_VERSION
+      - 提交：`$CI_COMMIT_SHORT_SHA`
+      - 流水线：[#$CI_PIPELINE_IID]($CI_PIPELINE_URL)
+      - 产物大小：约 $EXE_SIZE_MB MB
+
+      在下方 **Assets** 中下载 `reader-desktop.exe`。
+    assets:
+      links:
+        - name: "reader-desktop.exe（Windows x64）"
+          # 按 job ID 取产物：GitLab 的 ref 形式下载地址不支持 SHA 引用
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$BUILD_JOB_ID/artifacts/reader-desktop.exe"
+          link_type: "package"
+          direct_asset_path: "/reader-desktop.exe"
+
+# =============================================================================
+# 补充说明
+#
+# 1) 免费额度：GitLab.com Free 每个命名空间每月 400 compute minutes。
+#    Windows medium Runner 计费系数是 1，但一台 2 vCPU 冷编译这个依赖树
+#    （sqlx / reqwest / rquickjs / scraper…）通常要 20~40 分钟，也就是每月
+#    十几次构建。想省额度就少推 main，或者把验证放到手动 Run pipeline 上。
+#    另：裸 exe 约 26 MB 且 expire_in: never，注意 10 GiB 命名空间存储上限。
+#
+# 2) 以后想改出安装包：把 src-tauri/tauri.conf.json 改成
+#      "bundle": { "active": true, "targets": ["nsis"] }
+#    然后去掉构建命令里的 --no-bundle，并把 artifacts:paths 换成
+#      - src-tauri/target/release/bundle/nsis/*.exe
+#
+# 3) 为什么产物用 Cargo 包名：Tauri v2 在 bundle.active = false 时不做重命名，
+#    cargo 直接产出 src-tauri/target/release/reader-desktop.exe。
+# =============================================================================
