@@ -62,3 +62,23 @@ export function restoreReadingLocator(element: HTMLElement, mode: 'scroll' | 'pa
   const target = element.scrollLeft + fragment.left - viewport.left
   element.scrollLeft = Math.round(target / pageStep(element)) * pageStep(element)
 }
+
+/**
+ * Brings one paragraph to the start of the reading viewport — a 正文搜索 hit is
+ * addressed by element, so it cannot go through {@link restoreReadingLocator},
+ * which works from an index and a ratio.
+ */
+export function revealParagraph(element: HTMLElement, paragraph: HTMLElement, mode: 'scroll' | 'paged') {
+  const viewport = element.getBoundingClientRect()
+
+  if (mode === 'scroll') {
+    element.scrollTop += paragraph.getBoundingClientRect().top - viewport.top
+    return
+  }
+
+  const fragment = paragraph.getClientRects()[0]
+  if (!fragment) return
+  const step = pageStep(element)
+  const target = element.scrollLeft + fragment.left - viewport.left
+  element.scrollLeft = Math.round(target / step) * step
+}

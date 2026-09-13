@@ -3,9 +3,11 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useShellContext } from '@/app/shellKeys'
 import type { Chapter } from '../../services/api'
 import { useBookmark } from './useBookmark'
+import { useContentHighlight } from './useContentHighlight'
 import { useReaderPaging } from './useReaderPaging'
 import { isDialogueLine, splitParagraphs, volumeLabel } from './readerTypography'
 import ReaderCatalog from './ReaderCatalog.vue'
+import ReaderHighlight from './ReaderHighlight.vue'
 import ReaderPager from './ReaderPager.vue'
 
 const props = defineProps<{
@@ -70,6 +72,25 @@ const { turnPage, advance, spreadEligible, pageIndex, pageCount, chapterPercent 
   () => emit('scroll'),
 )
 
+/** 正文搜索 lands through here: switch chapter, mark the hit, scroll to it. */
+const {
+  highlight: highlightRange,
+  titleRange,
+  paragraphRange,
+  busy: highlightBusy,
+  jumpToHit,
+} = useContentHighlight(
+  contentRef,
+  () => props.selectedChapter?.id,
+  // `paged` only scrolls sideways in the two-column spread; below the prototype's
+  // breakpoints that same mode falls back to a vertical single column.
+  () => (props.readerMode === 'paged' && spreadEligible.value ? 'paged' : 'scroll'),
+  async (chapterId) => {
+    const chapter = props.chapters.find((item) => item.id === chapterId)
+    if (chapter) await reader.selectChapter(chapter)
+  },
+)
+
 onMounted(() => {
   emit('readerContent', contentRef.value)
 })
@@ -79,6 +100,9 @@ watch(
   () => {
     void nextTick(() => {
       if (!contentRef.value) return
+      // A jump owns the reading position: it is either still running or has
+      // already marked its hit. Only a plain chapter change rewinds to the top.
+      if (highlightBusy.value || highlightRange.value) return
       contentRef.value.scrollTop = 0
       contentRef.value.scrollLeft = 0
     })
@@ -86,7 +110,7 @@ watch(
 )
 
 /** The bottom toolbar owns the bookmark button, so the state lives here. */
-defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage, advance })
+defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage, advance, jumpToHit })
 </script>
 
 <template>
@@ -130,7 +154,9 @@ defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage,
         </button>
         <div class="reader-flow">
           <div class="chapter-eyebrow">{{ volumeLabel(selectedChapter.title) }}</div>
-          <h2 class="reader-title">{{ selectedChapter.title }}</h2>
+          <h2 class="reader-title">
+            <ReaderHighlight :text="selectedChapter.title" :offset="titleRange?.offset" :length="titleRange?.length" />
+          </h2>
           <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
           <p v-if="loading" class="reader-loading">正在获取正文…</p>
           <template v-else>
@@ -140,7 +166,11 @@ defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage,
               :class="['reader-paragraph', paragraphClass(index)]"
               :data-reader-index="index"
             >
-              {{ paragraph }}
+              <ReaderHighlight
+                :text="paragraph"
+                :offset="paragraphRange(index)?.offset"
+                :length="paragraphRange(index)?.length"
+              />
             </p>
           </template>
         </div>

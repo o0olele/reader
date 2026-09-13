@@ -329,6 +329,12 @@ shadcn-vue 当前版本原生支持 Tailwind v4 的 `@theme` / `@theme inline`�
 
 按纪律 F0：**听书 tab、AI tab、翻译工具、文本处理工具 —— 渲染为标注了缺失能力的未接入态。**
 
+> **实现偏差（2026 记录）**：原型把搜索框放在 topbar（「在本章搜索」），本节按 legado 的
+> `SearchContentRepository` 实现的是**全书正文搜索**（只扫已缓存正文的章节），入口是 bottom bar
+> 的「正文搜索」，界面是右侧 320px 面板（与阅读面板同槽位）：命中列表 + 进度 + 正则/仅本章开关，
+> 点结果跳章并高亮。topbar 的章内搜索框未实现，避免与全书搜索两套输入。
+> 真机验收见 `docs/manual-acceptance.md` §C11，后端 10 条单测：`cargo test reader_service::search`。
+
 ---
 
 ## 5. 排期

@@ -6,6 +6,7 @@ export type AppEvent =
   | 'download-progress'
   | 'download-completed'
   | 'download-failed'
+  | 'search-content-progress'
   | 'source-test-progress'
 
 type Handler = (payload?: unknown) => void

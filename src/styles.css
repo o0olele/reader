@@ -287,6 +287,69 @@
     @apply px-2 py-6 text-center text-xs text-muted-foreground;
   }
 
+  /* 正文搜索面板（原型 `.reader__searchbox` :797–803 的侧栏化版本） */
+  .reader-search {
+    @apply flex w-[320px] shrink-0 flex-col overflow-hidden border-l bg-card;
+  }
+  .reader-search-head {
+    @apply flex items-center justify-between px-4 pt-4;
+  }
+  .reader-search-box {
+    @apply mx-4 mt-3 flex h-9 items-center gap-2 rounded-md border px-2.5;
+  }
+  /* 原型 `.reader__searchbox input` (:802)：输入框自己不带边框，外框由容器给 */
+  .reader-search-input {
+    @apply h-full min-w-0 flex-1 border-0 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground;
+  }
+  .reader-search-input::-webkit-search-cancel-button {
+    display: none;
+  }
+  .reader-search-meta {
+    @apply mx-4 mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground;
+  }
+  .reader-search-count {
+    @apply min-w-0 flex-1 truncate;
+  }
+  .search-toggle {
+    @apply flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition hover:bg-accent disabled:opacity-40;
+  }
+  .search-toggle.active {
+    @apply border-primary bg-accent font-medium text-foreground;
+  }
+  .reader-search-empty {
+    @apply px-4 py-8 text-center text-xs text-muted-foreground;
+  }
+  .reader-search-list {
+    @apply mt-2 min-h-0 flex-1 overflow-y-scroll px-3;
+  }
+  .reader-search-foot {
+    @apply shrink-0 border-t px-4 py-2 text-[11px] text-muted-foreground;
+  }
+  .search-hit {
+    @apply mb-2 flex w-full flex-col gap-1 rounded-lg border border-transparent bg-muted/60 px-3 py-2.5 text-left transition hover:border-primary/40;
+  }
+  .search-hit.current {
+    @apply border-primary/60 bg-accent;
+  }
+  .search-hit-head {
+    @apply flex items-center gap-1.5 text-[11px] text-muted-foreground;
+  }
+  .search-hit-title {
+    @apply min-w-0 flex-1 truncate font-medium text-foreground;
+  }
+  .search-hit-tag {
+    @apply shrink-0 rounded bg-secondary px-1 py-px text-[10px] text-secondary-foreground;
+  }
+  .search-hit-percent {
+    @apply shrink-0 tabular-nums;
+  }
+  .search-hit-snippet {
+    @apply text-[12px] leading-relaxed text-muted-foreground;
+  }
+  .search-hit-snippet mark {
+    @apply rounded-sm bg-primary/25 px-0.5 text-inherit;
+  }
+
   .reader-content {
     @apply min-h-0 min-w-0 flex-1 overflow-y-auto pb-20 pt-12 outline-none scroll-smooth;
     padding-inline: var(--reader-margin, 32px);
@@ -364,6 +427,10 @@
     border-radius: 2px;
     background: linear-gradient(to top, color-mix(in srgb, var(--primary) 30%, transparent) 42%, transparent 42%);
     color: inherit;
+  }
+  /* 正文搜索命中：比普通标黄更实，翻页过去一眼能看到落点 */
+  .reader-content .reader-flow mark.reader-hit {
+    background: color-mix(in srgb, var(--primary) 42%, transparent);
   }
   .reader-content.mode-paged {
     @apply overflow-x-auto overflow-y-hidden pt-6 pb-6;
