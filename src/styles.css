@@ -324,8 +324,8 @@
     @apply text-center;
   }
   .reader-content.theme-sepia {
-    background: oklch(0.95 0.03 85);
-    color: oklch(0.42 0.03 60);
+    background: oklch(0.95 0.03 70);
+    color: oklch(0.42 0.03 50);
   }
   .reader-content.theme-dark {
     background: oklch(0.27 0.02 265);
