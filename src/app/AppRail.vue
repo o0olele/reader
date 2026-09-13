@@ -36,8 +36,10 @@ const itemClass = computed(() => cn('h-9', !extended.value && 'justify-center'))
     class="flex shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] duration-150 ease-out"
     :style="{ width: extended ? 'var(--rail-w-ext)' : 'var(--rail-w)' }"
   >
-    <SidebarHeader class="gap-2 p-2">
-      <div class="flex h-9 items-center gap-1.5">
+    <SidebarHeader :class="cn('gap-2', extended ? 'p-2' : 'p-1')">
+      <!-- 折叠态：与下方菜单项复用同一 primitive / 同一栅格（p-1 + h-9 + w-full），
+           否则 32px 的 ghost 方块和 48×36 的菜单胶囊会混排。 -->
+      <div v-if="extended" class="flex h-9 items-center gap-1.5">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -47,8 +49,34 @@ const itemClass = computed(() => cn('h-9', !extended.value && 'justify-center'))
         >
           <Menu />
         </Button>
-        <span v-if="extended" class="truncate text-[13px] font-semibold">Legado</span>
+        <span class="truncate text-[13px] font-semibold">Legado</span>
       </div>
+
+      <SidebarMenu v-else class="gap-1">
+        <SidebarMenuItem>
+          <SidebarMenuButtonChild
+            type="button"
+            :class="itemClass"
+            title="展开 / 收起导航 (Ctrl+B)"
+            aria-label="展开或收起导航"
+            @click="toggle"
+          >
+            <Menu />
+          </SidebarMenuButtonChild>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButtonChild
+            type="button"
+            :class="itemClass"
+            aria-label="全局搜索"
+            title="全局搜索 (Ctrl+K)"
+            @click="openPalette"
+          >
+            <Search />
+          </SidebarMenuButtonChild>
+        </SidebarMenuItem>
+      </SidebarMenu>
+
       <button
         v-if="extended"
         type="button"
@@ -59,16 +87,6 @@ const itemClass = computed(() => cn('h-9', !extended.value && 'justify-center'))
         <span class="flex-1 truncate font-semibold text-foreground">搜索书籍、书源</span>
         <kbd class="rounded border bg-background px-1 text-[10px] text-muted-foreground">Ctrl K</kbd>
       </button>
-      <Button
-        v-else
-        variant="ghost"
-        size="icon-sm"
-        aria-label="全局搜索"
-        title="全局搜索 (Ctrl+K)"
-        @click="openPalette"
-      >
-        <Search />
-      </Button>
     </SidebarHeader>
 
     <SidebarContent>
