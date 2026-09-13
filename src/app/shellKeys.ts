@@ -2,7 +2,7 @@ import type { InjectionKey, Ref } from 'vue'
 import { inject } from 'vue'
 import type { Book } from '../services/api'
 import type { useBookshelf } from '../features/bookshelf/useBookshelf'
-import type { useReader } from '../features/reader/useReader'
+import type { ReaderLocation, useReader } from '../features/reader/useReader'
 import type { useSearch } from '../features/search/useSearch'
 import type { useSettings } from '../features/settings/useSettings'
 import type { useSourceDebug } from '../features/source/useSourceDebug'
@@ -27,7 +27,7 @@ export interface ShellContext {
   settings: ReturnType<typeof useSettings>
   sources: ReturnType<typeof useSources>
   sourceDebug: ReturnType<typeof useSourceDebug>
-  openBook: (book: Book) => Promise<void>
+  openBook: (book: Book, location?: ReaderLocation) => Promise<void>
 }
 
 export const shellKey: InjectionKey<ShellContext> = Symbol('shell')

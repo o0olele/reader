@@ -4,10 +4,12 @@ mod cache;
 mod online;
 mod prefetch;
 mod processing;
+mod search;
 #[cfg(test)]
 mod processing_tests;
 use cache::memory_cache;
 pub(crate) use prefetch::cancel_prefetch;
+pub(crate) use search::cancel_search_content;
 
 use crate::{
     domain::{Chapter, ReadingProgress, ReadingRecord, ReadingStats},

@@ -16,6 +16,7 @@ import {
   type Chapter,
 } from '../../services/api'
 import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
+import { defaultFullJustification } from './readerTypography'
 
 const PROGRESS_DEBOUNCE_MS = 350
 const READING_TIME_TICK_MS = 15_000
@@ -29,6 +30,17 @@ function chapterKey(title: string): string {
     .toLocaleLowerCase()
     .replace(/^第[0-9零一二三四五六七八九十百千万两]+[章节卷回集部篇]\s*/u, '')
     .replace(/[\s\p{P}\p{S}]/gu, '')
+}
+
+/**
+ * An explicit "take me here" request: the reader opens the book on this
+ * chapter and restores the saved offset instead of the reading progress. The
+ * 书签 page and the `#/read/<id>?chapter=&offset=&mode=` deep link both use it.
+ */
+export interface ReaderLocation {
+  chapterId: number
+  offset: number
+  mode?: 'scroll' | 'paged'
 }
 
 /** Owns the open book: its catalog, the current chapter and reading progress. */
@@ -56,7 +68,10 @@ export function useReader(report: (cause: unknown) => void) {
   const readerMode = ref<'scroll' | 'paged'>((localStorage.getItem('reader-mode') as 'scroll' | 'paged') ?? 'scroll')
   const paragraphSpacing = ref(Number(localStorage.getItem('reader-paragraph-spacing') ?? '1.2'))
   const textIndent = ref(Number(localStorage.getItem('reader-text-indent') ?? '2'))
-  const justify = ref(localStorage.getItem('reader-justify') === '1')
+  /** 两端对齐：用户拨过开关（localStorage 里有值）就听用户的，否则按正文/系统语言
+   *  给默认值 —— 中文默认开，好把行尾禁则留下的空白摊进字距里。 */
+  const storedJustify = localStorage.getItem('reader-justify')
+  const justify = ref(storedJustify === null ? defaultFullJustification() : storedJustify === '1')
   const pageAnimation = ref<ReaderPageAnimation>(
     (localStorage.getItem('reader-page-animation') as ReaderPageAnimation) ?? 'slide',
   )
@@ -123,7 +138,7 @@ export function useReader(report: (cause: unknown) => void) {
 
   const isOnline = (book: Book) => book.source_id !== undefined && book.source_id !== null
 
-  async function openBook(book: Book) {
+  async function openBook(book: Book, location?: ReaderLocation) {
     await stopReadingTimer()
     selectedBook.value = book
     startReadingTimer()
@@ -138,12 +153,17 @@ export function useReader(report: (cause: unknown) => void) {
       if (!chapters.value.length && isOnline(book)) {
         await loadCatalog()
       }
-      const progress = await getReadingProgress(book.id).catch(() => null)
-      selectedChapter.value = chapters.value.find((chapter) => chapter.id === progress?.chapter_id) ?? chapters.value[0]
+      // A bookmark outranks the saved progress: it is where the reader asked to go.
+      const progress = location ? null : await getReadingProgress(book.id).catch(() => null)
+      selectedChapter.value =
+        (location
+          ? chapters.value.find((chapter) => chapter.id === location.chapterId)
+          : chapters.value.find((chapter) => chapter.id === progress?.chapter_id)) ?? chapters.value[0]
       lastReadChapterId.value = progress?.chapter_id ?? selectedChapter.value?.id
       await loadChapterContent(selectedChapter.value)
       await nextTick()
-      if (readerContent.value && progress && selectedChapter.value?.id === progress.chapter_id) {
+      if (location) await applyLocation(location)
+      else if (readerContent.value && progress && selectedChapter.value?.id === progress.chapter_id) {
         if (progress.anchor_index >= 0) {
           restoreReadingLocator(readerContent.value, readerMode.value, {
             index: progress.anchor_index,
@@ -155,6 +175,29 @@ export function useReader(report: (cause: unknown) => void) {
     } catch (cause) {
       report(cause)
     }
+  }
+
+  /** Puts the content box at a bookmark offset; its chapter must be loaded. */
+  async function applyLocation(location: ReaderLocation) {
+    if (selectedChapter.value?.id !== location.chapterId) return
+    if (location.mode) readerMode.value = location.mode
+    await nextTick()
+    const element = readerContent.value
+    if (!element) return
+    if (readerMode.value === 'paged') element.scrollLeft = location.offset
+    else element.scrollTop = location.offset
+  }
+
+  /**
+   * Jumps a book that is already open. Returns `false` when the catalog does
+   * not hold that chapter, so the caller can fall back to `openBook`.
+   */
+  async function focusLocation(location: ReaderLocation): Promise<boolean> {
+    const chapter = chapters.value.find((item) => item.id === location.chapterId)
+    if (!chapter) return false
+    await selectChapter(chapter)
+    await applyLocation(location)
+    return true
   }
 
   async function loadCatalog() {
@@ -230,6 +273,8 @@ export function useReader(report: (cause: unknown) => void) {
       const processed = await readChapter(chapter.id)
       if (request === chapterRequest && selectedChapter.value?.id === chapter.id) {
         selectedChapter.value = processed
+        // 正文到手才谈得上"按正文语言定默认"；用户拨过开关（storedJustify 有值）就不插手。
+        if (storedJustify === null) justify.value = defaultFullJustification(processed.content)
         warmNeighbourChapters(chapter.id)
       }
     } catch (cause) {
@@ -315,6 +360,7 @@ export function useReader(report: (cause: unknown) => void) {
     brightness,
     eyeCare,
     openBook,
+    focusLocation,
     refreshCatalogForBook,
     switchSource,
     handleCatalogUpdated,

@@ -2,7 +2,7 @@ import { onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import packageJson from '../../package.json'
 import { getErrorMessage, healthCheck, type Book } from '../services/api'
 import { useBookshelf } from '../features/bookshelf/useBookshelf'
-import { useReader } from '../features/reader/useReader'
+import { useReader, type ReaderLocation } from '../features/reader/useReader'
 import { useSearch } from '../features/search/useSearch'
 import { useSettings } from '../features/settings/useSettings'
 import { useSourceDebug } from '../features/source/useSourceDebug'
@@ -28,7 +28,7 @@ export function useShell(): ShellContext {
   const sourceDebug = useSourceDebug(report, notify, sources)
   const search = useSearch(report, (book) => bookshelf.upsert(book))
 
-  const openBook = (book: Book) => reader.openBook(book)
+  const openBook = (book: Book, location?: ReaderLocation) => reader.openBook(book, location)
 
   const context: ShellContext = {
     appVersion: packageJson.version,

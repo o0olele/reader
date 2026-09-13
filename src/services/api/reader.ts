@@ -1,11 +1,25 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Chapter, ReadingProgress, ReadingRecord, ReadingStats } from './types'
+import type { Chapter, ReadingProgress, ReadingRecord, ReadingStats, SearchContentResponse } from './types'
 
 export interface Bookmark {
   book_id: number
   chapter_id: number
   offset: number
   mode: 'scroll' | 'paged'
+}
+
+/** A bookmark joined with the book and chapter it points at (书签 page). */
+export interface BookmarkEntry extends Bookmark {
+  book_title: string
+  book_author: string | null
+  chapter_title: string
+  chapter_number: number
+  updated_at: string
+}
+
+/** Every bookmark in the library, newest first (`list_bookmarks`). */
+export function listBookmarks(): Promise<BookmarkEntry[]> {
+  return invoke<BookmarkEntry[]>('list_bookmarks')
 }
 
 export function getBookmark(bookId: number, chapterId: number): Promise<Bookmark | null> {
@@ -59,6 +73,20 @@ export function setReaderPrefetchNum(chapters: number): Promise<number> {
 /** Re-fetches the catalog from the book's source and returns the merged list. */
 export function refreshCatalog(bookId: number): Promise<Chapter[]> {
   return invoke<Chapter[]>('refresh_catalog', { bookId })
+}
+
+/**
+ * 正文搜索：scans every chapter of the book whose body is available offline.
+ * Resolves once with the full hit list (progress arrives on the
+ * `search-content-progress` event), so the reader never has to poll.
+ */
+export function searchBookContent(bookId: number, query: string, regex = false): Promise<SearchContentResponse> {
+  return invoke<SearchContentResponse>('search_book_content', { bookId, query, regex })
+}
+
+/** Stops the scan in flight for this book; safe to call when none is running. */
+export function cancelBookContentSearch(bookId: number): Promise<void> {
+  return invoke<void>('cancel_book_content_search', { bookId })
 }
 
 export function fetchOnlineContent(sourceId: number, chapterUrl: string, chapterId?: number): Promise<string> {

@@ -5,11 +5,12 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useShellContext } from '@/app/shellKeys'
+import { defaultFullJustification } from './readerTypography'
 
 const { reader } = useShellContext()
 const THEMES = [
   { value: 'light', label: '浅色', swatch: 'bg-[oklch(0.99_0.003_106)]' },
-  { value: 'sepia', label: '护眼', swatch: 'bg-[oklch(0.95_0.03_85)]' },
+  { value: 'sepia', label: '护眼', swatch: 'bg-[oklch(0.95_0.03_70)]' },
   { value: 'dark', label: '深色', swatch: 'bg-[oklch(0.27_0.02_265)]' },
   { value: 'black', label: '黑夜', swatch: 'bg-black' },
 ] as const
@@ -22,7 +23,7 @@ function reset() {
   reader.pageMargin = 32
   reader.paragraphSpacing = 1.2
   reader.textIndent = 2
-  reader.justify = false
+  reader.justify = defaultFullJustification(reader.selectedChapter?.content)
   reader.brightness = 1
   reader.eyeCare = false
   reader.pageAnimation = 'slide'

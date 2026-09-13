@@ -49,6 +49,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             health_check,
+            command_api::bookmark::list_bookmarks_cmd,
             command_api::bookmark::get_bookmark_cmd,
             command_api::bookmark::save_bookmark_cmd,
             command_api::bookmark::delete_bookmark_cmd,
@@ -102,6 +103,8 @@ pub fn run() {
             command_api::book::fetch_book_info_cmd,
             command_api::book::switch_book_source_cmd,
             command_api::reader::fetch_online_content_cmd,
+            command_api::reader::search_book_content_cmd,
+            command_api::reader::cancel_book_content_search_cmd,
             command_api::replace_rule::list_replace_rules_cmd,
             command_api::replace_rule::save_replace_rule_cmd,
             command_api::replace_rule::delete_replace_rule_cmd,

@@ -14,12 +14,33 @@ export function volumeLabel(title: string): string {
 }
 
 /**
- * Prototype `.dialog-line` — spoken paragraphs lose the first-line indent and
- * gain a 2em left inset. Detection is structural (leading quote or dash), never
- * a guess about the text itself.
+ * Prototype `.dialog-line` — spoken paragraphs are tagged by a structural cue
+ * (leading quote or dash), never by a guess about the text itself. The tag no
+ * longer changes the inset: the prototype's `padding-left: 2em` also pushed
+ * every wrapped line right, so it now shares the normal first-line indent.
  */
 export function isDialogueLine(text: string): boolean {
   return /^["“「『—]/.test(text.trim())
+}
+
+/** Han / kana / Hangul — the scripts whose lines break by 禁则: a closing
+ *  punctuation may not start a line, so the unit that carries it moves down and
+ *  leaves a blank at the end of the previous line. */
+const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+
+/** The runtime locale is CJK — the fallback before any chapter text is loaded. */
+export function isCJKLocale(): boolean {
+  return /^(zh|ja|ko)/i.test(navigator.language ?? '')
+}
+
+/**
+ * Default of the 两端对齐 switch, following the reference reader: CJK text is
+ * justified because justification spreads that ragged edge into the character
+ * spacing, while everything else only follows the locale. An explicit
+ * `reader-justify` entry in localStorage always wins over this.
+ */
+export function defaultFullJustification(text = ''): boolean {
+  return CJK_SCRIPT.test(text) || isCJKLocale()
 }
 
 /** Paragraph list of a chapter body; blank lines are dropped, not rendered. */

@@ -1,9 +1,19 @@
 use crate::{
     app::AppState,
+    domain::{Bookmark, BookmarkEntry},
     error::AppError,
-    repository::bookmark::{Bookmark, SqliteBookmarkRepository},
+    repository::bookmark::SqliteBookmarkRepository,
 };
 use tauri::State;
+
+#[tauri::command(rename = "list_bookmarks")]
+pub async fn list_bookmarks_cmd(
+    state: State<'_, AppState>,
+) -> Result<Vec<BookmarkEntry>, AppError> {
+    SqliteBookmarkRepository::new(state.database()?)
+        .list()
+        .await
+}
 
 #[tauri::command(rename = "get_bookmark")]
 pub async fn get_bookmark_cmd(

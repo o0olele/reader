@@ -32,6 +32,51 @@ export interface ReadingProgress {
   anchor_ratio: number
 }
 
+/**
+ * One 正文搜索 hit. `match_offset` / `match_length` / `snippet_offset` count
+ * UTF-16 code units inside the addressed unit (the chapter title when
+ * `in_title`, otherwise paragraph `paragraph_index`), so they can be fed
+ * straight to `String.prototype.slice`.
+ */
+export interface SearchContentHit {
+  chapter_id: number
+  chapter_number: number
+  chapter_title: string
+  /** 0-based occurrence index inside this chapter. */
+  result_index: number
+  in_title: boolean
+  /** `null` for a hit in the chapter title. */
+  paragraph_index: number | null
+  match_offset: number
+  match_length: number
+  match_text: string
+  snippet: string
+  snippet_offset: number
+  snippet_length: number
+  progress_percent: number
+}
+
+/** Streamed on `search-content-progress` while a scan runs. */
+export interface SearchContentProgress {
+  book_id: number
+  scanned: number
+  total: number
+  hits: number
+}
+
+/**
+ * The whole answer. Chapters without an offline body are skipped, so
+ * `searched_chapters` is normally smaller than `total_chapters` and the UI has
+ * to say so instead of implying the whole book was covered.
+ */
+export interface SearchContentResponse {
+  hits: SearchContentHit[]
+  searched_chapters: number
+  total_chapters: number
+  truncated: boolean
+  cancelled: boolean
+}
+
 export interface ReadingRecord {
   book_id: number
   duration_seconds: number

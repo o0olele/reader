@@ -97,7 +97,7 @@ v3 不再假设「做完 §X 就会达标」，而是把「受阻源数」本身
 | Rust 最大非测试生产文件 | 247 | 247 | §6.3 #1 达标 |
 | 最大 Vue SFC | 189 | 189 | §6.1 #1 达标 |
 | E0 清单 | 1/8 | 1/8 + 门禁修复（见 E0） | `selector.rs` 兜底仍未删 |
-| E1 清单 | 1/6 | 1/6 | 未动 |
+| E1 清单 | 1/6 | 1/6 | 未动；其后补记第 7 项「跨书书签列表命令」并已实现（§5 E1） |
 
 **门禁修复（第三次复发）**：`cargo test` 自 `7f4c275` 起在 `rule_audit` bin 上变红。
 该提交让规则对 HTML / JSON 两个假输入都跑，初衷是对的（假载荷缺字段不该算引擎缺口），
@@ -329,6 +329,12 @@ shadcn-vue 当前版本原生支持 Tailwind v4 的 `@theme` / `@theme inline`�
 
 按纪律 F0：**听书 tab、AI tab、翻译工具、文本处理工具 —— 渲染为标注了缺失能力的未接入态。**
 
+> **实现偏差（2026 记录）**：原型把搜索框放在 topbar（「在本章搜索」），本节按 legado 的
+> `SearchContentRepository` 实现的是**全书正文搜索**（只扫已缓存正文的章节），入口是 bottom bar
+> 的「正文搜索」，界面是右侧 320px 面板（与阅读面板同槽位）：命中列表 + 进度 + 正则/仅本章开关，
+> 点结果跳章并高亮。topbar 的章内搜索框未实现，避免与全书搜索两套输入。
+> 真机验收见 `docs/manual-acceptance.md` §C11，后端 10 条单测：`cargo test reader_service::search`。
+
 ---
 
 ## 5. 排期
@@ -518,6 +524,12 @@ path parser 18 条 / 16 源 · unsupported JVM access 24 条 / 14 源 · harness
 - [x] **阅读统计聚合命令** —— `get_reading_stats` / `set_reading_goal`
       （`command/reader.rs:119`、`service/reader_service.rs:140`、`repository/reading_record.rs:86`，
       首页 `HomePage.vue` 已在用；roadmap 此前漏记）
+- [x] **跨书书签列表命令** —— `list_bookmarks`（`command/bookmark.rs`、`repository/bookmark.rs`，
+      `Bookmark` 移入 `domain/bookmark.rs` 并新增 `BookmarkEntry`）。左导航「书签」页因此不再显示
+      未接入态：`BookmarksPage.vue` 列出书名 / 章节 / 位置类型 / 保存时间，可搜索、可删除，
+      「打开」走阅读器深链接 `#/read/<id>?chapter=<章节 id>&offset=<像素>&mode=`（`useReaderDeepLink.ts`
+      + `useReader.focusLocation`）。门禁：`cargo test bookmark`（跨表连接、排序、级联删除）。
+      手测项 `docs/manual-acceptance.md` §C12 —— 与其它 F 轨验收一样**留待 GUI 会话**，此处不代替勾选。
 - [ ] **书籍状态字段** —— 未读章数、「更新 / 完结 / 音频」徽标（书架卡片需要）
 - [ ] **书籍详情页命令** —— 现有 `fetch_book_info` 之上补简介/分类/字数/更新时间
 - [ ] **高亮 / 批注** —— 新表 + CRUD（正文 `<mark>` 与批注角标需要）

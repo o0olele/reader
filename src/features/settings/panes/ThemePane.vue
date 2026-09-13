@@ -8,7 +8,7 @@ const { reader } = useShellContext()
 const { isDark, setTheme } = useTheme()
 const READER_THEMES = [
   { value: 'light', label: '浅色', swatch: 'bg-[oklch(0.99_0.003_106)]' },
-  { value: 'sepia', label: '护眼', swatch: 'bg-[oklch(0.95_0.03_85)]' },
+  { value: 'sepia', label: '护眼', swatch: 'bg-[oklch(0.95_0.03_70)]' },
   { value: 'dark', label: '深色', swatch: 'bg-[oklch(0.27_0.02_265)]' },
   { value: 'black', label: '黑夜', swatch: 'bg-black' },
 ] as const

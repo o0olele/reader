@@ -1,28 +1,39 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { BookOpen } from 'lucide-vue-next'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import NotConnected from '@/components/NotConnected.vue'
 import ReaderBottomBar from './ReaderBottomBar.vue'
+import ReaderEmptyState from './ReaderEmptyState.vue'
 import ReaderPane from './ReaderPane.vue'
+import ReaderSearchPanel from './ReaderSearchPanel.vue'
 import ReaderSettingsPanel from './ReaderSettingsPanel.vue'
 import ReaderTopbar from './ReaderTopbar.vue'
+import ReaderUnavailableDialog from './ReaderUnavailableDialog.vue'
+import { useContentSearch } from './useContentSearch'
+import { useReaderDeepLink } from './useReaderDeepLink'
 import { useShellContext } from '@/app/shellKeys'
-import type { Chapter } from '@/services/api'
+import type { Chapter, SearchContentHit } from '@/services/api'
 
 const route = useRoute()
 const router = useRouter()
-const { reader, bookshelf, openBook } = useShellContext()
+const { reader } = useShellContext()
 
-// Deep link: `#/read/<bookId>?toc=0&panel=1` (prototype :2778–2794).
+// Deep link (prototype :2778–2794): `toc` / `panel` are read here, while the
+// book itself (plus a bookmark's `chapter` / `offset` / `mode`) is owned by
+// `useReaderDeepLink`.
+useReaderDeepLink()
+
 const chapterListOpen = ref(route.query.toc !== '0')
 const settingsOpen = ref(route.query.panel === '1')
+const searchOpen = ref(false)
 const immersive = ref(false)
 const autoPage = ref(false)
 const pane = ref<InstanceType<typeof ReaderPane>>()
 const missing = ref<{ title: string; description: string; capabilities: string[] }>()
+
+const contentSearch = useContentSearch(
+  () => reader.selectedBook?.id,
+  () => reader.selectedChapter?.id,
+)
 
 const chapterIndex = computed(() => reader.chapters.findIndex((chapter) => chapter.id === reader.selectedChapter?.id))
 
@@ -35,30 +46,32 @@ function selectRelativeChapter(offset: number) {
   if (chapter) selectChapter(chapter)
 }
 
+/** 正文搜索的结果行：跳章 + 定位 + 高亮，面板留着方便继续点下一条。 */
+function openSearchHit(hit: SearchContentHit) {
+  void pane.value?.jumpToHit(hit)
+}
+
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value
+  if (searchOpen.value) {
+    chapterListOpen.value = false
+    settingsOpen.value = false
+  }
+}
+
+function toggleSettings() {
+  settingsOpen.value = !settingsOpen.value
+  if (settingsOpen.value) searchOpen.value = false
+}
+
 async function closeReader() {
   await reader.closeBook()
   await router.push({ name: 'bookshelf' })
 }
 
-async function openFromShelf(book: (typeof bookshelf.books)[number]) {
-  await openBook(book)
-  await router.push({ name: 'read', params: { bookId: String(book.id) } })
-}
-
 function showMissing(title: string, description: string, capabilities: string[]) {
   missing.value = { title, description, capabilities }
 }
-
-watch(
-  [() => route.params.bookId, () => bookshelf.books.length],
-  async () => {
-    const id = Number(route.params.bookId)
-    if (!id || reader.selectedBook?.id === id) return
-    const book = bookshelf.books.find((item) => item.id === id)
-    if (book) await openBook(book)
-  },
-  { immediate: true },
-)
 
 let autoPageTimer: ReturnType<typeof setInterval> | undefined
 watch(autoPage, (on) => {
@@ -72,11 +85,13 @@ function isTyping(target: EventTarget | null) {
   return tag === 'input' || tag === 'textarea' || element?.isContentEditable === true
 }
 
-// Prototype reader keys: `T` toggles the catalog, `F` toggles immersive mode.
+// Prototype reader keys: `T` toggles the catalog, `F` toggles immersive mode,
+// `Esc` closes the 正文搜索 panel (`desktop-ui.html:2762`).
 // Page turning (`→` / `Space` / `←`) is owned by ReaderPane's paged mode.
 function onKeydown(event: KeyboardEvent) {
   if (isTyping(event.target)) return
-  if (event.key === 't' || event.key === 'T') chapterListOpen.value = !chapterListOpen.value
+  if (event.key === 'Escape' && searchOpen.value) searchOpen.value = false
+  else if (event.key === 't' || event.key === 'T') chapterListOpen.value = !chapterListOpen.value
   else if (event.key === 'f' || event.key === 'F') immersive.value = !immersive.value
 }
 
@@ -98,7 +113,7 @@ onBeforeUnmount(() => {
         @next="selectRelativeChapter(1)"
         @close="closeReader"
         @toggle-toc="chapterListOpen = !chapterListOpen"
-        @toggle-panel="settingsOpen = !settingsOpen"
+        @toggle-panel="toggleSettings"
       />
       <div class="flex min-h-0 flex-1">
         <ReaderPane
@@ -126,6 +141,18 @@ onBeforeUnmount(() => {
           @reader-mode="reader.readerMode = $event"
         />
         <ReaderSettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
+        <!-- 搜索面板按一个状态对象转发：它是阅读器内部组合，不必逐字段拆成 props。 -->
+        <ReaderSearchPanel
+          v-if="searchOpen"
+          :search="contentSearch"
+          :current-chapter-id="reader.selectedChapter?.id"
+          @update:query="contentSearch.query = $event"
+          @update:regex="contentSearch.regex = $event"
+          @update:scope="contentSearch.scope = $event"
+          @jump="openSearchHit"
+          @stop="contentSearch.stop()"
+          @close="searchOpen = false"
+        />
       </div>
       <ReaderBottomBar
         :class="immersive ? 'h-0 overflow-hidden border-t-0' : ''"
@@ -138,10 +165,10 @@ onBeforeUnmount(() => {
         @prev="selectRelativeChapter(-1)"
         @next="selectRelativeChapter(1)"
         @goto="reader.chapters[$event] && selectChapter(reader.chapters[$event])"
-        @search="chapterListOpen = false"
+        @search="toggleSearch"
         @auto-page="autoPage = !autoPage"
         @toc="chapterListOpen = !chapterListOpen"
-        @style="settingsOpen = !settingsOpen"
+        @style="toggleSettings"
         @bookmark="pane?.toggleBookmark()"
         @theme="reader.theme = reader.theme === 'light' ? 'dark' : 'light'"
         @eye-care="reader.eyeCare = !reader.eyeCare"
@@ -153,37 +180,8 @@ onBeforeUnmount(() => {
       />
     </template>
 
-    <div v-else class="flex min-h-0 flex-1 items-center justify-center p-10">
-      <div class="w-full max-w-md text-center">
-        <BookOpen :size="34" class="mx-auto mb-3 text-muted-foreground" />
-        <h2 class="text-sm font-semibold">还没有打开的书</h2>
-        <p class="mt-1 text-xs text-muted-foreground">从书架选一本开始阅读，URL 里的 bookId 会被记录为深链接。</p>
-        <div v-if="bookshelf.books.length" class="mt-4 grid gap-1.5 text-left">
-          <Button
-            v-for="book in bookshelf.books.slice(0, 6)"
-            :key="book.id"
-            variant="outline"
-            size="sm"
-            class="justify-start"
-            @click="openFromShelf(book)"
-          >
-            <BookOpen />{{ book.title }}
-          </Button>
-        </div>
-        <Button v-else class="mt-4" size="sm" @click="router.push({ name: 'bookshelf' })">去书架导入</Button>
-      </div>
-    </div>
+    <ReaderEmptyState v-else />
 
-    <Dialog :open="Boolean(missing)" @update:open="missing = undefined">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader><DialogTitle>未接入</DialogTitle></DialogHeader>
-        <NotConnected
-          v-if="missing"
-          :title="missing.title"
-          :description="missing.description"
-          :capabilities="missing.capabilities"
-        />
-      </DialogContent>
-    </Dialog>
+    <ReaderUnavailableDialog :tool="missing" @close="missing = undefined" />
   </div>
 </template>

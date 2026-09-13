@@ -1,6 +1,6 @@
 # Reader Desktop 路线图 v2
 
-> 从**目标项目 `D:\Code\chatting\legado-with-MD3` 的能力面**反向出发，回答「离能被称作 Legado 桌面版
+> 从**目标项目 `E:\Code\legado-with-MD3` 的能力面**反向出发，回答「离能被称作 Legado 桌面版
 > 还差什么、按什么顺序补」。`ROADMAP.md`（v1）作为历史记录保留，**排期与优先级一律以本文件为准**。
 >
 > 初版 2026-09-02。**本次修订 2026-09-05**：两侧体量、`docs/coverage/rule-audit.md` 的 1,811 条失败
