@@ -27,7 +27,8 @@ const props = defineProps<{
   readerMode: 'scroll' | 'paged'
   chapterListOpen: boolean
   loading: boolean
-  book?: { id?: number; intro?: string; kind?: string; latest_chapter?: string; cover_data?: string }
+  /** 阅读器只需要书籍 id（书签读写）；书籍信息由 `ReaderBookPanel` 展示。 */
+  book?: { id?: number }
 }>()
 
 const emit = defineEmits<{
@@ -157,7 +158,6 @@ defineExpose({ bookmark, bookmarkBusy, toggleBookmark, jumpToBookmark, turnPage,
           <h2 class="reader-title">
             <ReaderHighlight :text="selectedChapter.title" :offset="titleRange?.offset" :length="titleRange?.length" />
           </h2>
-          <p v-if="book?.intro" class="book-intro">{{ book.intro }}</p>
           <p v-if="loading" class="reader-loading">正在获取正文…</p>
           <template v-else>
             <p

@@ -335,6 +335,12 @@ shadcn-vue 当前版本原生支持 Tailwind v4 的 `@theme` / `@theme inline`�
 > 点结果跳章并高亮。topbar 的章内搜索框未实现，避免与全书搜索两套输入。
 > 真机验收见 `docs/manual-acceptance.md` §C11，后端 10 条单测：`cargo test reader_service::search`。
 
+> **实现偏差（2026 记录）**：书籍简介原先渲染在正文流顶部 —— 它是 `books.intro`（书源
+> `ruleBookInfo.intro`），不属于任何一章，于是**每章都重复一次**。现移出正文流，落到右侧同一
+> 320px 槽位的**书籍信息面板**（封面 / 书名 / 作者 / 分类 / 最新章节 / 章节数 / 阅读进度 / 简介），
+> 由 topbar 的 ⓘ 按钮与阅读面板、正文搜索互斥切换；正文流只保留 eyebrow · h2 · 段落。
+> 实现：`src/features/reader/ReaderBookPanel.vue`。
+
 ---
 
 ## 5. 排期
