@@ -1,6 +1,9 @@
 use crate::{
     app::AppState,
-    domain::{Chapter, ReadingProgress, ReadingRecord, ReadingStats},
+    domain::{
+        search_content::SearchContentProgress, Chapter, ReadingProgress, ReadingRecord,
+        ReadingStats, SearchContentResponse,
+    },
     error::AppError,
     service::{reader_service::ReaderService, settings_service::SettingsService},
 };
@@ -108,6 +111,47 @@ pub async fn fetch_online_content_cmd(
     ReaderService::new(state.database()?)
         .fetch_online_content(source_id, &chapter_url, chapter_id)
         .await
+}
+
+/// 正文搜索：扫描本书所有已缓存章节。进度按章流式发出，结果一次性返回。
+#[tauri::command(rename = "search_book_content")]
+pub async fn search_book_content_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    book_id: i64,
+    query: String,
+    regex: Option<bool>,
+) -> Result<SearchContentResponse, AppError> {
+    ReaderService::new(state.database()?)
+        .search_content(book_id, &query, regex.unwrap_or(false), |progress| {
+            emit_search_progress(&app, book_id, progress)
+        })
+        .await
+}
+
+/// 停止本次扫描：换关键词或关闭搜索面板。
+#[tauri::command(rename = "cancel_book_content_search")]
+pub async fn cancel_book_content_search_cmd(book_id: i64) -> Result<(), AppError> {
+    crate::service::reader_service::cancel_search_content(book_id)
+}
+
+/// One event every `PROGRESS_STEP` chapters: enough for a moving bar without
+/// drowning the IPC channel on a thousand-chapter book.
+const PROGRESS_STEP: usize = 20;
+
+fn emit_search_progress(app: &AppHandle, book_id: i64, progress: SearchContentProgress) {
+    if !progress.scanned.is_multiple_of(PROGRESS_STEP) && progress.scanned != progress.total {
+        return;
+    }
+    let _ = app.emit(
+        "search-content-progress",
+        serde_json::json!({
+            "book_id": book_id,
+            "scanned": progress.scanned,
+            "total": progress.total,
+            "hits": progress.hits,
+        }),
+    );
 }
 
 #[tauri::command(rename = "get_reading_progress")]

@@ -5,9 +5,11 @@ pub mod download;
 pub mod reader;
 pub mod reading_record;
 pub mod replace_rule;
+pub mod search_content;
 pub mod source;
 
 pub use book::{Book, BookshelfGroup};
 pub use download::DownloadTask;
 pub use reader::{Chapter, ReadingProgress};
 pub use reading_record::{ReadingRecord, ReadingStats};
+pub use search_content::{SearchContentHit, SearchContentProgress, SearchContentResponse};
