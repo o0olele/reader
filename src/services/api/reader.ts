@@ -8,6 +8,20 @@ export interface Bookmark {
   mode: 'scroll' | 'paged'
 }
 
+/** A bookmark joined with the book and chapter it points at (书签 page). */
+export interface BookmarkEntry extends Bookmark {
+  book_title: string
+  book_author: string | null
+  chapter_title: string
+  chapter_number: number
+  updated_at: string
+}
+
+/** Every bookmark in the library, newest first (`list_bookmarks`). */
+export function listBookmarks(): Promise<BookmarkEntry[]> {
+  return invoke<BookmarkEntry[]>('list_bookmarks')
+}
+
 export function getBookmark(bookId: number, chapterId: number): Promise<Bookmark | null> {
   return invoke('get_bookmark', { bookId, chapterId })
 }

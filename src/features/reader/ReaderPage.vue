@@ -9,14 +9,19 @@ import ReaderSettingsPanel from './ReaderSettingsPanel.vue'
 import ReaderTopbar from './ReaderTopbar.vue'
 import ReaderUnavailableDialog from './ReaderUnavailableDialog.vue'
 import { useContentSearch } from './useContentSearch'
+import { useReaderDeepLink } from './useReaderDeepLink'
 import { useShellContext } from '@/app/shellKeys'
 import type { Chapter, SearchContentHit } from '@/services/api'
 
 const route = useRoute()
 const router = useRouter()
-const { reader, bookshelf, openBook } = useShellContext()
+const { reader } = useShellContext()
 
-// Deep link: `#/read/<bookId>?toc=0&panel=1` (prototype :2778–2794).
+// Deep link (prototype :2778–2794): `toc` / `panel` are read here, while the
+// book itself (plus a bookmark's `chapter` / `offset` / `mode`) is owned by
+// `useReaderDeepLink`.
+useReaderDeepLink()
+
 const chapterListOpen = ref(route.query.toc !== '0')
 const settingsOpen = ref(route.query.panel === '1')
 const searchOpen = ref(false)
@@ -67,17 +72,6 @@ async function closeReader() {
 function showMissing(title: string, description: string, capabilities: string[]) {
   missing.value = { title, description, capabilities }
 }
-
-watch(
-  [() => route.params.bookId, () => bookshelf.books.length],
-  async () => {
-    const id = Number(route.params.bookId)
-    if (!id || reader.selectedBook?.id === id) return
-    const book = bookshelf.books.find((item) => item.id === id)
-    if (book) await openBook(book)
-  },
-  { immediate: true },
-)
 
 let autoPageTimer: ReturnType<typeof setInterval> | undefined
 watch(autoPage, (on) => {

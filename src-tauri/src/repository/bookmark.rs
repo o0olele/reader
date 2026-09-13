@@ -1,13 +1,7 @@
-use crate::error::AppError;
-use serde::Serialize;
-
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
-pub struct Bookmark {
-    pub book_id: i64,
-    pub chapter_id: i64,
-    pub offset: i64,
-    pub mode: String,
-}
+use crate::{
+    domain::{Bookmark, BookmarkEntry},
+    error::AppError,
+};
 
 pub struct SqliteBookmarkRepository {
     pool: sqlx::SqlitePool,
@@ -46,6 +40,24 @@ impl SqliteBookmarkRepository {
             .await
             .map_err(AppError::database)?;
         Ok(())
+    }
+
+    /// Every bookmark across the library, newest first. `updated_at` has
+    /// second resolution, so title and chapter number break the tie and keep
+    /// the order stable between refreshes.
+    pub async fn list(&self) -> Result<Vec<BookmarkEntry>, AppError> {
+        sqlx::query_as(
+            "SELECT b.book_id, k.title AS book_title, k.author AS book_author,
+                    b.chapter_id, c.title AS chapter_title, c.number AS chapter_number,
+                    b.offset, b.mode, b.updated_at
+             FROM bookmarks b
+             JOIN books k ON k.id = b.book_id
+             JOIN chapters c ON c.id = b.chapter_id
+             ORDER BY b.updated_at DESC, k.title ASC, c.number ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(AppError::database)
     }
 }
 
