@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ALargeSmall, ArrowLeft, ArrowRight, List, MoreHorizontal, Sun, Type, X } from 'lucide-vue-next'
+import { ALargeSmall, ArrowLeft, ArrowRight, Info, List, MoreHorizontal, Sun, Type, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -11,8 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useShellContext } from '@/app/shellKeys'
 
-defineProps<{ chapterListOpen: boolean; settingsOpen: boolean; collapsed?: boolean }>()
-const emit = defineEmits<{ prev: []; next: []; close: []; toggleToc: []; togglePanel: [] }>()
+defineProps<{ chapterListOpen: boolean; settingsOpen: boolean; bookOpen: boolean; collapsed?: boolean }>()
+const emit = defineEmits<{ prev: []; next: []; close: []; toggleToc: []; togglePanel: []; toggleBook: [] }>()
 
 const { reader } = useShellContext()
 const FONTS = ['思源宋体', '霞鹜文楷', '系统默认']
@@ -95,6 +95,16 @@ const chapterLabel = computed(() =>
         @click="emit('toggleToc')"
       >
         <List />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        :class="bookOpen ? 'bg-accent' : ''"
+        aria-label="显示或隐藏书籍信息"
+        title="书籍信息"
+        @click="emit('toggleBook')"
+      >
+        <Info />
       </Button>
       <Button
         variant="ghost"

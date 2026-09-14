@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import ReaderBookPanel from './ReaderBookPanel.vue'
 import ReaderBottomBar from './ReaderBottomBar.vue'
 import ReaderEmptyState from './ReaderEmptyState.vue'
 import ReaderPane from './ReaderPane.vue'
@@ -23,8 +24,12 @@ const { reader } = useShellContext()
 useReaderDeepLink()
 
 const chapterListOpen = ref(route.query.toc !== '0')
-const settingsOpen = ref(route.query.panel === '1')
-const searchOpen = ref(false)
+/** 右侧只有一个 320px 槽位（ROADMAP-v3 §4 panel），同一时刻最多一块面板。 */
+type ReaderPanel = 'book' | 'search' | 'settings'
+const panel = ref<ReaderPanel | undefined>(route.query.panel === '1' ? 'settings' : undefined)
+const bookOpen = computed(() => panel.value === 'book')
+const searchOpen = computed(() => panel.value === 'search')
+const settingsOpen = computed(() => panel.value === 'settings')
 const immersive = ref(false)
 const autoPage = ref(false)
 const pane = ref<InstanceType<typeof ReaderPane>>()
@@ -51,17 +56,14 @@ function openSearchHit(hit: SearchContentHit) {
   void pane.value?.jumpToHit(hit)
 }
 
-function toggleSearch() {
-  searchOpen.value = !searchOpen.value
-  if (searchOpen.value) {
-    chapterListOpen.value = false
-    settingsOpen.value = false
-  }
+/** 再点同一颗按钮就收起；换一块面板时其余两块自动让位。 */
+function togglePanel(target: ReaderPanel) {
+  panel.value = panel.value === target ? undefined : target
 }
 
-function toggleSettings() {
-  settingsOpen.value = !settingsOpen.value
-  if (settingsOpen.value) searchOpen.value = false
+function toggleSearch() {
+  togglePanel('search')
+  if (searchOpen.value) chapterListOpen.value = false
 }
 
 async function closeReader() {
@@ -90,7 +92,7 @@ function isTyping(target: EventTarget | null) {
 // Page turning (`→` / `Space` / `←`) is owned by ReaderPane's paged mode.
 function onKeydown(event: KeyboardEvent) {
   if (isTyping(event.target)) return
-  if (event.key === 'Escape' && searchOpen.value) searchOpen.value = false
+  if (event.key === 'Escape' && searchOpen.value) panel.value = undefined
   else if (event.key === 't' || event.key === 'T') chapterListOpen.value = !chapterListOpen.value
   else if (event.key === 'f' || event.key === 'F') immersive.value = !immersive.value
 }
@@ -109,11 +111,13 @@ onBeforeUnmount(() => {
         :collapsed="immersive"
         :chapter-list-open="chapterListOpen"
         :settings-open="settingsOpen"
+        :book-open="bookOpen"
         @prev="selectRelativeChapter(-1)"
         @next="selectRelativeChapter(1)"
         @close="closeReader"
         @toggle-toc="chapterListOpen = !chapterListOpen"
-        @toggle-panel="toggleSettings"
+        @toggle-panel="togglePanel('settings')"
+        @toggle-book="togglePanel('book')"
       />
       <div class="flex min-h-0 flex-1">
         <ReaderPane
@@ -140,7 +144,14 @@ onBeforeUnmount(() => {
           @reader-content="reader.readerContent = $event"
           @reader-mode="reader.readerMode = $event"
         />
-        <ReaderSettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
+        <ReaderSettingsPanel v-if="settingsOpen" @close="panel = undefined" />
+        <ReaderBookPanel
+          v-if="bookOpen && reader.selectedBook"
+          :book="reader.selectedBook"
+          :chapter-index="chapterIndex"
+          :chapter-count="reader.chapters.length"
+          @close="panel = undefined"
+        />
         <!-- 搜索面板按一个状态对象转发：它是阅读器内部组合，不必逐字段拆成 props。 -->
         <ReaderSearchPanel
           v-if="searchOpen"
@@ -151,7 +162,7 @@ onBeforeUnmount(() => {
           @update:scope="contentSearch.scope = $event"
           @jump="openSearchHit"
           @stop="contentSearch.stop()"
-          @close="searchOpen = false"
+          @close="panel = undefined"
         />
       </div>
       <ReaderBottomBar
@@ -168,7 +179,7 @@ onBeforeUnmount(() => {
         @search="toggleSearch"
         @auto-page="autoPage = !autoPage"
         @toc="chapterListOpen = !chapterListOpen"
-        @style="toggleSettings"
+        @style="togglePanel('settings')"
         @bookmark="pane?.toggleBookmark()"
         @theme="reader.theme = reader.theme === 'light' ? 'dark' : 'light'"
         @eye-care="reader.eyeCare = !reader.eyeCare"

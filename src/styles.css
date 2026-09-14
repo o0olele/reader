@@ -350,6 +350,54 @@
     @apply rounded-sm bg-primary/25 px-0.5 text-inherit;
   }
 
+  /* 书籍信息面板：与阅读面板 / 正文搜索共用右侧 320px 槽位 */
+  .reader-book {
+    @apply flex w-[320px] shrink-0 flex-col overflow-hidden border-l bg-card;
+  }
+  .reader-book-head {
+    @apply flex items-center justify-between px-4 pt-4;
+  }
+  .reader-book-scroll {
+    @apply min-h-0 flex-1 overflow-y-scroll px-4 pb-6 pt-4;
+    scrollbar-gutter: stable both-edges;
+  }
+  .reader-book-hero {
+    @apply flex items-start gap-3;
+  }
+  .reader-book-cover {
+    @apply h-[126px] w-[94px] shrink-0 rounded-md object-cover shadow-sm;
+  }
+  .reader-book-cover-empty {
+    @apply grid h-[126px] w-[94px] shrink-0 place-items-center rounded-md bg-muted text-2xl font-semibold text-muted-foreground;
+  }
+  .reader-book-title {
+    @apply text-[15px] font-semibold leading-snug;
+  }
+  .reader-book-author {
+    @apply mt-1 text-xs text-muted-foreground;
+  }
+  .reader-book-meta {
+    @apply mt-4 flex flex-col gap-1.5 text-[12px];
+  }
+  .reader-book-meta > div {
+    @apply flex gap-2;
+  }
+  .reader-book-meta dt {
+    @apply w-14 shrink-0 text-muted-foreground;
+  }
+  .reader-book-meta dd {
+    @apply min-w-0 flex-1 break-words;
+  }
+  .reader-book-section {
+    @apply mt-5 border-b pb-1.5 text-[11px] font-bold tracking-wider text-muted-foreground;
+  }
+  .reader-book-intro {
+    @apply mt-2.5 text-[13px] leading-relaxed;
+  }
+  .reader-book-empty {
+    @apply mt-2.5 text-xs text-muted-foreground;
+  }
+
   .reader-content {
     @apply min-h-0 min-w-0 flex-1 overflow-y-auto pb-20 pt-12 outline-none scroll-smooth;
     padding-inline: var(--reader-margin, 32px);
@@ -379,12 +427,8 @@
     @apply mb-8 indent-0 text-[32px];
   }
   .reader-content .reader-title,
-  .reader-content .book-intro,
   .reader-content .reader-loading {
     @apply indent-0;
-  }
-  .reader-content .book-intro {
-    @apply text-center;
   }
   .reader-content.theme-sepia {
     background: oklch(0.95 0.03 70);
