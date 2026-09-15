@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ALargeSmall, ArrowLeft, ArrowRight, Info, List, MoreHorizontal, Sun, Type, X } from 'lucide-vue-next'
+import {
+  ALargeSmall,
+  ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
+  Info,
+  List,
+  MoreHorizontal,
+  Sun,
+  Type,
+  X,
+} from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -11,8 +22,25 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useShellContext } from '@/app/shellKeys'
 
-defineProps<{ chapterListOpen: boolean; settingsOpen: boolean; bookOpen: boolean; collapsed?: boolean }>()
-const emit = defineEmits<{ prev: []; next: []; close: []; toggleToc: []; togglePanel: []; toggleBook: [] }>()
+const props = defineProps<{
+  chapterListOpen: boolean
+  settingsOpen: boolean
+  bookOpen: boolean
+  /** 换源面板是否展开（它和书籍信息 / 阅读设置共用右侧槽位）。 */
+  sourceOpen?: boolean
+  collapsed?: boolean
+  /** 换源进行中：按钮转起来，同时挡住重复点击。 */
+  switchingSource?: boolean
+}>()
+const emit = defineEmits<{
+  prev: []
+  next: []
+  close: []
+  toggleToc: []
+  togglePanel: []
+  toggleBook: []
+  changeSource: []
+}>()
 
 const { reader } = useShellContext()
 const FONTS = ['思源宋体', '霞鹜文楷', '系统默认']
@@ -20,6 +48,15 @@ const SIZES = [14, 16, 17, 18, 20, 22, 24]
 const chapterIndex = computed(() => reader.chapters.findIndex((chapter) => chapter.id === reader.selectedChapter?.id))
 const chapterLabel = computed(() =>
   chapterIndex.value < 0 ? '正文' : `第${chapterIndex.value + 1}章 ${reader.selectedChapter?.title ?? ''}`,
+)
+/** 本地书籍没有在线书源，换源入口对它没有意义。 */
+const canChangeSource = computed(() => reader.selectedBook?.source_id != null)
+const changeSourceTitle = computed(() =>
+  canChangeSource.value
+    ? props.switchingSource
+      ? '正在换源…'
+      : '换源：换一个在线书源继续读这本书'
+    : '本地书籍没有在线书源',
 )
 </script>
 
@@ -95,6 +132,17 @@ const chapterLabel = computed(() =>
         @click="emit('toggleToc')"
       >
         <List />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        :class="sourceOpen ? 'bg-accent' : ''"
+        :disabled="!canChangeSource || switchingSource"
+        :title="changeSourceTitle"
+        :aria-label="changeSourceTitle"
+        @click="emit('changeSource')"
+      >
+        <ArrowLeftRight :class="switchingSource ? 'animate-spin' : ''" />
       </Button>
       <Button
         variant="ghost"

@@ -1,27 +1,60 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Compass, Loader2, Plus, RefreshCw } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { Loader2, Plus, RefreshCw } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import PageBody from '@/components/PageBody.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ExploreSourceList from './ExploreSourceList.vue'
 import { useShellContext } from '@/app/shellKeys'
 
 const { search, sources } = useShellContext()
 const activeSourceId = ref<number | null>(null)
 
-const exploreSources = computed(() => sources.sources.filter((source) => source.enabled && source.enabled_explore))
+/**
+ * A source only participates in 发现 when it actually carries an 发现页 URL:
+ * legado imports default `enabledExplore` to true, so the flag alone would list
+ * sources whose category bar can only ever be empty (`ExploreService::categories`
+ * skips them for the same reason). Keeping them out also makes the subtitle and
+ * the first-source default honest.
+ */
+const exploreSources = computed(() =>
+  sources.sources.filter((source) => source.enabled && source.enabled_explore && !!source.explore_url?.trim()),
+)
 const categories = computed(() =>
   activeSourceId.value === null
-    ? search.exploreCategories
+    ? []
     : search.exploreCategories.filter((category) => category.source_id === activeSourceId.value),
 )
 const activeCategoryKey = computed(() =>
   search.selectedExplore ? `${search.selectedExplore.source_id}-${search.selectedExplore.url}` : '',
 )
+/** Switching source leaves the previous selection behind, so an empty result set
+ *  only means “该分类没有结果” while the selection still belongs to this source. */
+const pickedCategory = computed(() =>
+  categories.value.some((category) => `${category.source_id}-${category.url}` === activeCategoryKey.value),
+)
 const results = computed(() =>
   activeSourceId.value === null
-    ? search.exploreResults
+    ? []
     : search.exploreResults.filter((result) => result.source_id === activeSourceId.value),
+)
+
+/**
+ * The page browses exactly one source now that 全部书源 is gone. That is also what
+ * keeps it cheap: the category bar can no longer fan out into every category of
+ * every source, which is where the first paint used to stall at 500+ sources.
+ * The first available source is selected as soon as one exists.
+ */
+watch(
+  exploreSources,
+  (list) => {
+    if (!list.length) {
+      activeSourceId.value = null
+      return
+    }
+    if (!list.some((source) => source.id === activeSourceId.value)) activeSourceId.value = list[0].id
+  },
+  { immediate: true },
 )
 </script>
 
@@ -32,27 +65,8 @@ const results = computed(() =>
     </PageHeader>
 
     <div class="flex min-h-0 flex-1">
-      <aside class="w-56 shrink-0 overflow-y-auto border-r bg-card p-2">
-        <button
-          type="button"
-          class="mb-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent"
-          :class="activeSourceId === null ? 'bg-accent font-medium' : ''"
-          @click="activeSourceId = null"
-        >
-          <Compass :size="14" /> 全部书源
-        </button>
-        <button
-          v-for="source in exploreSources"
-          :key="source.id"
-          type="button"
-          class="mb-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent"
-          :class="activeSourceId === source.id ? 'bg-accent font-medium' : ''"
-          @click="activeSourceId = source.id"
-        >
-          <span class="size-2 shrink-0 rounded-full" :class="source.enabled ? 'bg-primary' : 'bg-muted-foreground'" />
-          <span class="truncate">{{ source.name }}</span>
-        </button>
-        <p v-if="!exploreSources.length" class="p-2 text-xs text-muted-foreground">还没有启用「发现」的书源。</p>
+      <aside class="flex w-56 shrink-0 flex-col border-r bg-card">
+        <ExploreSourceList :sources="exploreSources" :active-id="activeSourceId" @select="activeSourceId = $event.id" />
       </aside>
 
       <div class="flex min-w-0 flex-1 flex-col">
@@ -64,17 +78,14 @@ const results = computed(() =>
             size="sm"
             @click="search.runExplore(category)"
           >
-            {{ category.source_name }} · {{ category.title }}
+            {{ category.title }}
           </Button>
           <span v-if="!categories.length" class="text-xs text-muted-foreground">暂无可用的发现分类</span>
         </div>
 
         <PageBody>
           <div v-if="search.exploring" class="py-12 text-center text-xs text-muted-foreground">正在加载发现页…</div>
-          <div
-            v-else-if="search.selectedExplore && !results.length"
-            class="py-12 text-center text-xs text-muted-foreground"
-          >
+          <div v-else-if="pickedCategory && !results.length" class="py-12 text-center text-xs text-muted-foreground">
             该分类没有结果
           </div>
           <div v-else-if="!results.length" class="py-12 text-center text-xs text-muted-foreground">

@@ -1,5 +1,8 @@
 use crate::{
-    app::AppState, domain::source::BookSearchResult, domain::Book, error::AppError,
+    app::AppState,
+    domain::source::{BookSearchResult, ChapterRef, SourceBookPreview},
+    domain::Book,
+    error::AppError,
     service::book_service::BookService,
 };
 use tauri::State;
@@ -56,13 +59,32 @@ pub async fn fetch_book_info_cmd(
         .await
 }
 
+/// Reads a candidate source for an already-shelved book without switching to
+/// it: 换源's 加载详情 / 加载目录, and the check that runs before 换源 commits.
+#[tauri::command(rename = "preview_book_source")]
+pub async fn preview_book_source_cmd(
+    state: State<'_, AppState>,
+    book_id: i64,
+    result: BookSearchResult,
+    with_info: bool,
+    with_toc: bool,
+) -> Result<SourceBookPreview, AppError> {
+    BookService::new(state.database()?)
+        .preview_source(book_id, &result, with_info, with_toc)
+        .await
+}
+
+/// Switches a shelved book to another source. `chapters` is the catalog a
+/// previous `preview_book_source` returned; omit it to have the backend fetch
+/// the 目录 itself. The switch only happens once a catalog is in hand.
 #[tauri::command(rename = "switch_book_source")]
 pub async fn switch_book_source_cmd(
     state: State<'_, AppState>,
     book_id: i64,
     result: BookSearchResult,
+    chapters: Option<Vec<ChapterRef>>,
 ) -> Result<Book, AppError> {
     BookService::new(state.database()?)
-        .switch_source(book_id, &result)
+        .switch_source(book_id, &result, chapters)
         .await
 }

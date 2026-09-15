@@ -1,10 +1,10 @@
 use crate::{
-    domain::source::BookSearchResult,
+    domain::source::{BookSearchResult, BookSource, ChapterRef, SourceBookPreview},
     domain::Book,
     error::AppError,
     infrastructure::ebook::{epub, title_from_filename, txt, ParsedBook},
     infrastructure::http::request::response_error,
-    repository::{book::SqliteBookRepository, BookRepository},
+    repository::{book::SqliteBookRepository, chapter::SqliteChapterRepository, BookRepository},
     repository::{source::SqliteSourceRepository, SourceRepository},
     service::{settings_service::SettingsService, source_session::SourceSession},
     source_engine::{
@@ -15,9 +15,20 @@ use crate::{
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 
+/// A source may rename the book on 详情 only when it declares `canRename`.
+fn can_rename(source: &BookSource) -> bool {
+    LegadoRules::decode(&source.raw_rules)
+        .book_info
+        .and_then(|rule| rule.can_rename)
+        .as_deref()
+        .or(source.info_rule.can_rename.as_deref())
+        .is_some_and(|value| !value.trim().is_empty())
+}
+
 #[derive(Clone)]
 pub struct BookService {
     books: SqliteBookRepository,
+    chapters: SqliteChapterRepository,
     sources: SqliteSourceRepository,
     settings: SettingsService,
 }
@@ -26,9 +37,20 @@ impl BookService {
     pub fn new(pool: sqlx::SqlitePool) -> Self {
         Self {
             books: SqliteBookRepository::new(pool.clone()),
+            chapters: SqliteChapterRepository::new(pool.clone()),
             sources: SqliteSourceRepository::new(pool.clone()),
             settings: SettingsService::new(pool),
         }
+    }
+
+    /// Opens one source-scoped session for this book's source.
+    async fn session(&self, source: &BookSource) -> Result<SourceSession, AppError> {
+        SourceSession::new(
+            source.clone(),
+            self.sources.clone(),
+            15,
+            self.settings.proxy_url().await?.as_deref(),
+        )
     }
 
     pub async fn list(&self) -> Result<Vec<Book>, AppError> {
@@ -69,12 +91,7 @@ impl BookService {
             .get(source_id)
             .await?
             .ok_or_else(|| AppError::Source("书源不存在".into()))?;
-        let session = SourceSession::new(
-            source.clone(),
-            self.sources.clone(),
-            15,
-            self.settings.proxy_url().await?.as_deref(),
-        )?;
+        let session = self.session(&source).await?;
         let request = build_url_request(&source, url, None, "详情 URL")?;
         let response = session.send(&request).await?;
         if !response.status().is_success() {
@@ -85,43 +102,134 @@ impl BookService {
         let html = decode_text(response, &request, &source).await?;
         let info = parse_book_info(&source, &html)?;
         let cover_url = info.cover.clone();
-        let raw_can_rename = LegadoRules::decode(&source.raw_rules)
-            .book_info
-            .and_then(|rule| rule.can_rename);
-        let can_rename = raw_can_rename
-            .as_deref()
-            .or(source.info_rule.can_rename.as_deref())
-            .is_some_and(|value| !value.trim().is_empty());
-        self.books.update_info(book_id, &info, can_rename).await?;
-        if let Some(cover) = cover_url.as_deref() {
-            if let Ok(request) = build_url_request(&source, cover, None, "封面 URL") {
-                if let Ok(fetched) = session.fetch_bytes(&request).await {
-                    let mime = fetched.content_type.as_deref().unwrap_or("image/jpeg");
-                    self.books
-                        .save_cover_data(
-                            book_id,
-                            &format!("data:{mime};base64,{}", STANDARD.encode(fetched.bytes)),
-                        )
-                        .await?;
-                }
-            }
-        }
+        self.books
+            .update_info(book_id, &info, can_rename(&source))
+            .await?;
+        self.store_cover(book_id, &session, cover_url.as_deref())
+            .await?;
         self.load(book_id).await
     }
 
+    /// Reads what a candidate source has for this book without changing it —
+    /// the 换源 sheet's 加载详情 / 加载目录 options, and the check that keeps a
+    /// broken source from replacing a working catalog.
+    pub async fn preview_source(
+        &self,
+        book_id: i64,
+        result: &BookSearchResult,
+        with_info: bool,
+        with_toc: bool,
+    ) -> Result<SourceBookPreview, AppError> {
+        self.load(book_id).await?;
+        let source = self
+            .sources
+            .get(result.source_id)
+            .await?
+            .ok_or_else(|| AppError::Source("书源不存在".into()))?;
+        let session = self.session(&source).await?;
+        let mut preview = SourceBookPreview::default();
+        if with_toc {
+            let catalog = session.fetch_catalog(&result.url).await?;
+            if catalog.is_empty() {
+                return Err(AppError::Source("书源没有解析出目录".into()));
+            }
+            preview.latest_chapter = catalog.last().map(|(title, _)| title.clone());
+            preview.chapters = catalog
+                .into_iter()
+                .map(|(title, url)| ChapterRef { title, url })
+                .collect();
+        }
+        if with_info {
+            // 详情 failing does not make the source unusable — only a missing
+            // 目录 does — so it is reported beside the row instead of failing it.
+            match session.fetch_book_info(&result.url).await {
+                Ok(info) => {
+                    if preview.latest_chapter.is_none() {
+                        preview.latest_chapter = info.latest_chapter.clone();
+                    }
+                    preview.info = Some(info);
+                }
+                Err(error) => preview.info_error = Some(error.to_string()),
+            }
+        }
+        Ok(preview)
+    }
+
+    /// 换源: re-points the shelf entry at another source.
+    ///
+    /// The candidate's catalog is fetched *before* anything is written, so a
+    /// source that cannot produce a 目录 leaves the current one untouched — the
+    /// reference app's `ChangeBookSource` does the same by calling `getToc`
+    /// first. `chapters` is the previewed catalog when the sheet already loaded
+    /// it, which saves a second walk over the source's 目录 pages.
     pub async fn switch_source(
         &self,
         book_id: i64,
         result: &BookSearchResult,
+        chapters: Option<Vec<ChapterRef>>,
     ) -> Result<Book, AppError> {
         let current = self.load(book_id).await?;
-        if current.source_id == Some(result.source_id) {
+        if current.source_id == Some(result.source_id)
+            && current.remote_url.as_deref() == Some(result.url.as_str())
+        {
             return Ok(current);
         }
+        let source = self
+            .sources
+            .get(result.source_id)
+            .await?
+            .ok_or_else(|| AppError::Source("书源不存在".into()))?;
+        let session = self.session(&source).await?;
+        let catalog = match chapters {
+            Some(chapters) => chapters
+                .into_iter()
+                .map(|chapter| (chapter.title, chapter.url))
+                .collect::<Vec<_>>(),
+            None => session.fetch_catalog(&result.url).await?,
+        };
+        if catalog.is_empty() {
+            return Err(AppError::Source("书源没有解析出目录".into()));
+        }
+        // 详情 is a nice-to-have: a source whose catalog parses but whose info
+        // rule is broken still reads fine, so its failure must not block 换源.
+        let info = session.fetch_book_info(&result.url).await.ok();
+        let cover_url = info.as_ref().and_then(|info| info.cover.clone());
         self.books
             .switch_source(book_id, result.source_id, &result.url)
             .await?;
+        if let Some(info) = info.as_ref() {
+            self.books
+                .update_info(book_id, info, can_rename(&source))
+                .await?;
+        }
+        self.store_cover(book_id, &session, cover_url.as_deref())
+            .await?;
+        self.chapters.replace_catalog(book_id, &catalog).await?;
+        tracing::info!(target: "book", book_id, source = %source.name, chapter_count = catalog.len(), "book source switched");
         self.load(book_id).await
+    }
+
+    /// Downloads the parsed cover into `cover_data`; a source that will not
+    /// serve its own image simply leaves the placeholder in place.
+    async fn store_cover(
+        &self,
+        book_id: i64,
+        session: &SourceSession,
+        cover_url: Option<&str>,
+    ) -> Result<(), AppError> {
+        let Some(cover) = cover_url else {
+            return Ok(());
+        };
+        let Some(fetched) = session.fetch_cover(cover).await else {
+            return Ok(());
+        };
+        let mime = fetched.content_type.as_deref().unwrap_or("image/jpeg");
+        self.books
+            .save_cover_data(
+                book_id,
+                &format!("data:{mime};base64,{}", STANDARD.encode(fetched.bytes)),
+            )
+            .await
     }
 
     pub async fn import_txt(&self, filename: &str, bytes: &[u8]) -> Result<Book, AppError> {

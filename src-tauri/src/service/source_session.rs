@@ -1,12 +1,22 @@
 use crate::{
-    domain::source::BookSource,
+    domain::source::{BookInfo, BookSource},
     error::AppError,
-    infrastructure::http::client::build_source_client_with_cookie_jar,
+    infrastructure::http::{client::build_source_client_with_cookie_jar, request::response_error},
     repository::source::SqliteSourceRepository,
-    source_engine::url::{self, FetchedBytes, RequestSpec},
+    source_engine::{
+        pipeline::{parse_book_info, parse_catalog_page},
+        url::{self, FetchedBytes, RequestSpec},
+    },
 };
 use reqwest::cookie::CookieStore;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
+};
+
+/// Upper bound on the 目录 pages one book is allowed to span; the same ceiling
+/// `ReaderService::refresh_catalog` uses so a next-page loop cannot run away.
+const MAX_CATALOG_PAGES: usize = 50;
 
 /// One source-scoped HTTP session whose response cookies survive app restarts.
 pub struct SourceSession {
@@ -76,6 +86,66 @@ impl SourceSession {
             bytes,
             content_type,
         })
+    }
+
+    /// One 详情 page parsed through this source's `ruleBookInfo`.
+    ///
+    /// Read-only: the caller decides whether the result is worth persisting, so
+    /// 换源 can inspect a candidate source without touching the shelf.
+    pub async fn fetch_book_info(&self, book_url: &str) -> Result<BookInfo, AppError> {
+        let source = self.source.read().await.clone();
+        let request = url::build(&source, book_url, None, "详情 URL")?;
+        let response = self.send(&request).await?;
+        if !response.status().is_success() {
+            return Err(AppError::Network(
+                response_error(response, &source.name).await,
+            ));
+        }
+        let html = url::decode_text(response, &request, &source).await?;
+        parse_book_info(&source, &html)
+    }
+
+    /// The whole 目录 for `book_url`, following `ruleToc.nextTocUrl` until the
+    /// source stops asking for another page (or [`MAX_CATALOG_PAGES`] is hit).
+    /// Returns `(title, url)` pairs in reading order and never touches the
+    /// database — the same list is both a 换源 preview and the committed catalog.
+    pub async fn fetch_catalog(&self, book_url: &str) -> Result<Vec<(String, String)>, AppError> {
+        let source = self.source.read().await.clone();
+        let mut current_rule = book_url.to_owned();
+        let mut current_base = source.base_url.clone();
+        let mut visited = HashSet::new();
+        let mut catalog = Vec::new();
+        for _ in 0..MAX_CATALOG_PAGES {
+            let request =
+                url::build_with_base(&source, &current_base, &current_rule, None, "目录 URL")?;
+            let request_key = format!("{} {} {:?}", request.method, request.url, request.body);
+            if !visited.insert(request_key) {
+                break;
+            }
+            let response = self.send(&request).await?;
+            if !response.status().is_success() {
+                return Err(AppError::Network(
+                    response_error(response, &source.name).await,
+                ));
+            }
+            let html = url::decode_text(response, &request, &source).await?;
+            let (page, next) = parse_catalog_page(&source, &html)?;
+            catalog.extend(page);
+            let Some(next) = next else {
+                break;
+            };
+            current_base = request.url.to_string();
+            current_rule = next;
+        }
+        Ok(catalog)
+    }
+
+    /// Best-effort cover download: a source that will not serve its own cover
+    /// must not fail the operation that asked for it.
+    pub async fn fetch_cover(&self, cover_url: &str) -> Option<FetchedBytes> {
+        let source = self.source.read().await.clone();
+        let request = url::build(&source, cover_url, None, "封面 URL").ok()?;
+        self.fetch_bytes(&request).await.ok()
     }
 
     async fn persist_cookies(

@@ -230,6 +230,30 @@ pub struct BookInfo {
     pub latest_chapter: Option<String>,
 }
 
+/// One catalog entry of a candidate source. 换源 carries these between the
+/// preview and the commit so the catalog is fetched once, not twice.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChapterRef {
+    pub title: String,
+    pub url: String,
+}
+
+/// What one candidate source can offer for an already-shelved book, read
+/// without writing anything: `preview_book_source`.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct SourceBookPreview {
+    /// `None` when the caller did not ask for 详情, or the source has no
+    /// working `ruleBookInfo`.
+    pub info: Option<BookInfo>,
+    /// Empty unless the caller asked for 目录.
+    pub chapters: Vec<ChapterRef>,
+    /// Last title of the previewed 目录, else the source's own 最新章节.
+    pub latest_chapter: Option<String>,
+    /// Why 详情 failed, when it did. Not fatal: 换源 only needs a 目录, and the
+    /// commit path tolerates the same failure.
+    pub info_error: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
