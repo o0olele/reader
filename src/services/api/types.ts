@@ -194,6 +194,33 @@ export interface BookSearchResult {
   word_count?: string
 }
 
+/** One catalog entry of a candidate source (换源 preview → commit handoff). */
+export interface ChapterRef {
+  title: string
+  url: string
+}
+
+/** What `preview_book_source` read from a candidate source, without writing. */
+export interface SourceBookPreview {
+  /** Only present when 详情 was requested; a source without a working info
+   *  rule still yields a usable 目录. */
+  info: {
+    title?: string
+    author?: string
+    intro?: string
+    cover?: string
+    kind?: string
+    latest_chapter?: string
+  } | null
+  /** Empty unless 目录 was requested. */
+  chapters: ChapterRef[]
+  /** Last chapter of the previewed 目录, or the source's own 最新章节. */
+  latest_chapter: string | null
+  /** Why 详情 failed, when it did. 换源 only needs a 目录, so this is a note
+   *  rather than a row-level failure. */
+  info_error: string | null
+}
+
 /** The same book merged across every source that returned it. */
 export interface SearchResultGroup {
   title: string

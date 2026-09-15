@@ -459,7 +459,27 @@ F3 阅读器重建
       翻章即令旧窗口失效；命令 `prefetch_chapters` / `cancel_prefetch`（`command/reader.rs`）由
       `useReader.ts` 在每次正文加载完成后触发、关书时取消。已缓存 / 无地址 / 本地书都在计划期就被剔除。
       窗口规则的 11 条单测见 `cargo test prefetch`（网络路径需真实书源，见 `docs/manual-acceptance.md` §C10）
+- [x] **换源入口**（顶栏「书籍详情」左侧的 ⇄ 按钮，右侧第 4 块面板，与 书籍信息 / 正文搜索 / 阅读设置 共用 320px 槽位）：
+      对**所有启用的书源**重搜这本书，逐源并发、结果即时上屏，行内给出书源名 / 作者 / 最新章节（勾选选项后还有章数与简介）；
+      三个选项 校验作者 · 加载详情 · 加载目录，行菜单 置顶 / 置底 / 停用 该书源。换源后按参考项目
+      `BookHelp.getDurChapter()` 的算法定位回原章
+      —— `useChangeSource.ts` · `ReaderChangeSourcePanel.vue` · `chapterMatch.ts`（13 条断言由本地脚本
+      `.scratch/chapter-match-check.mts` 跑过，见 `docs/manual-acceptance.md` §C13）；右侧槽位随之抽出
+      `ReaderPanels.vue`（纯展示，四块面板渲染其一）与 `useReaderSidePanels.ts`（开一块收起其余），
+      `ReaderPage.vue` 仍是 192 行（< 200 行纪律）；后端 `preview_book_source`
+      （只读预读）与改写的 `switch_book_source`
+      （**先拿到目录再落库**，失败时原书源 / 目录 / 阅读进度一动不动），抓目录的循环与 `refresh_catalog` 共用
+      `SourceSession::fetch_catalog`
 - [x] 听书 / AI / 翻译 / 文本处理：未接入态（纪律 F0）
+
+**换源对位参考项目 `ChangeSourceSheet` 未做的部分：**
+
+| 缺什么 | 为什么 |
+| --- | --- |
+| 「显示更多信息」（按章字数排序） | 每个候选源都要多抓一章正文来数字数，代价高；参考项目里默认也是关的 |
+| 搜索范围选择（按书源分组 / 单个书源） | 用「筛选」文本框（按源名 / 最新章节）替代，少一层弹层 |
+| 行菜单的「编辑 / 删除书源」 | 都是书源管理页的破坏性操作，不在阅读器里做 |
+| 停用**当前**书源后自动换源 | 参考项目会自动挑下一个结果；这里只停用，换哪家由用户点 |
 
 **F3 明确未做的三小块（不计入上面的勾）：**
 

@@ -398,6 +398,70 @@
     @apply mt-2.5 text-xs text-muted-foreground;
   }
 
+  /* 换源面板：与书籍信息 / 正文搜索共用右侧 320px 槽位。
+     窄槽位里每个候选源要同时放下「源名 + 作者/最新章节 + 操作」，所以行内两栏而不是上下堆叠。 */
+  .reader-source {
+    @apply flex w-[320px] shrink-0 flex-col overflow-hidden border-l bg-card;
+  }
+  .reader-source-head {
+    @apply flex items-center justify-between px-4 pt-4;
+  }
+  .reader-source-hint {
+    @apply mx-4 mt-1.5 text-[11px] leading-relaxed text-muted-foreground;
+  }
+  .reader-source-tools {
+    @apply mx-4 mt-3 flex items-center gap-1.5;
+  }
+  .reader-source-filter {
+    @apply h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2.5 text-[12px] outline-none transition placeholder:text-muted-foreground focus-visible:border-ring;
+  }
+  .reader-source-options {
+    @apply mx-4 mt-2 flex flex-wrap items-center gap-1.5;
+  }
+  .reader-source-progress {
+    @apply mx-4 mt-2.5 flex items-center gap-2 text-[11px] text-muted-foreground;
+  }
+  .reader-source-list {
+    @apply mt-2 min-h-0 flex-1 overflow-y-scroll px-3 pb-4;
+    scrollbar-gutter: stable both-edges;
+  }
+  .reader-source-empty {
+    @apply px-4 py-10 text-center text-xs text-muted-foreground;
+  }
+  .reader-source-row {
+    @apply mb-2 flex items-start gap-2 rounded-lg border bg-muted/40 p-2.5 transition;
+  }
+  .reader-source-row.current {
+    @apply border-primary/60 bg-accent/50;
+  }
+  .reader-source-row.broken {
+    @apply border-destructive/40;
+  }
+  .reader-source-main {
+    @apply min-w-0 flex-1;
+  }
+  .reader-source-name {
+    @apply flex items-center gap-1.5 text-[13px] font-semibold;
+  }
+  .reader-source-name > span {
+    @apply min-w-0 truncate;
+  }
+  .reader-source-meta {
+    @apply mt-0.5 truncate text-[11px] text-muted-foreground;
+  }
+  .reader-source-intro {
+    @apply mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground;
+  }
+  .reader-source-error {
+    @apply mt-1 text-[11px] text-destructive;
+  }
+  .reader-source-note {
+    @apply mt-1 text-[11px] text-muted-foreground;
+  }
+  .reader-source-actions {
+    @apply mt-2 flex flex-wrap items-center justify-end gap-1.5;
+  }
+
   .reader-content {
     @apply min-h-0 min-w-0 flex-1 overflow-y-auto pb-20 pt-12 outline-none scroll-smooth;
     padding-inline: var(--reader-margin, 32px);

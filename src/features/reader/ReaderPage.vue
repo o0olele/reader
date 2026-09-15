@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ReaderBookPanel from './ReaderBookPanel.vue'
 import ReaderBottomBar from './ReaderBottomBar.vue'
 import ReaderEmptyState from './ReaderEmptyState.vue'
 import ReaderPane from './ReaderPane.vue'
-import ReaderSearchPanel from './ReaderSearchPanel.vue'
-import ReaderSettingsPanel from './ReaderSettingsPanel.vue'
+import ReaderPanels from './ReaderPanels.vue'
 import ReaderTopbar from './ReaderTopbar.vue'
 import ReaderUnavailableDialog from './ReaderUnavailableDialog.vue'
+import { useChangeSource } from './useChangeSource'
 import { useContentSearch } from './useContentSearch'
 import { useReaderDeepLink } from './useReaderDeepLink'
+import { useReaderSidePanels } from './useReaderSidePanels'
 import { useShellContext } from '@/app/shellKeys'
 import type { Chapter, SearchContentHit } from '@/services/api'
 
@@ -24,12 +24,6 @@ const { reader } = useShellContext()
 useReaderDeepLink()
 
 const chapterListOpen = ref(route.query.toc !== '0')
-/** 右侧只有一个 320px 槽位（ROADMAP-v3 §4 panel），同一时刻最多一块面板。 */
-type ReaderPanel = 'book' | 'search' | 'settings'
-const panel = ref<ReaderPanel | undefined>(route.query.panel === '1' ? 'settings' : undefined)
-const bookOpen = computed(() => panel.value === 'book')
-const searchOpen = computed(() => panel.value === 'search')
-const settingsOpen = computed(() => panel.value === 'settings')
 const immersive = ref(false)
 const autoPage = ref(false)
 const pane = ref<InstanceType<typeof ReaderPane>>()
@@ -39,6 +33,10 @@ const contentSearch = useContentSearch(
   () => reader.selectedBook?.id,
   () => reader.selectedChapter?.id,
 )
+
+/** 换源面板（`useChangeSource`）自己持有开关，好让换源搜索能跨面板开关继续跑。 */
+const changeSource = useChangeSource()
+const panels = useReaderSidePanels(changeSource, route.query.panel === '1' ? 'settings' : undefined)
 
 const chapterIndex = computed(() => reader.chapters.findIndex((chapter) => chapter.id === reader.selectedChapter?.id))
 
@@ -56,14 +54,9 @@ function openSearchHit(hit: SearchContentHit) {
   void pane.value?.jumpToHit(hit)
 }
 
-/** 再点同一颗按钮就收起；换一块面板时其余两块自动让位。 */
-function togglePanel(target: ReaderPanel) {
-  panel.value = panel.value === target ? undefined : target
-}
-
 function toggleSearch() {
-  togglePanel('search')
-  if (searchOpen.value) chapterListOpen.value = false
+  panels.toggle('search')
+  if (panels.searchOpen) chapterListOpen.value = false
 }
 
 async function closeReader() {
@@ -92,7 +85,8 @@ function isTyping(target: EventTarget | null) {
 // Page turning (`→` / `Space` / `←`) is owned by ReaderPane's paged mode.
 function onKeydown(event: KeyboardEvent) {
   if (isTyping(event.target)) return
-  if (event.key === 'Escape' && searchOpen.value) panel.value = undefined
+  if (event.key === 'Escape' && panels.searchOpen) panels.close()
+  else if (event.key === 'Escape' && panels.sourceOpen) changeSource.close()
   else if (event.key === 't' || event.key === 'T') chapterListOpen.value = !chapterListOpen.value
   else if (event.key === 'f' || event.key === 'F') immersive.value = !immersive.value
 }
@@ -101,6 +95,8 @@ onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   if (autoPageTimer) clearInterval(autoPageTimer)
+  // 离开阅读器时停掉还在跑的换源搜索，不让它再往已卸载的组件里写结果。
+  changeSource.close()
 })
 </script>
 
@@ -110,14 +106,17 @@ onBeforeUnmount(() => {
       <ReaderTopbar
         :collapsed="immersive"
         :chapter-list-open="chapterListOpen"
-        :settings-open="settingsOpen"
-        :book-open="bookOpen"
+        :settings-open="panels.settingsOpen"
+        :book-open="panels.bookOpen"
+        :switching-source="reader.switchingSource"
+        :source-open="panels.sourceOpen"
         @prev="selectRelativeChapter(-1)"
         @next="selectRelativeChapter(1)"
         @close="closeReader"
         @toggle-toc="chapterListOpen = !chapterListOpen"
-        @toggle-panel="togglePanel('settings')"
-        @toggle-book="togglePanel('book')"
+        @toggle-panel="panels.toggle('settings')"
+        @toggle-book="panels.toggle('book')"
+        @change-source="panels.toggleSource()"
       />
       <div class="flex min-h-0 flex-1">
         <ReaderPane
@@ -144,25 +143,20 @@ onBeforeUnmount(() => {
           @reader-content="reader.readerContent = $event"
           @reader-mode="reader.readerMode = $event"
         />
-        <ReaderSettingsPanel v-if="settingsOpen" @close="panel = undefined" />
-        <ReaderBookPanel
-          v-if="bookOpen && reader.selectedBook"
+        <ReaderPanels
+          :panel="panels.panel"
+          :change-source="changeSource"
+          :search="contentSearch"
           :book="reader.selectedBook"
           :chapter-index="chapterIndex"
           :chapter-count="reader.chapters.length"
-          @close="panel = undefined"
-        />
-        <!-- 搜索面板按一个状态对象转发：它是阅读器内部组合，不必逐字段拆成 props。 -->
-        <ReaderSearchPanel
-          v-if="searchOpen"
-          :search="contentSearch"
-          :current-chapter-id="reader.selectedChapter?.id"
+          :selected-chapter-id="reader.selectedChapter?.id"
+          @close="panels.close()"
+          @jump="openSearchHit"
+          @stop-search="contentSearch.stop()"
           @update:query="contentSearch.query = $event"
           @update:regex="contentSearch.regex = $event"
           @update:scope="contentSearch.scope = $event"
-          @jump="openSearchHit"
-          @stop="contentSearch.stop()"
-          @close="panel = undefined"
         />
       </div>
       <ReaderBottomBar
@@ -179,7 +173,7 @@ onBeforeUnmount(() => {
         @search="toggleSearch"
         @auto-page="autoPage = !autoPage"
         @toc="chapterListOpen = !chapterListOpen"
-        @style="togglePanel('settings')"
+        @style="panels.toggle('settings')"
         @bookmark="pane?.toggleBookmark()"
         @theme="reader.theme = reader.theme === 'light' ? 'dark' : 'light'"
         @eye-care="reader.eyeCare = !reader.eyeCare"

@@ -10,11 +10,13 @@ import {
   prefetchChapters,
   refreshCatalog,
   saveReadingProgress,
-  searchBooks,
   switchBookSource,
   type Book,
+  type BookSearchResult,
   type Chapter,
+  type ChapterRef,
 } from '../../services/api'
+import { matchChapterIndex } from './chapterMatch'
 import { captureReadingLocator, restoreReadingLocator } from './readerPosition'
 import { defaultFullJustification } from './readerTypography'
 
@@ -24,13 +26,6 @@ const READING_TIME_TICK_MS = 15_000
 /** Page-turn animation: only the two that are actually implemented. The
  *  prototype's six choices (仿真 / 覆盖 / 淡入 / 竖排 …) stay 未接入 (§9). */
 export type ReaderPageAnimation = 'none' | 'slide'
-
-function chapterKey(title: string): string {
-  return title
-    .toLocaleLowerCase()
-    .replace(/^第[0-9零一二三四五六七八九十百千万两]+[章节卷回集部篇]\s*/u, '')
-    .replace(/[\s\p{P}\p{S}]/gu, '')
-}
 
 /**
  * An explicit "take me here" request: the reader opens the book on this
@@ -221,36 +216,43 @@ export function useReader(report: (cause: unknown) => void) {
     }
   }
 
-  async function switchSource() {
+  /**
+   * 换源：把这本书交给另一个书源，并尽量停在原来读到的那一章。
+   *
+   * `catalog` is the 目录 the 换源 sheet previewed (加载目录); without it the
+   * backend walks the new source's 目录 itself. Either way the switch only
+   * commits once a catalog exists, so a failed attempt leaves this reader — and
+   * the shelf row — exactly as it was.
+   */
+  async function switchSource(result: BookSearchResult, catalog?: ChapterRef[]) {
     const book = selectedBook.value
-    if (!book?.source_id) return
+    if (!book?.source_id) throw new Error('本地书籍没有在线书源')
     const previousChapter = selectedChapter.value
+    const previousIndex = chapters.value.findIndex((chapter) => chapter.id === previousChapter?.id)
+    const previousSize = chapters.value.length
     const previousLocator = readerContent.value
       ? captureReadingLocator(readerContent.value, readerMode.value)
       : undefined
     switchingSource.value = true
     try {
-      const response = await searchBooks(book.title)
-      const group = response.groups.find((item) => item.title.replace(/\s/g, '') === book.title.replace(/\s/g, ''))
-      const alternative = group?.sources.find((source) => source.source_id !== book.source_id)
-      if (!alternative) throw new Error('没有找到其他可用书源')
-      selectedBook.value = await switchBookSource(book.id, alternative)
-      chapters.value = []
-      selectedChapter.value = undefined
-      await loadCatalog()
-      const previousKey = previousChapter ? chapterKey(previousChapter.title) : ''
-      selectedChapter.value =
-        chapters.value.find((chapter) => previousKey && chapterKey(chapter.title) === previousKey) ??
-        chapters.value.find((chapter) => chapter.number === previousChapter?.number) ??
-        chapters.value[0]
+      selectedBook.value = await switchBookSource(book.id, result, catalog)
+      // The backend wrote the new catalog together with the switch, so this is
+      // a local read rather than another round-trip to the source.
+      chapters.value = await listChapters(book.id)
+      const target = matchChapterIndex(
+        Math.max(0, previousIndex),
+        previousChapter?.title,
+        chapters.value.map((chapter) => chapter.title),
+        previousSize,
+      )
+      selectedChapter.value = chapters.value[target] ?? chapters.value[0]
+      lastReadChapterId.value = selectedChapter.value?.id
       await loadChapterContent(selectedChapter.value)
       await nextTick()
       if (readerContent.value && previousLocator) {
         restoreReadingLocator(readerContent.value, readerMode.value, previousLocator)
         scheduleProgressSave()
       }
-    } catch (cause) {
-      report(cause)
     } finally {
       switchingSource.value = false
     }
