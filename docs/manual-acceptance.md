@@ -311,7 +311,7 @@ Set-Content -Path "$env:USERPROFILE\Desktop\百万字单章.txt" -Encoding UTF8 
 | ---: | --- | --- | --- | --- |
 | D1 | 导入 D1 的百万字 TXT，打开第一章并计时 | 正文出现 **< 1s**；上下滚动无明显掉帧（目测，必要时用任务管理器看 CPU） | | |
 | D2 | 用 D4 那本真实在线书，从第 1 章读到末章 | 全程不崩溃、不卡死；章节切换正常；读完后「累计读完」+1 | | |
-| D3 | 直接访问 `#/read/<bookId>?toc=0&panel=1` | 目录关闭、右侧面板打开；`toc=0` 生效（原型 :2778–2794） | | |
+| D3 | 直接访问 `#/read/<bookId>`，再访问 `#/read/<bookId>?toc=1&panel=1` | 前者**目录默认关闭**；后者目录展开、右侧面板打开（原型 :2778–2794） | | |
 | D4 | 直接访问 `#/settings/backup`、`#/settings/lab` | 命中对应 pane（深链接） | | |
 | D5 | 重启应用后回到 `#/read/<bookId>` | 恢复到上次章节与位置 | | |
 | D6 | 双击 `src-tauri/target/release/reader-desktop.exe`（**不要**从终端启动） | **不出现任何控制台窗口**；日志写在 `%APPDATA%\com.reader.desktop\logs\reader-desktop.log` | | |

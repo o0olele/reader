@@ -374,7 +374,7 @@ F3 阅读器重建
 - [x] 拆 `AppShell.vue`（439 行）→ `AppLayout` / `AppTitlebar` / `AppRail` / `AppBreadcrumb` / `<RouterView>`；
       阅读器顶栏与阅读设置面板移入 `features/reader/`（`ReaderPage` / `ReaderTopbar` / `ReaderSettingsPanel` / `ReaderCatalog`）
 - [x] **路由真实化**：13 条路由各自指向真实组件，删除 `useAppShell.view` 双轨状态；
-      支持 `#/read/<bookId>?toc=0&panel=1` 形式的深链接（原型 :2778–2794 已定义）
+      支持 `#/read/<bookId>?toc=1&panel=1` 形式的深链接（原型 :2778–2794 已定义）
 - [x] 处置死代码：`SourceManager.vue` 删除，重建为 `SourceManagerPage.vue` 接回 `/sources`
 - [x] **删除 `LibraryTabPage.vue` 的假数据三页**，换成 `NotConnected.vue` 未接入空状态（纪律 F0）
 - [x] 生成首批组件：`button card input textarea tabs badge separator switch slider select

@@ -23,7 +23,9 @@ const { reader } = useShellContext()
 // `useReaderDeepLink`.
 useReaderDeepLink()
 
-const chapterListOpen = ref(route.query.toc !== '0')
+// 目录默认收起，不挡正文；只有显式 `?toc=1` 深链接才展开（原型 :2778–2794
+// 里 `toc=0` 表示关闭，现在关闭就是默认值，`toc=0` 仍然兼容）。
+const chapterListOpen = ref(route.query.toc === '1')
 const immersive = ref(false)
 const autoPage = ref(false)
 const pane = ref<InstanceType<typeof ReaderPane>>()
