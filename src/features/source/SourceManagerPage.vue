@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { save } from '@tauri-apps/plugin-dialog'
 import { Download, Plus, RefreshCw, Upload } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
@@ -10,11 +11,21 @@ import SourceEditorDialog from './SourceEditorDialog.vue'
 import SourceList from './SourceList.vue'
 import { useShellContext } from '@/app/shellKeys'
 
+const route = useRoute()
 const { sources } = useShellContext()
 const fileInput = ref<HTMLInputElement>()
 const editorOpen = ref(false)
-const keyword = ref('')
+const keyword = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const probeQuery = ref('剑来')
+
+// `Ctrl+K` picks a source by deep-linking `#/sources?q=<name>`; editing the box
+// afterwards stays local until another source is picked from the palette.
+watch(
+  () => route.query.q,
+  (value) => {
+    keyword.value = typeof value === 'string' ? value : ''
+  },
+)
 
 const filtered = computed(() => {
   const needle = keyword.value.trim().toLowerCase()

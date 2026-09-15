@@ -3,14 +3,21 @@ import type { ListboxItemEmits, ListboxItemProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit, useCurrentElement } from "@vueuse/core"
 import { ListboxItem, useForwardPropsEmits, useId } from "reka-ui"
-import { computed, onMounted, onUnmounted, ref } from "vue"
+import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { cn } from "@/lib/utils"
 import { useCommand, useCommandGroup } from "."
 
-const props = defineProps<ListboxItemProps & { class?: HTMLAttributes["class"] }>()
+/**
+ * `keywords` is extra text the item matches on, on top of its rendered label.
+ * It carries the fields a row is built from but does not print (a book's
+ * author, a source's group), so a row whose owner already matched the query can
+ * never be hidden by the list filter, and the filter text can be replaced when
+ * the label is dynamic (e.g. it quotes the current query).
+ */
+const props = defineProps<ListboxItemProps & { class?: HTMLAttributes["class"], keywords?: string }>()
 const emits = defineEmits<ListboxItemEmits>()
 
-const delegatedProps = reactiveOmit(props, "class")
+const delegatedProps = reactiveOmit(props, "class", "keywords")
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 
@@ -37,12 +44,14 @@ const isRender = computed(() => {
 
 const itemRef = ref()
 const currentElement = useCurrentElement(itemRef)
-onMounted(() => {
+
+function register() {
   if (!(currentElement.value instanceof HTMLElement))
     return
 
   // textValue to perform filter
-  allItems.value.set(id, currentElement.value.textContent ?? props?.value!.toString())
+  const label = currentElement.value.textContent ?? props?.value?.toString() ?? ""
+  allItems.value.set(id, props.keywords ? `${label} ${props.keywords}` : label)
 
   const groupId = groupContext?.id
   if (groupId) {
@@ -53,7 +62,12 @@ onMounted(() => {
       allGroups.value.get(groupId)?.add(id)
     }
   }
-})
+}
+
+onMounted(register)
+// A changing `keywords` means the row now filters on different text; without
+// re-registering, the list would keep scoring it against its first render.
+watch(() => props.keywords, register, { flush: "post" })
 onUnmounted(() => {
   allItems.value.delete(id)
 })

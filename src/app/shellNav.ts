@@ -75,6 +75,23 @@ export const routeTitles: Record<string, string> = {
   settings: '设置',
 }
 
+/** Extra `Ctrl+K` keywords per route: the route name and a pinyin reading, so
+ *  `bookshelf` and `shujia` both reach 书架. Labels come from {@link routeTitles}. */
+export const routeKeywords: Record<string, string> = {
+  home: 'home shouye',
+  bookshelf: 'bookshelf shujia',
+  explore: 'explore faxian',
+  rss: 'rss dingyue',
+  read: 'read reader yueduqi',
+  search: 'search sosuo',
+  sources: 'sources shuyuan',
+  downloads: 'downloads xiazai',
+  history: 'history lishi',
+  bookmarks: 'bookmarks shuqian',
+  my: 'my wode',
+  settings: 'settings shezhi',
+}
+
 /** Prototype digit shortcuts 1–5 (`desktop-ui.html:2768`). */
 export const shortcutRoutes: Record<string, string> = {
   '1': 'home',
