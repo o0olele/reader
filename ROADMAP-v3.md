@@ -341,6 +341,13 @@ shadcn-vue 当前版本原生支持 Tailwind v4 的 `@theme` / `@theme inline`�
 > 由 topbar 的 ⓘ 按钮与阅读面板、正文搜索互斥切换；正文流只保留 eyebrow · h2 · 段落。
 > 实现：`src/features/reader/ReaderBookPanel.vue`。
 
+> **实现偏差（2026 记录）**：原型在 topbar 与 bottom bar 各放了一份**目录**入口（`#tocToggle` /
+> `#tocToggle2`）和一份**上一章 / 下一章**（顶部 `icon-btn--sm`、底部 `reader__progress` 行）。同一功能
+> 两处入口既冗余，也让「哪一处代表当前状态」含糊，现按「底栏是阅读工具栏的唯一权威」收敛：topbar 只留
+> 关闭 / 章节标题 / 字体 / 字号 / 主题 / 换源 / 书籍信息 / 阅读设置；目录与上一章 / 下一章**只在底栏**，
+> 且目录展开时底栏目录按钮保持选中态（`tocOpen` → `bg-accent`）。另外目录进入阅读器时**默认收起**，
+> 只有 `?toc=1` 深链接才展开。实现：`ReaderTopbar.vue` / `ReaderBottomBar.vue` / `ReaderPage.vue`。
+
 ---
 
 ## 5. 排期

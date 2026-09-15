@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ALargeSmall, ArrowLeft, ArrowLeftRight, ArrowRight, Info, MoreHorizontal, Sun, Type, X } from 'lucide-vue-next'
+import { ALargeSmall, ArrowLeftRight, Info, MoreHorizontal, Sun, Type, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -21,8 +21,6 @@ const props = defineProps<{
   switchingSource?: boolean
 }>()
 const emit = defineEmits<{
-  prev: []
-  next: []
   close: []
   togglePanel: []
   toggleBook: []
@@ -53,18 +51,6 @@ const changeSourceTitle = computed(() =>
     :class="collapsed ? 'h-0 border-b-0' : 'h-14'"
   >
     <div class="flex items-center gap-1">
-      <Button variant="ghost" size="icon-sm" aria-label="上一章" :disabled="chapterIndex <= 0" @click="emit('prev')">
-        <ArrowLeft />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="下一章"
-        :disabled="chapterIndex < 0 || chapterIndex >= reader.chapters.length - 1"
-        @click="emit('next')"
-      >
-        <ArrowRight />
-      </Button>
       <Button variant="ghost" size="icon-sm" aria-label="关闭阅读" title="关闭阅读" @click="emit('close')">
         <X />
       </Button>
