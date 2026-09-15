@@ -1,17 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import {
-  ALargeSmall,
-  ArrowLeft,
-  ArrowLeftRight,
-  ArrowRight,
-  Info,
-  List,
-  MoreHorizontal,
-  Sun,
-  Type,
-  X,
-} from 'lucide-vue-next'
+import { ALargeSmall, ArrowLeft, ArrowLeftRight, ArrowRight, Info, MoreHorizontal, Sun, Type, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -23,7 +12,6 @@ import {
 import { useShellContext } from '@/app/shellKeys'
 
 const props = defineProps<{
-  chapterListOpen: boolean
   settingsOpen: boolean
   bookOpen: boolean
   /** 换源面板是否展开（它和书籍信息 / 阅读设置共用右侧槽位）。 */
@@ -36,7 +24,6 @@ const emit = defineEmits<{
   prev: []
   next: []
   close: []
-  toggleToc: []
   togglePanel: []
   toggleBook: []
   changeSource: []
@@ -122,16 +109,6 @@ const changeSourceTitle = computed(() =>
         @click="reader.theme = reader.theme === 'light' ? 'dark' : 'light'"
       >
         <Sun />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        :class="chapterListOpen ? 'bg-accent' : ''"
-        aria-label="显示或隐藏目录"
-        title="显示或隐藏目录 (T)"
-        @click="emit('toggleToc')"
-      >
-        <List />
       </Button>
       <Button
         variant="ghost"

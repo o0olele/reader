@@ -107,7 +107,6 @@ onBeforeUnmount(() => {
     <template v-if="reader.selectedBook">
       <ReaderTopbar
         :collapsed="immersive"
-        :chapter-list-open="chapterListOpen"
         :settings-open="panels.settingsOpen"
         :book-open="panels.bookOpen"
         :switching-source="reader.switchingSource"
@@ -115,7 +114,6 @@ onBeforeUnmount(() => {
         @prev="selectRelativeChapter(-1)"
         @next="selectRelativeChapter(1)"
         @close="closeReader"
-        @toggle-toc="chapterListOpen = !chapterListOpen"
         @toggle-panel="panels.toggle('settings')"
         @toggle-book="panels.toggle('book')"
         @change-source="panels.toggleSource()"
@@ -169,6 +167,7 @@ onBeforeUnmount(() => {
         :has-bookmark="Boolean(pane?.bookmark)"
         :auto-page="autoPage"
         :eye-care="reader.eyeCare"
+        :toc-open="chapterListOpen"
         @prev="selectRelativeChapter(-1)"
         @next="selectRelativeChapter(1)"
         @goto="reader.chapters[$event] && selectChapter(reader.chapters[$event])"
