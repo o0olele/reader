@@ -101,6 +101,7 @@ pub fn run() {
             command_api::search::validate_all_sources_cmd,
             command_api::book::add_online_book_cmd,
             command_api::book::fetch_book_info_cmd,
+            command_api::book::preview_book_source_cmd,
             command_api::book::switch_book_source_cmd,
             command_api::reader::fetch_online_content_cmd,
             command_api::reader::search_book_content_cmd,

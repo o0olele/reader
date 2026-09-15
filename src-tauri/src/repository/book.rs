@@ -44,6 +44,10 @@ impl SqliteBookRepository {
             .map_err(AppError::database)
     }
 
+    /// Re-points a book at another source, dropping the catalog and the saved
+    /// reading position with it. Downloaded bodies are deleted explicitly:
+    /// `chapter_contents` cascades only where foreign keys are enforced, and
+    /// they are not, so orphans would otherwise sit in the cache quota forever.
     pub async fn switch_source(
         &self,
         book_id: i64,
@@ -58,6 +62,13 @@ impl SqliteBookRepository {
             .execute(&mut *tx)
             .await
             .map_err(AppError::database)?;
+        sqlx::query(
+            "DELETE FROM chapter_contents WHERE chapter_id IN (SELECT id FROM chapters WHERE book_id = ?)",
+        )
+        .bind(book_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::database)?;
         sqlx::query("DELETE FROM chapters WHERE book_id = ?")
             .bind(book_id)
             .execute(&mut *tx)
