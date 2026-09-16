@@ -3,6 +3,14 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Download, FolderPlus, Grid3x3, List, Plus, RefreshCw, Trash2, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -23,6 +31,28 @@ const sort = ref<SortKey>('updated')
 const filter = ref<FilterKey>('all')
 const mode = ref<'grid' | 'list'>('grid')
 const selected = ref<number[]>([])
+const groupDialogOpen = ref(false)
+const groupName = ref('')
+const creatingGroup = ref(false)
+
+function openGroupDialog() {
+  groupName.value = ''
+  groupDialogOpen.value = true
+}
+
+async function submitGroup() {
+  const name = groupName.value.trim()
+  if (!name || creatingGroup.value) return
+  creatingGroup.value = true
+  try {
+    if (await bookshelf.addGroup(name)) {
+      groupDialogOpen.value = false
+      groupName.value = ''
+    }
+  } finally {
+    creatingGroup.value = false
+  }
+}
 
 const visible = computed(() => {
   const needle = keyword.value.trim().toLowerCase()
@@ -93,7 +123,7 @@ async function removeSelected() {
           <span class="truncate">{{ group.name }}</span>
           <span class="text-xs text-muted-foreground">{{ group.book_count }}</span>
         </button>
-        <Button variant="ghost" size="sm" class="mt-1 w-full justify-start" @click="bookshelf.addGroup()">
+        <Button variant="ghost" size="sm" class="mt-1 w-full justify-start" @click="openGroupDialog">
           <FolderPlus /> 新建分组
         </Button>
       </aside>
@@ -173,5 +203,26 @@ async function removeSelected() {
         </div>
       </div>
     </div>
+
+    <Dialog v-model:open="groupDialogOpen">
+      <DialogContent class="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>新建分组</DialogTitle>
+          <DialogDescription>为书架创建一个分组，便于归类整理的书籍。</DialogDescription>
+        </DialogHeader>
+        <form class="grid gap-4" @submit.prevent="submitGroup">
+          <label class="grid gap-1.5 text-xs">
+            <span class="text-muted-foreground">分组名称</span>
+            <Input v-model="groupName" placeholder="例如：待读" aria-label="分组名称" />
+          </label>
+          <DialogFooter>
+            <Button type="button" variant="ghost" @click="groupDialogOpen = false">取消</Button>
+            <Button type="submit" :disabled="!groupName.trim() || creatingGroup">
+              {{ creatingGroup ? '创建中…' : '创建' }}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

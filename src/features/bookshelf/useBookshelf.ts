@@ -55,13 +55,16 @@ export function useBookshelf(report: (cause: unknown) => void) {
     }
   }
 
-  async function addGroup() {
-    const name = window.prompt('新分组名称')?.trim()
-    if (!name) return
+  /** Creates a group; the caller collects the name through its own dialog. */
+  async function addGroup(name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return false
     try {
-      groups.value.push(await createGroup(name))
+      groups.value.push(await createGroup(trimmed))
+      return true
     } catch (cause) {
       report(cause)
+      return false
     }
   }
 
