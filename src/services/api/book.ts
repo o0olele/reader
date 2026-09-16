@@ -13,6 +13,11 @@ export function importEpubBook(filename: string, bytes: number[]): Promise<Book>
   return invoke<Book>('import_epub_book', { filename, bytes })
 }
 
+/** Send bytes directly: a multi-megabyte TXT must not become millions of JSON numbers. */
+export function importLocalBook(filename: string, bytes: ArrayBuffer): Promise<Book> {
+  return invoke<Book>('import_local_book', bytes, { headers: { 'x-book-filename': encodeURIComponent(filename) } })
+}
+
 export function deleteBook(bookId: number): Promise<void> {
   return invoke<void>('delete_book', { bookId })
 }

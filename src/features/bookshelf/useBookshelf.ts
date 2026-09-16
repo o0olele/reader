@@ -2,8 +2,7 @@ import { computed, reactive, ref } from 'vue'
 import {
   createGroup,
   deleteBook,
-  importEpubBook,
-  importTxtBook,
+  importLocalBook,
   listBooks,
   listGroups,
   moveBookToGroup,
@@ -46,9 +45,8 @@ export function useBookshelf(report: (cause: unknown) => void) {
     if (!file) return
     importing.value = true
     try {
-      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()))
-      const isEpub = file.name.toLowerCase().endsWith('.epub')
-      upsert(isEpub ? await importEpubBook(file.name, bytes) : await importTxtBook(file.name, bytes))
+      const bytes = await file.arrayBuffer()
+      upsert(await importLocalBook(file.name, bytes))
     } catch (cause) {
       report(cause)
     } finally {
