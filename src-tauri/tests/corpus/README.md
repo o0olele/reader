@@ -8,6 +8,9 @@
 这是本次输入指纹；历史未登记哈希，不能据此证明历史文件逐字节相同。
 执行记录见 `docs/e0-rule-authority-2026-09-16.md`，结果见 `docs/coverage/rule-audit.md`。
 
+同日 Jsoup 绑定修复后再次重测：受阻 **131 → 127**，843 无执行错误（86.9%）；
+分母与输入哈希不变，正式报告已更新，细节及 hook 统计边界见 `docs/e0-jsoup-2026-09-16.md`。
+
 ## 重测命令（仓库根目录，PowerShell）
 
 ```powershell

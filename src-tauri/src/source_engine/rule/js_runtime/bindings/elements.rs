@@ -64,28 +64,36 @@ pub(super) fn node_text(node: &str) -> String {
         .unwrap_or_default()
 }
 
-pub(super) fn select_within(node: &str, css: &str) -> Vec<String> {
+pub(super) fn select_within(node: &str, css: &str) -> Result<Vec<String>, AppError> {
     // JSoup's `Element.select` takes plain CSS, not the legado rule dialect:
     // a bare `a` is a tag selector here, while the rule engine would read it as
     // an attribute name.
-    let Ok(selector) = Selector::parse(css) else {
-        return Vec::new();
-    };
-    Html::parse_fragment(node)
+    let selector = Selector::parse(css)
+        .map_err(|error| AppError::parse(format!("JSoup selector: {error}")))?;
+    Ok(Html::parse_fragment(node)
         .select(&selector)
         .map(|element| element.html())
-        .collect()
+        .collect())
+}
+
+pub(super) fn node_html(node: &str) -> String {
+    Html::parse_fragment(node)
+        .root_element()
+        .child_elements()
+        .next()
+        .map(|element| element.inner_html())
+        .unwrap_or_default()
 }
 
 /// Wraps one node's markup as a JSoup `Element`.
 pub(super) fn element<'js>(ctx: &Ctx<'js>, node: String) -> Result<Object<'js>, AppError> {
     let object = Object::new(ctx.clone()).map_err(js_error)?;
-    let markup = node.clone();
+    let markup = node_html(&node);
     object
         .set("html", Function::new(ctx.clone(), move || markup.clone()))
         .map_err(js_error)?;
     // `String(element)` and string concatenation must keep yielding the markup.
-    for name in ["toString", "valueOf"] {
+    for name in ["toString", "valueOf", "outerHtml"] {
         let raw = node.clone();
         object
             .set(name, Function::new(ctx.clone(), move || raw.clone()))
@@ -118,7 +126,8 @@ pub(super) fn element<'js>(ctx: &Ctx<'js>, node: String) -> Result<Object<'js>, 
         .set(
             "select",
             Function::new(ctx.clone(), move |ctx: Ctx<'js>, css: String| {
-                collection(&ctx, select_within(&for_select, &css)).map_err(element_js_error)
+                let nodes = select_within(&for_select, &css).map_err(element_js_error)?;
+                collection(&ctx, nodes).map_err(element_js_error)
             }),
         )
         .map_err(js_error)?;

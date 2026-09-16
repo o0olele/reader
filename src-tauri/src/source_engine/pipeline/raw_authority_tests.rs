@@ -195,3 +195,28 @@ fn bare_content_rule_remains_supported() {
         "Unrelated body"
     );
 }
+
+#[test]
+fn jsoup_catalog_objects_flow_through_the_stage_pipeline() {
+    let mut source = source();
+    // Shape used by corpus sources 124/576: parse, select, sort, then map to
+    // objects consumed by the chapterName/chapterUrl JSON rules.
+    source.raw_rules.toc = Some(serde_json::json!({
+        "chapterList": "+@js:org.jsoup.Jsoup.parse(result).select(' #newlist a').toArray().sort().map(x=>({n:x.text(),u:x.attr('href')}))",
+        "chapterName": "$.n",
+        "chapterUrl": "$.u"
+    }).to_string());
+    let (chapters, next) = parse_catalog_page(
+        &source,
+        r#"<div id="newlist"><a href="/2">第二章</a><a href="/1">第一章</a></div>"#,
+    )
+    .unwrap();
+    assert_eq!(
+        chapters,
+        vec![
+            ("第一章".into(), "https://example.com/1".into()),
+            ("第二章".into(), "https://example.com/2".into())
+        ]
+    );
+    assert!(next.is_none());
+}

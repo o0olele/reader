@@ -48,7 +48,7 @@ pub(in super::super) fn install_globals<'js>(
     // Rhino-era sources often use these unqualified aliases. Keep them
     // harmless and deterministic in QuickJS so a missing convenience helper
     // does not abort the whole rule.
-    globals.set("org", rule_input.clone()).map_err(js_error)?;
+    super::jsoup::install(&ctx)?;
     globals.set("run", rule_input.clone()).map_err(js_error)?;
     globals
         .set("time", format_epoch(0, "yyyy-MM-dd HH:mm:ss"))

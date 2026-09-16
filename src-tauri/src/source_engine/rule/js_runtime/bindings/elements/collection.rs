@@ -2,7 +2,7 @@
 //! Java's `ArrayList<String>`.
 
 use super::super::super::js_error;
-use super::{element, element_js_error, node_attr, node_text, resolve, select_within};
+use super::{element, element_js_error, node_attr, node_html, node_text, resolve, select_within};
 use crate::error::AppError;
 use rquickjs::{Array, Ctx, Function};
 
@@ -35,7 +35,7 @@ pub(crate) fn collection<'js>(ctx: &Ctx<'js>, nodes: Vec<String>) -> Result<Arra
             }),
         )
         .map_err(js_error)?;
-    let markup = nodes.clone();
+    let markup = nodes.iter().map(|node| node_html(node)).collect::<Vec<_>>();
     object
         .set(
             "html",
@@ -89,10 +89,13 @@ pub(crate) fn collection<'js>(ctx: &Ctx<'js>, nodes: Vec<String>) -> Result<Arra
         .set(
             "select",
             Function::new(ctx.clone(), move |ctx: Ctx<'js>, css: String| {
-                let found = for_select
-                    .iter()
-                    .flat_map(|node| select_within(node, &css))
-                    .collect();
+                // Validate even for an empty collection: invalid CSS is an
+                // error, not evidence that a source executed successfully.
+                select_within("", &css).map_err(element_js_error)?;
+                let mut found = Vec::new();
+                for node in &for_select {
+                    found.extend(select_within(node, &css).map_err(element_js_error)?);
+                }
                 collection(&ctx, found).map_err(element_js_error)
             }),
         )

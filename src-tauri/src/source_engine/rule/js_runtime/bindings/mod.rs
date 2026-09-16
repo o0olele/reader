@@ -3,6 +3,7 @@ mod context;
 mod crypto;
 mod ctx;
 mod elements;
+mod jsoup;
 mod net;
 mod objects;
 mod rule;
