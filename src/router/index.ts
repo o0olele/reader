@@ -4,7 +4,7 @@ import AppLayout from '../app/AppLayout.vue'
 /**
  * Real routes: every page is its own component under a single layout, and the
  * URL is the only navigation state (ROADMAP-v3 F0). The reader is deep-linkable
- * as `#/read/<bookId>?chapter=<id>&toc=0&panel=1`.
+ * as `#/read/<bookId>?chapter=<id>&toc=1&panel=1` (`toc=1` 才展开目录，默认收起).
  */
 export const router = createRouter({
   history: createWebHashHistory(),

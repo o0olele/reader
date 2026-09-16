@@ -13,7 +13,9 @@ pub(crate) use browser::{
 pub use grouping::SearchResultGroup;
 pub use types::{SearchResponse, SourceTestResult};
 
-use crate::{repository::source::SqliteSourceRepository, service::settings_service::SettingsService};
+use crate::{
+    repository::source::SqliteSourceRepository, service::settings_service::SettingsService,
+};
 
 #[derive(Clone)]
 pub struct SearchService {

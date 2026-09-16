@@ -30,7 +30,9 @@ pub(super) fn parse_request_options<'js>(
             headers
                 .props::<String, String>()
                 .collect::<Result<HashMap<_, _>, _>>()
-                .map_err(|error| AppError::InvalidArgument(format!("request options.headers: {error}")))
+                .map_err(|error| {
+                    AppError::InvalidArgument(format!("request options.headers: {error}"))
+                })
         })
         .transpose()?
         .unwrap_or_default();

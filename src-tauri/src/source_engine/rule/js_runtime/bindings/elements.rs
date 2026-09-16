@@ -40,7 +40,9 @@ pub(super) fn resolve(values: &[String], index: i32) -> Option<&String> {
     } else {
         index as i64
     };
-    usize::try_from(index).ok().and_then(|index| values.get(index))
+    usize::try_from(index)
+        .ok()
+        .and_then(|index| values.get(index))
 }
 
 /// Runs one rule against a single node's markup.
@@ -108,9 +110,7 @@ pub(super) fn element<'js>(ctx: &Ctx<'js>, node: String) -> Result<Object<'js>, 
     object
         .set(
             "attr",
-            Function::new(ctx.clone(), move |name: String| {
-                node_attr(&for_attr, &name)
-            }),
+            Function::new(ctx.clone(), move |name: String| node_attr(&for_attr, &name)),
         )
         .map_err(js_error)?;
     let for_select = node;

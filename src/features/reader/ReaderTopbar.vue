@@ -1,17 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import {
-  ALargeSmall,
-  ArrowLeft,
-  ArrowLeftRight,
-  ArrowRight,
-  Info,
-  List,
-  MoreHorizontal,
-  Sun,
-  Type,
-  X,
-} from 'lucide-vue-next'
+import { ALargeSmall, ArrowLeftRight, Info, MoreHorizontal, Sun, Type, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -23,7 +12,6 @@ import {
 import { useShellContext } from '@/app/shellKeys'
 
 const props = defineProps<{
-  chapterListOpen: boolean
   settingsOpen: boolean
   bookOpen: boolean
   /** 换源面板是否展开（它和书籍信息 / 阅读设置共用右侧槽位）。 */
@@ -33,10 +21,7 @@ const props = defineProps<{
   switchingSource?: boolean
 }>()
 const emit = defineEmits<{
-  prev: []
-  next: []
   close: []
-  toggleToc: []
   togglePanel: []
   toggleBook: []
   changeSource: []
@@ -66,18 +51,6 @@ const changeSourceTitle = computed(() =>
     :class="collapsed ? 'h-0 border-b-0' : 'h-14'"
   >
     <div class="flex items-center gap-1">
-      <Button variant="ghost" size="icon-sm" aria-label="上一章" :disabled="chapterIndex <= 0" @click="emit('prev')">
-        <ArrowLeft />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="下一章"
-        :disabled="chapterIndex < 0 || chapterIndex >= reader.chapters.length - 1"
-        @click="emit('next')"
-      >
-        <ArrowRight />
-      </Button>
       <Button variant="ghost" size="icon-sm" aria-label="关闭阅读" title="关闭阅读" @click="emit('close')">
         <X />
       </Button>
@@ -122,16 +95,6 @@ const changeSourceTitle = computed(() =>
         @click="reader.theme = reader.theme === 'light' ? 'dark' : 'light'"
       >
         <Sun />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        :class="chapterListOpen ? 'bg-accent' : ''"
-        aria-label="显示或隐藏目录"
-        title="显示或隐藏目录 (T)"
-        @click="emit('toggleToc')"
-      >
-        <List />
       </Button>
       <Button
         variant="ghost"

@@ -39,10 +39,7 @@ fn engine_catalog(
     Ok((!chapters.is_empty()).then_some(chapters))
 }
 
-pub fn parse_catalog_page(
-    source: &BookSource,
-    html: &str,
-) -> Result<CatalogPage, AppError> {
+pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage, AppError> {
     let rules = LegadoRules::decode(&source.raw_rules).toc;
     if let Some(rules) = rules.as_ref() {
         if let Some(chapters) = engine_catalog(source, rules, html)? {

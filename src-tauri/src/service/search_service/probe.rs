@@ -125,11 +125,8 @@ impl SearchService {
                                 self.sync_browser_cookies(&source, browser, &request.url)
                                     .await?;
                                 let source = self.sources.get(source_id).await?.unwrap_or(source);
-                                let parsed = parse_search_response(
-                                    &source,
-                                    &text,
-                                    request.url.as_str(),
-                                )?;
+                                let parsed =
+                                    parse_search_response(&source, &text, request.url.as_str())?;
                                 let source_name = source.name.clone();
                                 let session_state = source.session_state().to_owned();
                                 let duration_ms = started.elapsed().as_millis() as u64;

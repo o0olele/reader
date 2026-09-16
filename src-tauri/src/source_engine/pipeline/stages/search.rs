@@ -13,10 +13,7 @@ use crate::{
 
 use super::info::parse_book_info;
 
-pub fn parse_search(
-    source: &BookSource,
-    html: &str,
-) -> Result<Vec<BookSearchResult>, AppError> {
+pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
     if let Some(rules) = LegadoRules::decode(&source.raw_rules).search {
         if let Some(list) = rules.book_list.as_deref() {
             let mut list_context = RuleContext::default();
@@ -26,8 +23,12 @@ pub fn parse_search(
             for item in &items {
                 let mut context = RuleContext::new(list_context.snapshot());
                 context.with_http(source.http_context());
-                let Some(title) = first_in(source, rules.name.as_ref(), item, &mut context)? else { continue };
-                let Some(url) = url_in(source, rules.book_url.as_ref(), item, &mut context)? else { continue };
+                let Some(title) = first_in(source, rules.name.as_ref(), item, &mut context)? else {
+                    continue;
+                };
+                let Some(url) = url_in(source, rules.book_url.as_ref(), item, &mut context)? else {
+                    continue;
+                };
                 results.push(BookSearchResult {
                     source_id: source.id,
                     source_name: source.name.clone(),
@@ -38,7 +39,12 @@ pub fn parse_search(
                     url: absolutize(&source.base_url, &url),
                     intro: joined_in(source, rules.intro.as_ref(), item, &mut context)?,
                     kind: first_in(source, rules.kind.as_ref(), item, &mut context)?,
-                    latest_chapter: first_in(source, rules.last_chapter.as_ref(), item, &mut context)?,
+                    latest_chapter: first_in(
+                        source,
+                        rules.last_chapter.as_ref(),
+                        item,
+                        &mut context,
+                    )?,
                     word_count: first_in(source, rules.word_count.as_ref(), item, &mut context)?,
                 });
             }
@@ -55,7 +61,9 @@ pub fn parse_search(
         // turn that expected no-match into a misleading CSS parse failure.
         Err(error)
             if !source.raw_rules.is_empty()
-                && error.to_string().starts_with("parse error: 搜索结果选择器无效:") =>
+                && error
+                    .to_string()
+                    .starts_with("parse error: 搜索结果选择器无效:") =>
         {
             tracing::debug!(target: "source", source = %source.name, %error, "ignoring invalid CSS projection after raw rule no-match");
             Ok(Vec::new())

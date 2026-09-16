@@ -82,10 +82,16 @@ async fn searching_a_non_local_book_without_a_cache_finds_nothing() {
         .unwrap();
     let service = ReaderService::new(pool);
 
-    let response = service.search_content(902, "长街", false, |_| {}).await.unwrap();
+    let response = service
+        .search_content(902, "长街", false, |_| {})
+        .await
+        .unwrap();
 
     assert!(response.hits.is_empty());
-    assert_eq!((response.searched_chapters, response.total_chapters), (0, 1));
+    assert_eq!(
+        (response.searched_chapters, response.total_chapters),
+        (0, 1)
+    );
 }
 
 #[tokio::test]
@@ -112,8 +118,14 @@ async fn hits_address_the_displayed_text_not_the_raw_body() {
         .unwrap();
     let service = ReaderService::new(pool);
 
-    let displayed = service.search_content(903, "长街", false, |_| {}).await.unwrap();
-    let hidden = service.search_content(903, "first", false, |_| {}).await.unwrap();
+    let displayed = service
+        .search_content(903, "长街", false, |_| {})
+        .await
+        .unwrap();
+    let hidden = service
+        .search_content(903, "first", false, |_| {})
+        .await
+        .unwrap();
 
     assert_eq!(displayed.hits.len(), 1);
     assert_eq!(displayed.hits[0].paragraph_index, Some(0));

@@ -137,10 +137,9 @@ fn judges_url_fields_the_way_the_engine_resolves_them() {
     assert!(is_url_field("ruleSearch.bookUrl"));
     assert!(is_url_field("ruleBookInfo.tocUrl"));
     assert!(!is_url_field("ruleSearch.name"));
-    let report = run(
-        r#"[{"ruleSearch":{"bookUrl":"/novel/{{$.novelId}}?isSearch=1","name":".title"}}]"#,
-    )
-    .unwrap();
+    let report =
+        run(r#"[{"ruleSearch":{"bookUrl":"/novel/{{$.novelId}}?isSearch=1","name":".title"}}]"#)
+            .unwrap();
     assert_eq!(report.clean, 1);
     assert!(report.errors.is_empty());
 }

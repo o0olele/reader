@@ -16,14 +16,7 @@ const BLOCK_TAGS: &[&str] = &[
 
 /// Tags whose entire subtree is removed before text extraction.
 const SKIP_TAGS: &[&str] = &[
-    "script",
-    "style",
-    "noscript",
-    "template",
-    "head",
-    "title",
-    "meta",
-    "link",
+    "script", "style", "noscript", "template", "head", "title", "meta", "link",
 ];
 
 /// Turns rule-extracted markup (for example `id.content@html`) into readable

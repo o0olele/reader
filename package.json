@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "lint": "eslint .",
-    "format:check": "prettier --check \"src/**/*.{ts,vue,css}\" \"eslint.config.js\" \"*.json\"",
+    "format": "prettier --write \"src/**/*.{ts,vue,css}\" \"scripts/**/*.mjs\" \"eslint.config.js\" \"*.json\" \".github/workflows/*.yml\"",
+    "format:check": "prettier --check \"src/**/*.{ts,vue,css}\" \"scripts/**/*.mjs\" \"eslint.config.js\" \"*.json\" \".github/workflows/*.yml\"",
+    "check:structure": "node scripts/check-structure.mjs",
+    "test:tooling": "node --test scripts/check-structure.test.mjs",
+    "check": "npm run lint && npm run format:check && npm run test:tooling && npm run check:structure && npm run build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

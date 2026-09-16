@@ -11,10 +11,7 @@ use crate::{
     },
 };
 
-pub fn parse_explore(
-    source: &BookSource,
-    html: &str,
-) -> Result<Vec<BookSearchResult>, AppError> {
+pub fn parse_explore(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
     let Some(rules) = LegadoRules::decode(&source.raw_rules).explore else {
         return Err(AppError::parse(format!(
             "书源 `{}` 未配置发现规则",

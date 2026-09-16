@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/sidebar'
 import SidebarMenuButtonChild from '@/components/ui/sidebar/SidebarMenuButtonChild.vue'
 import { cn } from '@/lib/utils'
+import RailTooltip from './RailTooltip.vue'
 import { shellFooterNav, shellNavGroups, type ShellNavItem } from './shellNav'
 import { useCommandPalette } from './useCommandPalette'
 import { useRail } from './useRail'
@@ -32,93 +33,90 @@ const itemClass = computed(() => cn('h-9', !extended.value && 'justify-center'))
 </script>
 
 <template>
-  <aside
-    class="flex shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] duration-150 ease-out"
-    :style="{ width: extended ? 'var(--rail-w-ext)' : 'var(--rail-w)' }"
-  >
-    <SidebarHeader :class="cn('gap-2', extended ? 'p-2' : 'p-1')">
-      <!-- 折叠态：与下方菜单项复用同一 primitive / 同一栅格（p-1 + h-9 + w-full），
+  <!-- Commit the reader's final width once. The animated rail is out of flow,
+       so its intermediate widths cannot rewrap an entire long chapter per frame. -->
+  <div class="relative z-20 shrink-0" :style="{ width: extended ? 'var(--rail-w-ext)' : 'var(--rail-w)' }">
+    <aside
+      class="absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width] duration-150 ease-out motion-reduce:transition-none"
+      :style="{ width: extended ? 'var(--rail-w-ext)' : 'var(--rail-w)' }"
+    >
+      <SidebarHeader :class="cn('gap-2', extended ? 'p-2' : 'p-1')">
+        <!-- 折叠态：与下方菜单项复用同一 primitive / 同一栅格（p-1 + h-9 + w-full），
            否则 32px 的 ghost 方块和 48×36 的菜单胶囊会混排。 -->
-      <div v-if="extended" class="flex h-9 items-center gap-1.5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="展开 / 收起导航 (Ctrl+B)"
-          aria-label="展开或收起导航"
-          @click="toggle"
+        <div v-if="extended" class="flex h-9 items-center gap-1.5">
+          <!-- 展开态这一颗仍然只显示图标，所以它保留 tooltip；其余菜单项此时标签已可见。 -->
+          <RailTooltip label="展开 / 收起导航 (Ctrl+B)">
+            <Button variant="ghost" size="icon-sm" aria-label="展开或收起导航" @click="toggle">
+              <Menu />
+            </Button>
+          </RailTooltip>
+          <span class="truncate text-[13px] font-semibold">Legado</span>
+        </div>
+
+        <SidebarMenu v-else class="gap-1">
+          <SidebarMenuItem>
+            <RailTooltip label="展开 / 收起导航 (Ctrl+B)">
+              <SidebarMenuButtonChild type="button" :class="itemClass" aria-label="展开或收起导航" @click="toggle">
+                <Menu />
+              </SidebarMenuButtonChild>
+            </RailTooltip>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <RailTooltip label="全局搜索 (Ctrl+K)">
+              <SidebarMenuButtonChild type="button" :class="itemClass" aria-label="全局搜索" @click="openPalette">
+                <Search />
+              </SidebarMenuButtonChild>
+            </RailTooltip>
+          </SidebarMenuItem>
+        </SidebarMenu>
+
+        <button
+          v-if="extended"
+          type="button"
+          class="flex h-9 items-center gap-2 rounded-md bg-muted px-2.5 text-left text-xs hover:bg-accent"
+          @click="openPalette"
         >
-          <Menu />
-        </Button>
-        <span class="truncate text-[13px] font-semibold">Legado</span>
-      </div>
+          <Search class="size-4 shrink-0" />
+          <span class="flex-1 truncate font-semibold text-foreground">搜索书籍、书源</span>
+          <kbd class="rounded border bg-background px-1 text-[10px] text-muted-foreground">Ctrl K</kbd>
+        </button>
+      </SidebarHeader>
 
-      <SidebarMenu v-else class="gap-1">
-        <SidebarMenuItem>
-          <SidebarMenuButtonChild
-            type="button"
-            :class="itemClass"
-            title="展开 / 收起导航 (Ctrl+B)"
-            aria-label="展开或收起导航"
-            @click="toggle"
-          >
-            <Menu />
-          </SidebarMenuButtonChild>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButtonChild
-            type="button"
-            :class="itemClass"
-            aria-label="全局搜索"
-            title="全局搜索 (Ctrl+K)"
-            @click="openPalette"
-          >
-            <Search />
-          </SidebarMenuButtonChild>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      <SidebarContent>
+        <SidebarGroup v-for="group in shellNavGroups" :key="group.label" class="p-1">
+          <SidebarGroupLabel v-if="extended">{{ group.label }}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem v-for="item in group.items" :key="item.to">
+                <RailTooltip :label="item.label" :disabled="extended">
+                  <SidebarMenuButtonChild as-child :is-active="isActive(item)" :class="itemClass">
+                    <RouterLink :to="item.to" :aria-label="item.label">
+                      <component :is="item.icon" />
+                      <span v-if="extended" class="truncate">{{ item.label }}</span>
+                    </RouterLink>
+                  </SidebarMenuButtonChild>
+                </RailTooltip>
+                <SidebarMenuBadge v-if="extended && badgeCount(item)">{{ badgeCount(item) }}</SidebarMenuBadge>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-      <button
-        v-if="extended"
-        type="button"
-        class="flex h-9 items-center gap-2 rounded-md bg-muted px-2.5 text-left text-xs hover:bg-accent"
-        @click="openPalette"
-      >
-        <Search class="size-4 shrink-0" />
-        <span class="flex-1 truncate font-semibold text-foreground">搜索书籍、书源</span>
-        <kbd class="rounded border bg-background px-1 text-[10px] text-muted-foreground">Ctrl K</kbd>
-      </button>
-    </SidebarHeader>
-
-    <SidebarContent>
-      <SidebarGroup v-for="group in shellNavGroups" :key="group.label" class="p-1">
-        <SidebarGroupLabel v-if="extended">{{ group.label }}</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem v-for="item in group.items" :key="item.to">
+      <SidebarFooter class="gap-1 p-1">
+        <SidebarMenu>
+          <SidebarMenuItem v-for="item in shellFooterNav" :key="item.to">
+            <RailTooltip :label="item.label" :disabled="extended">
               <SidebarMenuButtonChild as-child :is-active="isActive(item)" :class="itemClass">
-                <RouterLink :to="item.to" :title="item.label">
+                <RouterLink :to="item.to" :aria-label="item.label">
                   <component :is="item.icon" />
                   <span v-if="extended" class="truncate">{{ item.label }}</span>
                 </RouterLink>
               </SidebarMenuButtonChild>
-              <SidebarMenuBadge v-if="extended && badgeCount(item)">{{ badgeCount(item) }}</SidebarMenuBadge>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </SidebarContent>
-
-    <SidebarFooter class="gap-1 p-1">
-      <SidebarMenu>
-        <SidebarMenuItem v-for="item in shellFooterNav" :key="item.to">
-          <SidebarMenuButtonChild as-child :is-active="isActive(item)" :class="itemClass">
-            <RouterLink :to="item.to" :title="item.label">
-              <component :is="item.icon" />
-              <span v-if="extended" class="truncate">{{ item.label }}</span>
-            </RouterLink>
-          </SidebarMenuButtonChild>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </SidebarFooter>
-  </aside>
+            </RailTooltip>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </aside>
+  </div>
 </template>

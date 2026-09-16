@@ -5,6 +5,7 @@
 
 pub mod backup;
 pub mod book;
+pub mod book_import;
 pub mod bookmark;
 pub mod bookshelf;
 pub mod download;

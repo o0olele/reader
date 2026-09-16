@@ -334,10 +334,12 @@ async fn exposes_nested_rule_helpers() {
 #[tokio::test]
 async fn exposes_the_jsoup_element_and_java_collection_api() {
     let runtime = QuickJsRuntime::default();
-    let context = || JsContext {
+    let context = || {
+        JsContext {
         result: r#"<div class="row"><a href="/one" data-id="2">一</a><a href="/two" data-id="1">二</a></div>"#
             .into(),
         ..Default::default()
+    }
     };
     // JSoup's `Elements`: size() / attr() / text() on the collection itself.
     let value = runtime

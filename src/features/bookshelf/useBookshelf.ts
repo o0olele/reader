@@ -2,8 +2,7 @@ import { computed, reactive, ref } from 'vue'
 import {
   createGroup,
   deleteBook,
-  importEpubBook,
-  importTxtBook,
+  importLocalBook,
   listBooks,
   listGroups,
   moveBookToGroup,
@@ -46,9 +45,8 @@ export function useBookshelf(report: (cause: unknown) => void) {
     if (!file) return
     importing.value = true
     try {
-      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()))
-      const isEpub = file.name.toLowerCase().endsWith('.epub')
-      upsert(isEpub ? await importEpubBook(file.name, bytes) : await importTxtBook(file.name, bytes))
+      const bytes = await file.arrayBuffer()
+      upsert(await importLocalBook(file.name, bytes))
     } catch (cause) {
       report(cause)
     } finally {
@@ -57,13 +55,16 @@ export function useBookshelf(report: (cause: unknown) => void) {
     }
   }
 
-  async function addGroup() {
-    const name = window.prompt('新分组名称')?.trim()
-    if (!name) return
+  /** Creates a group; the caller collects the name through its own dialog. */
+  async function addGroup(name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return false
     try {
-      groups.value.push(await createGroup(name))
+      groups.value.push(await createGroup(trimmed))
+      return true
     } catch (cause) {
       report(cause)
+      return false
     }
   }
 
@@ -78,15 +79,20 @@ export function useBookshelf(report: (cause: unknown) => void) {
     }
   }
 
-  async function moveBook(book: Book, event: Event) {
-    const groupId = Number((event.target as HTMLSelectElement).value)
-    try {
-      await moveBookToGroup(book.id, groupId)
-      book.group_id = groupId
-      await refresh()
-    } catch (cause) {
-      report(cause)
+  /** Moves books into one group and re-reads the shelf; returns how many moved. */
+  async function moveBooks(bookIds: number[], groupId: number) {
+    let moved = 0
+    for (const bookId of bookIds) {
+      try {
+        await moveBookToGroup(bookId, groupId)
+        moved += 1
+      } catch (cause) {
+        report(cause)
+        break
+      }
     }
+    if (moved) await refresh()
+    return moved
   }
 
   return reactive({
@@ -100,6 +106,6 @@ export function useBookshelf(report: (cause: unknown) => void) {
     handleFile,
     addGroup,
     removeBook,
-    moveBook,
+    moveBooks,
   })
 }

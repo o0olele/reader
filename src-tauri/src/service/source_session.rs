@@ -1,3 +1,8 @@
+mod cookies;
+use cookies::{
+    apply_set_cookie_headers, cookie_header, cookie_map, normalized_cookie_header, seed_cookie_jar,
+};
+
 use crate::{
     domain::source::{BookInfo, BookSource},
     error::AppError,
@@ -9,10 +14,7 @@ use crate::{
     },
 };
 use reqwest::cookie::CookieStore;
-use std::{
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 /// Upper bound on the 目录 pages one book is allowed to span; the same ceiling
 /// `ReaderService::refresh_catalog` uses so a next-page loop cannot run away.
@@ -182,71 +184,6 @@ impl SourceSession {
         current.session_expires_at = None;
         Ok(())
     }
-}
-
-fn seed_cookie_jar(jar: &reqwest::cookie::Jar, scope: &str, header: Option<&str>) {
-    let (Ok(url), Some(header)) = (reqwest::Url::parse(scope), header) else {
-        return;
-    };
-    for (name, value) in cookie_map(Some(header)) {
-        jar.add_cookie_str(&format!("{name}={value}"), &url);
-    }
-}
-
-fn apply_set_cookie_headers(
-    cookies: &mut BTreeMap<String, String>,
-    headers: &reqwest::header::HeaderMap,
-) {
-    for value in headers.get_all(reqwest::header::SET_COOKIE) {
-        let Ok(value) = value.to_str() else { continue };
-        let Some(pair) = value.split(';').next() else {
-            continue;
-        };
-        let Some((name, cookie_value)) = pair.split_once('=') else {
-            continue;
-        };
-        let name = name.trim();
-        if name.is_empty() {
-            continue;
-        }
-        let remove = cookie_value.trim().is_empty()
-            || value.split(';').any(|part| {
-                part.trim()
-                    .strip_prefix("Max-Age=")
-                    .or_else(|| part.trim().strip_prefix("max-age="))
-                    .is_some_and(|age| age.trim().parse::<i64>().is_ok_and(|age| age <= 0))
-            });
-        if remove {
-            cookies.remove(name);
-        } else {
-            cookies.insert(name.to_owned(), cookie_value.trim().to_owned());
-        }
-    }
-}
-
-fn cookie_map(header: Option<&str>) -> BTreeMap<String, String> {
-    header
-        .into_iter()
-        .flat_map(|value| value.split(';'))
-        .filter_map(|part| {
-            let (name, value) = part.trim().split_once('=')?;
-            (!name.is_empty()).then(|| (name.to_owned(), value.to_owned()))
-        })
-        .collect()
-}
-
-fn cookie_header(cookies: &BTreeMap<String, String>) -> Option<String> {
-    (!cookies.is_empty()).then(|| {
-        cookies
-            .iter()
-            .map(|(name, value)| format!("{name}={value}"))
-            .collect::<Vec<_>>()
-            .join("; ")
-    })
-}
-
-fn normalized_cookie_header(header: Option<&str>) -> Option<String> {
-    cookie_header(&cookie_map(header))
 }
 
 #[cfg(test)]

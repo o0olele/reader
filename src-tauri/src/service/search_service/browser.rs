@@ -1,8 +1,6 @@
 //! Browser-bound requests used for Cloudflare clearance and auth retries.
 
-use crate::{
-    domain::source::BookSource, error::AppError, source_engine::url::RequestSpec,
-};
+use crate::{domain::source::BookSource, error::AppError, source_engine::url::RequestSpec};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::WebviewWindow;
 

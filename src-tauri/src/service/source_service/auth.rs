@@ -2,9 +2,7 @@
 
 use crate::{
     error::AppError,
-    infrastructure::http::{
-        client::build_source_client_with_cookie_jar, url::resolve_url,
-    },
+    infrastructure::http::{client::build_source_client_with_cookie_jar, url::resolve_url},
     service::source_service::{
         cookies::{cookie_max_age, merge_cookies, session_expiry},
         SourceLoginInput, SourceLoginResult, SourceService, SourceSessionStatus,

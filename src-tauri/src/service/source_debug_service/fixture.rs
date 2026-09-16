@@ -38,7 +38,8 @@ fn slugify_source_name(name: &str) -> String {
     for character in name.chars() {
         if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
             slug.push(character.to_ascii_lowercase());
-        } else if character.is_whitespace() || matches!(character, '·' | '（' | '）' | '(' | ')') {
+        } else if character.is_whitespace() || matches!(character, '·' | '（' | '）' | '(' | ')')
+        {
             if !slug.ends_with('-') {
                 slug.push('-');
             }

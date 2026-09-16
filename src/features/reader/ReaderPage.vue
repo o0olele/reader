@@ -23,7 +23,9 @@ const { reader } = useShellContext()
 // `useReaderDeepLink`.
 useReaderDeepLink()
 
-const chapterListOpen = ref(route.query.toc !== '0')
+// 目录默认收起，不挡正文；只有显式 `?toc=1` 深链接才展开（原型 :2778–2794
+// 里 `toc=0` 表示关闭，现在关闭就是默认值，`toc=0` 仍然兼容）。
+const chapterListOpen = ref(route.query.toc === '1')
 const immersive = ref(false)
 const autoPage = ref(false)
 const pane = ref<InstanceType<typeof ReaderPane>>()
@@ -105,15 +107,11 @@ onBeforeUnmount(() => {
     <template v-if="reader.selectedBook">
       <ReaderTopbar
         :collapsed="immersive"
-        :chapter-list-open="chapterListOpen"
         :settings-open="panels.settingsOpen"
         :book-open="panels.bookOpen"
         :switching-source="reader.switchingSource"
         :source-open="panels.sourceOpen"
-        @prev="selectRelativeChapter(-1)"
-        @next="selectRelativeChapter(1)"
         @close="closeReader"
-        @toggle-toc="chapterListOpen = !chapterListOpen"
         @toggle-panel="panels.toggle('settings')"
         @toggle-book="panels.toggle('book')"
         @change-source="panels.toggleSource()"
@@ -167,6 +165,7 @@ onBeforeUnmount(() => {
         :has-bookmark="Boolean(pane?.bookmark)"
         :auto-page="autoPage"
         :eye-care="reader.eyeCare"
+        :toc-open="chapterListOpen"
         @prev="selectRelativeChapter(-1)"
         @next="selectRelativeChapter(1)"
         @goto="reader.chapters[$event] && selectChapter(reader.chapters[$event])"

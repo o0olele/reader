@@ -14,7 +14,7 @@ pub async fn import_txt_book_cmd(
     bytes: Vec<u8>,
 ) -> Result<Book, AppError> {
     BookService::new(state.database()?)
-        .import_txt(&filename, &bytes)
+        .import_txt(&filename, bytes)
         .await
 }
 

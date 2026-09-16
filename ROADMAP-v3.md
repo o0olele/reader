@@ -1,20 +1,19 @@
 # Reader Desktop 路线图 v3
 
-> v1 按字段表排期，错了。v2 按 token 频次排期，错了 60 个百分点。v2 改用真实失败归类后，
-> **后端已经基本对了 —— 但前端一直没有被度量过。**
-> 本版把度量口径扩到前端：以 `desktop-ui.html`（2,798 行静态原型）为目标态，
-> 逐页对照现有 43 个前端文件，并据此重排。
-> `ROADMAP.md`（v1）、`ROADMAP-v2.md`（v2）作为历史保留，**优先级一律以本文件为准**。
+## 当前状态（2026-09-16 复核）
 
-**一句话现状：后端 50 个 IPC 命令、148 个 Rust 文件、静态覆盖率 86.5%（受阻 131 源），已经能撑起原型里
-七个页面中的五个；前端却只有 4,168 行 TS·Vue（另有 1,032 行手写 CSS），
-其中一个 439 行的 `AppShell.vue` 同时充当标题栏、导航栏、阅读器顶栏和页面分发器，
-9 条路由全部指向同一个组件，三个页面（RSS / 历史 / 书签）渲染的是同一份占位假数据。
-瓶颈已经从「引擎写得对不对」转移到「前端根本没建起来」。**
+F0–F3 主体实现已落地：13 条真实页面路由、阅读器分页/搜索/换源/预下载；E1 已有统计、每日目标、跨书书签和书籍信息侧栏。
+GUI、性能、在线端到端验收仍未收口，不能把实现勾选当作版本验收通过。RSS/历史及多个高级子系统仍未接入。
+
+工程门禁现由 `npm run check`、Rust fmt/test/clippy 及 PR/发布共用的 quality workflow 管理，口径见 [工程质量门禁](docs/quality-gates.md)。
+原先三个超长 Rust 文件已拆分，并修复旧计数口径漏掉的 HTTP request 生产代码。
+
+仓库历史审计为 970 源 / 131 受阻 / 86.5% dummy 执行无错误；原始 JSON 不在当前工作区，不能称为当前重测结果或在线可用率。
+完整差距见 [2026-09-16 进度复核](docs/progress-audit-2026-09-16.md)。以下 §0/§1 与各项“写时实测”保留历史语境，当前门禁以本节、§6 和 §10 为准。
 
 ---
 
-## 0. 校验结果：v2 声明 vs 实测
+## 0. 历史校验：v2 声明 vs v3 初期实测
 
 以下逐条核对 `ROADMAP-v2.md` 中打勾的条目。**大部分属实**，三处需要修正。
 
@@ -115,7 +114,7 @@ v3 不再假设「做完 §X 就会达标」，而是把「受阻源数」本身
 
 ---
 
-## 1. 前端差距：本版新增的度量维度
+## 1. 历史前端差距：v3 重建前的度量基线
 
 ### 1.1 现状盘点
 
@@ -170,7 +169,7 @@ v2 最贵的两次失误本质相同：
 
 ---
 
-## 2. 后端能力 → 原型页面的映射
+## 2. v3 初版后端能力 → 原型页面映射（后续进度见 E1 与当前状态）
 
 50 个已注册 IPC 命令能覆盖多少原型？逐块对照：
 
@@ -341,6 +340,13 @@ shadcn-vue 当前版本原生支持 Tailwind v4 的 `@theme` / `@theme inline`�
 > 由 topbar 的 ⓘ 按钮与阅读面板、正文搜索互斥切换；正文流只保留 eyebrow · h2 · 段落。
 > 实现：`src/features/reader/ReaderBookPanel.vue`。
 
+> **实现偏差（2026 记录）**：原型在 topbar 与 bottom bar 各放了一份**目录**入口（`#tocToggle` /
+> `#tocToggle2`）和一份**上一章 / 下一章**（顶部 `icon-btn--sm`、底部 `reader__progress` 行）。同一功能
+> 两处入口既冗余，也让「哪一处代表当前状态」含糊，现按「底栏是阅读工具栏的唯一权威」收敛：topbar 只留
+> 关闭 / 章节标题 / 字体 / 字号 / 主题 / 换源 / 书籍信息 / 阅读设置；目录与上一章 / 下一章**只在底栏**，
+> 且目录展开时底栏目录按钮保持选中态（`tocOpen` → `bg-accent`）。另外目录进入阅读器时**默认收起**，
+> 只有 `?toc=1` 深链接才展开。实现：`ReaderTopbar.vue` / `ReaderBottomBar.vue` / `ReaderPage.vue`。
+
 ---
 
 ## 5. 排期
@@ -374,7 +380,7 @@ F3 阅读器重建
 - [x] 拆 `AppShell.vue`（439 行）→ `AppLayout` / `AppTitlebar` / `AppRail` / `AppBreadcrumb` / `<RouterView>`；
       阅读器顶栏与阅读设置面板移入 `features/reader/`（`ReaderPage` / `ReaderTopbar` / `ReaderSettingsPanel` / `ReaderCatalog`）
 - [x] **路由真实化**：13 条路由各自指向真实组件，删除 `useAppShell.view` 双轨状态；
-      支持 `#/read/<bookId>?toc=0&panel=1` 形式的深链接（原型 :2778–2794 已定义）
+      支持 `#/read/<bookId>?toc=1&panel=1` 形式的深链接（原型 :2778–2794 已定义）
 - [x] 处置死代码：`SourceManager.vue` 删除，重建为 `SourceManagerPage.vue` 接回 `/sources`
 - [x] **删除 `LibraryTabPage.vue` 的假数据三页**，换成 `NotConnected.vue` 未接入空状态（纪律 F0）
 - [x] 生成首批组件：`button card input textarea tabs badge separator switch slider select
@@ -400,7 +406,7 @@ F3 阅读器重建
 - [x] `error-banner` → `Sonner` toast
 
 验收：
-- [ ] 九组快捷键逐一手测通过 —— **未手测**（本机无 GUI 会话，只有静态构建）
+- [ ] 九组快捷键逐一手测通过 —— **未手测**（尚未执行桌面手测）
       → 手测清单 `docs/manual-acceptance.md` §A
 - [x] rail 折叠态宽度 56px、展开态 220px
 
@@ -427,10 +433,10 @@ F3 阅读器重建
 7. [x] **设置页** —— 左导航 + **10 个 pane**；已填 **主题 / 阅读 / 净化替换 / 下载缓存 / 备份恢复 / 其他（代理·UA）** 六个；
    封面 / AI / 翻译 / 实验室四个按纪律 F0 显示未接入
 8. [x] **「我的」页** —— 规则入口组 + 其他入口组；Web 服务卡未接入态
-9. [x] **首页** —— 最近在读接真实 `list_books`；统计 / 每日目标 / WebDAV 按纪律 F0 显示未接入（等 E1）
+9. [x] **首页** —— 书籍列表、统计与每日目标已接后端；WebDAV 未接入。最近在读仍按书籍更新时间排序，待改为真实阅读时间
 
 验收：
-- [ ] 每页与 `desktop-ui.html` 对应 section 并排截图比对 —— **未做**（本机无法截图比对）
+- [ ] 每页与 `desktop-ui.html` 对应 section 并排截图比对 —— **未做**（尚未执行逐页截图比对）
       → 手测清单 `docs/manual-acceptance.md` §B
 - [x] 无一处渲染非本模块数据：`grep -rn 'props.books.slice' src/features` 无结果；
       未接入模块一律走 `NotConnected.vue` 并列出所需能力
@@ -490,7 +496,7 @@ F3 阅读器重建
 | ttsbar（迷你封面/波形/朗读进度）、「跟随系统亮度」 | 子系统与平台接口 | S / E1 |
 
 验收：
-- [ ] 100 万字单章 TXT 打开 < 1s，滚动无掉帧（v2 遗留未验收）—— **仍未测**：本机无 GUI 会话
+- [ ] 100 万字单章 TXT 打开 < 1s，滚动无掉帧（v2 遗留未验收）—— **仍未测**：需真实 WebView 与计时证据
 - [ ] 分页模式改字号 → 进度不丢 —— 代码路径已接（`readerPosition.ts` + `useReader.ts` 字体 watcher），
       **双栏下的运行时验证未做**
 - [ ] **用本项目读完一本真实在线书**（v2 遗留未验收）—— **未验收**
@@ -502,16 +508,16 @@ F3 阅读器重建
 最大 SFC 189 行（`ReaderPage.vue`，`ReaderPane.vue` 188）；分栏与退回单栏的样式确实进入产物 ——
 `dist/assets/index-*.css` 命中 `is-narrow`(2) · `column-width`(2) · `column-rule`(3) · `first-letter`(1) ·
 `dialog-line`(1) · `chapter-status`(1) · `--reader-column-width`(1)。
-**未验证项**：分栏落版、页数/页码、改字号重排 —— 需要真实 WebView 几何，本机无 GUI 会话。
+**未验证项**：分栏落版、页数/页码、改字号重排 —— 需要真实 WebView 几何，尚未执行桌面验收。
 
 ### E0 · v0.3.0 门槛收尾（与 F 轨并行）
 
-- [ ] **受阻源 133 → 门槛见 §6.2**（v0.8.0 的 ≤140 已过，v1.0.0 的 ≤90 未到）。每次改动重跑 `rule-audit`，把受阻源变化写进 commit message
+- [ ] **受阻源历史结果 131 → 门槛见 §6.2**（历史满足 ≤140；原语料缺失，当前不可重测）。每次改动重跑 `rule-audit`，把受阻源变化写进 commit message
 - [ ] 删 `selector.rs` CSS 兜底（333 行）+ 扁平列迁移到 `raw_rules`；
       四个调用点已随拆分移动：`pipeline/stages/search.rs:50` · `stages/info.rs:41` ·
       `stages/catalog.rs:57` · `stages/content.rs:37`
-- [ ] `ContentRule` / `ExploreRule` 结构化 —— 目前无独立 struct，靠 `raw_rules` 原始 JSON 懒解析
-- [ ] 补 `SearchRule`（5/11）· `InfoRule`（7/13）· `CatalogRule`（4/10）缺口字段，按 v2 §3.7 填充率排序
+- [ ] 规则模型补全与存储迁移 —— `legado_rules.rs` 已有独立 `LegadoContentRule`（3 字段）与 `LegadoExploreRule`（9 字段），仍需补执行语义并迁移旧扁平列
+- [ ] 补 typed projection 字段与执行语义：Search 9/11、BookInfo 7/13、Toc 4/10；旧扁平 Search 5/11 不能代表实际管线能力
 - [x] 拆 `pipeline/stages.rs`（252 行，唯一越线）—— 拆成门面 `stages.rs`(17) +
       `stages/search.rs`(104) · `explore.rs`(58) · `info.rs`(42) · `catalog.rs`(58) · `content.rs`(38)；
       顺带删掉 `pipeline.rs` 里多余的 `#[path]`（它把子模块目录指到 `pipeline/` 而不是 `pipeline/stages/`）。
@@ -557,7 +563,7 @@ path parser 18 条 / 16 源 · unsupported JVM access 24 条 / 14 源 · harness
       + `useReader.focusLocation`）。门禁：`cargo test bookmark`（跨表连接、排序、级联删除）。
       手测项 `docs/manual-acceptance.md` §C12 —— 与其它 F 轨验收一样**留待 GUI 会话**，此处不代替勾选。
 - [ ] **书籍状态字段** —— 未读章数、「更新 / 完结 / 音频」徽标（书架卡片需要）
-- [ ] **书籍详情页命令** —— 现有 `fetch_book_info` 之上补简介/分类/字数/更新时间
+- [ ] **完整书籍详情** —— 已有 `fetch_book_info` 与阅读器信息侧栏（简介/分类等）；仍缺独立详情页、字数及源站更新时间等字段
 - [ ] **高亮 / 批注** —— 新表 + CRUD（正文 `<mark>` 与批注角标需要）
 - [ ] **TXT 目录规则 / 封面规则 CRUD** —— `txtTocRule.json` 已打包，缺管理命令
 - [ ] **托盘 / 开机自启 / 启动页** —— 设置「其他」pane 需要
@@ -598,11 +604,9 @@ path parser 18 条 / 16 源 · unsupported JVM access 24 条 / 14 源 · harness
 | 7 | 七页与原型对位 | home / bookshelf / explore / rss / read / my / settings 逐页截图比对 |
 | 8 | 九组快捷键可用 | 手测清单 |
 
-**门槛实测状态（在 `427db42` 之上）**：1 / 2 / 3 / 5 / 6 由命令证明为真 ——
-最大 SFC 189 行、`component: AppShell` 计数 0、`props.books.slice` 无结果、`styles.css` 硬编码十六进制 0
-（424 行，全部为令牌 + 阅读器排版层）、Rust 最大非测试生产文件 247 行。
-4 为逐页人工核对，已做（未接入模块一律走 `NotConnected.vue`）。
-**7 与 8 依赖 GUI 会话，本机做不了 —— 保持未勾，不得以「实现就位」替代。**
+**当前自动门禁**：`npm run check:structure` 统一检查 Rust 生产段 <250 行、Vue SFC ≤200 行（不含 style）、令牌颜色与旧路由回退。末尾内联测试模块以外的生产代码不能因中途 `cfg(test)` 被漏计；旧 shell 首标记口径已废弃。
+格式、lint、构建与测试通过情况见 `docs/quality-gates.md` 及本次收口记录。
+#3 的死导出、#4 的逐页数据真实性、#7 视觉对位与 #8 快捷键仍需代码审查/手测，不由结构脚本替代。
 
 ### 6.2 引擎（重设 v0.3.0 门槛）
 
@@ -612,7 +616,7 @@ v2 的「受阻源下降 ≥ 70%」定得过于乐观：六项全做完只降 18
 | 级别 | 受阻源 | 相对 224 基线 |
 | --- | ---: | ---: |
 | 当前（v3 写时） | 182 | −18.8% |
-| **当前实测（2026-09-10，三批引擎修复后）** | **131** | **−41.5%** |
+| **历史实测（2026-09-10，原语料待恢复）** | **131** | **−41.5%** |
 | **v0.8.0 门槛** | **≤ 140** | −37.5% |
 | **v1.0.0 门槛** | **≤ 90** | −60% |
 
@@ -621,7 +625,7 @@ v2 的「受阻源下降 ≥ 70%」定得过于乐观：六项全做完只降 18
 
 ### 6.3 每次 P 收尾复查
 
-1. Rust 最大非测试行 < 250；Vue SFC < 200 行
+1. Rust 最大非测试行 < 250；Vue SFC ≤ 200 行
 2. 每条验收能用一条命令或一个文件路径证明
 
 ---
@@ -635,8 +639,8 @@ v2 的「受阻源下降 ≥ 70%」定得过于乐观：六项全做完只降 18
 | v0.5.0 | v2 P4 | 下载 / 缓存 / 导出 | ✅ |
 | v0.6.0 | v2 P5 | 批量校验 + 换源 + 书源管理 | ✅ |
 | ~~v0.3.0~~ | — | 受阻源 −70% —— **门槛不可达，作废，见 §6.2** | ⛔ |
-| **v0.8.0** | **F0 + F1 + F2** | shadcn-vue 地基 + 真实路由 + 六页对位原型 + 无假数据 + SFC < 200 行 | 🟡 实现就位；视觉对位（§6.1 #7）未验收 |
-| **v0.9.0** | **F3 + E0** | 阅读器七区全建 + 精确分页 + 读完一本在线书 · 受阻源 ≤ 140 + `selector.rs` 兜底已删 | 🟡 F3 实现就位（运行时未验）；E0 受阻源 **131 已达标**，`selector.rs` 兜底未删 |
+| **v0.8.0** | **F0 + F1 + F2** | shadcn-vue 地基 + 真实路由 + 六页对位原型 + 无假数据 + SFC ≤ 200 行 | 🟡 实现就位；视觉对位（§6.1 #7）未验收 |
+| **v0.9.0** | **F3 + E0** | 阅读器七区全建 + 精确分页 + 读完一本在线书 · 受阻源 ≤ 140 + `selector.rs` 兜底已删 | 🟡 F3 实现就位（运行时未验）；E0 历史受阻源 **131，待恢复语料重验**，`selector.rs` 兜底未删 |
 | v0.9.5 | E1 | 首页仪表盘数据 + 高亮批注 + 书籍详情页 | ⬜ |
 | v1.0.0 | S + R | legado 兼容备份 + RSS + 受阻源 ≤ 90 + Windows/Linux 打包 | ⬜ |
 
@@ -651,7 +655,7 @@ TTS / AI / 翻译 / 局域网 Web 不进 v1.0.0 门槛，各自独立立项。
 | **前端从未被度量** | 三版路线图 0 条前端验收；结果是 439 行单体、装饰性路由、三个假页面 | **本版新增** —— §6.1 建立八条前端门槛 |
 | **门禁声称全绿但从未真的运行** | `cargo test` 自 `d674c64` 起在 `rule_audit` bin 上失败（分类器与测试期望相反），三版路线图都写着「三件套全绿」；**2026-09-10 二次复发**：`7f4c275` 让空匹配掩盖解析级失败，同样没人跑过（见 §0.4） | **本版新增** —— E0 附带修复 ×2；打勾前必须真的跑一遍 |
 | **F1/F2/F3 的验收依赖 GUI 会话** | 快捷键手测、逐页截图比对、双栏落版、读完一本在线书 —— 原判「本机无 GUI 会话」 | **本版新增** —— 相关条目保持 `[ ]`；2026-09-10 复核发现本机存在交互式桌面（session 3），可尝试，但未实测前不许用「实现就位」替代 |
-| **沙箱下 `src/` 与 `src-tauri/` 不可写（ACL 残留）** | `cargo test` / `clippy` 打不开 `src-tauri/.cargo-target/debug/.cargo-lock`，`npm run build` 因 esbuild 走管道报 EPERM —— **标准门禁在本机默认跑不起来**；DSH 文件工具仍可正常编辑源码 | **本版新增** —— 用更宽权限运行，或用管理员 `takeown` + `icacls /reset` 一次性修复继承；修好前每条验收都要额外授权 |
+| **历史沙箱 ACL 残留（本次未复现）** | `cargo test` / `clippy` 打不开 `src-tauri/.cargo-target/debug/.cargo-lock`，`npm run build` 因 esbuild 走管道报 EPERM —— **标准门禁在本机默认跑不起来**；DSH 文件工具仍可正常编辑源码 | 2026-09-16 默认权限下 fmt/test/clippy/npm 检查可运行；不再作为当前阻塞，不需因历史描述重置 ACL |
 | **纪律条目打勾但不为真** | v2 §3.9「最大文件 < 250」打 ✅，实测 `stages.rs` 252 | **本版新增** —— 打勾前必须跑一次 §6.3 的命令 |
 | **门槛定得不可达就等于没门槛** | v2 的 −70% 六项做完只到 −18.8%，之后停滞 | **本版新增** —— §6.2 改为 −37.5% / −60% 分级 |
 | **重写期间前后端同时在动** | 页面重建与 E1 新命令交错，容易互相阻塞 | F2 只用已就绪命令；E1 按 F 轨实际阻塞顺序做，不提前 |
@@ -687,64 +691,25 @@ TTS / AI / 翻译 / 局域网 Web 不进 v1.0.0 门槛，各自独立立项。
 
 ## 10. 度量与验收命令
 
-```bash
-# 三件套
-cargo test   --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target
-cargo clippy --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target \
-             --all-targets -- -D warnings
-npm run lint && npm run format:check && npm run build
-
-# 静态覆盖率（无网络，进 CI）—— 只看「受阻源数」
-READER_STRICT_ENGINE=1 cargo run --bin rule-audit -- \
-  --corpus src-tauri/tests/corpus/ --out docs/coverage/
-
-# 在线可用率（需网络，不进 CI）—— 必须分层报告
-READER_STRICT_ENGINE=1 cargo run --bin source-audit -- \
-  --corpus src-tauri/tests/corpus/f3f55c6e-723b-4055-b254-124c9d88c5cb.json \
-  --keyword 剑来 --concurrency 8 --out audit.csv
-
-# 后端文件行数纪律（非测试行 = 首个 #[cfg(test)] 之前）
-cd src-tauri/src && for f in $(find . -name "*.rs"); do
-  t=$(grep -n "#\[cfg(test)\]" "$f" | head -1 | cut -d: -f1)
-  [ -z "$t" ] && n=$(wc -l < "$f") || n=$((t-1)); echo "$n $f"
-done | sort -rn | head -15
-
-# 前端门槛
-find src -name '*.vue' -exec wc -l {} + | sort -rn | head -5     # ≤ 200
-grep -c 'component: AppShell' src/router/index.ts                 # == 0
-grep -rn 'props.books.slice' src/features                         # 无结果
-grep -cE '#[0-9a-fA-F]{3,8}\b' src/styles.css                     # 硬编码颜色 → 0
-
-# 体量
-find src-tauri/src -name "*.rs" | wc -l
-find src-tauri/src -name "*.rs" -exec cat {} + | wc -l
-find src \( -name "*.vue" -o -name "*.ts" \) -exec cat {} + | wc -l
+```powershell
+npm run check
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo test --locked --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target-dir src-tauri/.cargo-target --all-targets -- -D warnings
+git diff --check
 ```
+
+全量静态/在线审计需先恢复原 970 源语料，命令见 `src-tauri/tests/corpus/README.md`。
+CI 使用已提交的审计器单测和 fixtures，不声称全量覆盖率达标。详细计数和门禁边界见 `docs/quality-gates.md`。
 
 ---
 
-## 11. 下一步（2026-09-10 重写）
+## 11. 下一步（2026-09-16 更新）
 
-F0 / F1 / F2 / F3 的实现项已全部落地（§0.4 复核），原表的 1–6 项均已完成；
-当前瓶颈是「E0 的量化门槛」与「依赖桌面会话的验收」。
+1. 工程收口：格式、生产文件拆分、自动结构检查、测试与发布前质量门禁已接入；实际验证结果记录在本次收口文档。
+2. 执行 `docs/manual-acceptance.md`：快捷键、七页视觉、分页几何、重排定位、连续在线阅读与性能。相关勾选继续保持未验收。
+3. E1：最近阅读/历史、书籍状态与完整详情、持久化划线笔记。
+4. E0：恢复审计语料，按真实 fixture 修 JS/规则语义；删 selector 四处兜底并完成存储迁移。131 受阻为历史结果，不直接作为新改动验收。
+5. S/R：Legado 兼容备份、阅读进度同步、RSS 与 Linux 发布。
 
-| # | 任务 | 阻塞关系 | 节 |
-| ---: | --- | --- | --- |
-| 1 | 修 `cargo test` 红门禁：`rule_audit` 兜底不得掩盖解析级失败 | ✅ 已完成（受阻源 164 → 165，三件套全绿） | §0.4 / E0 |
-| 2 | E0 · **js runtime 一类**：`JavaImporter is not defined`（约 24 条规则）· `cannot read property 'Jsoup' of undefined`（9 条）· `@js:` 内 `{{$...}}` 未先求值（`if({{$.isFinished}}==1)` 一族） | **当前主战场**：106 源受阻、单独修好可解 64 源 | E0 / §6.2 |
-| 3 | E0 · **规则方言 + URL 字段 + Java 容器三批**：显示模板 `{$.x}` 路由、JSoup `[attr~=regex]`、前导 `+`、属性运算符空格、审计区分配置字段与钩子；URL 字段改走 `AnalyzeUrl` 语义；`getElements` / `getElement` / `getStringList` 返回 JSoup `Element(s)` 与 Java `ArrayList`（`select` / `attr` / `text` / `html` / `get` / `size` / `toArray`） | ✅ 已完成：受阻源 165 → **131**（过 v0.8.0 门槛），css compatibility 77 → 23 源、path parser 16 → 2 源、js runtime 106 → 103 源 | §0.4 / E0 |
-| 4 | 删 `selector.rs` 兜底（355 行）+ 扁平列迁移到 `raw_rules` | 独立，E0 关键项 | E0 |
-| 5 | `ContentRule` / `ExploreRule` 结构化 + 补 `SearchRule` / `InfoRule` / `CatalogRule` 缺口字段 | 依赖 #4 定下的迁移形态 | E0 |
-| 6 | 在桌面会话执行 `docs/manual-acceptance.md`（§A 快捷键 · §B 七页对位 · §C 阅读器几何 · §D 性能/端到端） | 需要交互会话；本机已有（session 3），待实测确认 | F1 / F2 / F3 |
-| 7 | E1 · 书籍状态字段 / 详情页命令 / 高亮批注 | 按 F 轨实际阻塞顺序 | E1 |
-| 8 | 修本机沙箱 ACL（`src/` `src-tauri/` 不可写） | 独立，可并行；修好前每条门禁都要更宽权限 | §8 |
-
-**顺序**：#1 已关闭；接着做 #2 → #3（这两块是 165 源里最大的可解空间），目标 **≤ 140（v0.8.0 门槛）**；
-#6 可在任意阶段插入 —— 它是 v0.8.0 / v0.9.0 收口的唯一路径。
-
-### 需要同步修改的文档
-
-`ARCHITECTURE.md` 原写着「使用 Tailwind 工具类 + 共享设计令牌，**不依赖 shadcn-vue**」——
-v2 §10 刚把这句从「不用 Tailwind/shadcn」改成现在这样。
-**已第三次修改为**「Tailwind v4 + shadcn-vue（Reka UI）+ CSS 变量令牌；阅读器正文层例外」，
-同时更新了 Current milestone、`pipeline/stages/` 的模块边界与「13 条真实路由」。
+旧沙箱 ACL/无 GUI 的判断不作为当前事实；本机默认权限已能运行前端检查和 Rust 测试，实际桌面能力仍需手测。

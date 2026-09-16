@@ -24,6 +24,8 @@ const props = defineProps<{
   hasBookmark: boolean
   autoPage: boolean
   eyeCare: boolean
+  /** 目录是否展开：展开时目录按钮保持选中态。 */
+  tocOpen: boolean
 }>()
 
 const emit = defineEmits<{
@@ -77,7 +79,15 @@ const percent = computed(() =>
       <Button variant="ghost" size="sm" :class="autoPage ? 'bg-accent' : ''" title="自动翻页" @click="emit('autoPage')">
         <Play /> 自动翻页
       </Button>
-      <Button variant="ghost" size="sm" title="目录 (T)" @click="emit('toc')"><List /> 目录</Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        :class="tocOpen ? 'bg-accent' : ''"
+        :aria-pressed="tocOpen"
+        title="目录 (T)"
+        @click="emit('toc')"
+        ><List /> 目录</Button
+      >
       <Button variant="ghost" size="sm" title="听书（未接入）" @click="emit('tts')"><Headphones /> 听书</Button>
       <Button variant="ghost" size="sm" title="阅读样式" @click="emit('style')"><SlidersHorizontal /> 阅读样式</Button>
       <Button

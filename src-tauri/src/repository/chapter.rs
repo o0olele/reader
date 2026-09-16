@@ -202,7 +202,10 @@ mod tests {
         sqlx::query("INSERT INTO chapters (book_id, number, title, content, remote_url) VALUES (1, 0, 'Local', 'body in the chapters table', 'https://example.test/1'), (1, 1, 'Cached', '', 'https://example.test/2'), (1, 2, 'Empty', '   ', 'https://example.test/3')")
             .execute(&pool).await.unwrap();
         let repository = SqliteChapterRepository::new(pool);
-        repository.save_content(2, "body in the cache table").await.unwrap();
+        repository
+            .save_content(2, "body in the cache table")
+            .await
+            .unwrap();
 
         let searchable = repository.list_searchable(1).await.unwrap();
 

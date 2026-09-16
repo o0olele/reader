@@ -84,13 +84,12 @@ impl ReaderService {
                     .map(str::trim)
                     .collect::<Vec<_>>()
                     .join("\n");
-                chapter.content =
-                    evaluate(&replace, &content, Extraction::Values, &mut context)
-                        .map_err(|error| AppError::parse(format!("书源正文替换失败：{error}")))?
-                        .join("\n");
+                chapter.content = evaluate(&replace, &content, Extraction::Values, &mut context)
+                    .map_err(|error| AppError::parse(format!("书源正文替换失败：{error}")))?
+                    .join("\n");
             }
-            let processed =
-                ContentProcessor::new(rules, &book_name, &origin)?.process(&chapter.title, &chapter.content)?;
+            let processed = ContentProcessor::new(rules, &book_name, &origin)?
+                .process(&chapter.title, &chapter.content)?;
             chapter.title = processed.title;
             chapter.content = processed.content;
             Ok(chapter)

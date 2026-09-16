@@ -1,6 +1,8 @@
 use super::directive::{extract_get, extract_put, extract_replacement, extract_templates};
 use super::model::{RuleAlternatives, RuleContext, RuleJoin, RuleMode, RuleParseError, SourceRule};
-use super::scanner::{find_ignore_ascii_case, split_top_level, starts_ignore_ascii_case, Separator};
+use super::scanner::{
+    find_ignore_ascii_case, split_top_level, starts_ignore_ascii_case, Separator,
+};
 
 mod mode;
 
