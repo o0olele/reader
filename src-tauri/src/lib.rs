@@ -54,6 +54,7 @@ pub fn run() {
             command_api::bookmark::save_bookmark_cmd,
             command_api::bookmark::delete_bookmark_cmd,
             command_api::book::import_txt_book_cmd,
+            command_api::book_import::import_local_book_cmd,
             command_api::book::import_epub_book_cmd,
             command_api::book::list_books_cmd,
             command_api::reader::list_chapters_cmd,

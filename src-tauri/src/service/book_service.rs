@@ -135,12 +135,17 @@ impl BookService {
             .await
     }
 
-    pub async fn import_txt(&self, filename: &str, bytes: &[u8]) -> Result<Book, AppError> {
+    pub async fn import_txt(&self, filename: &str, bytes: Vec<u8>) -> Result<Book, AppError> {
         let title = title_from_filename(filename);
         if title.is_empty() || bytes.is_empty() {
             return Err(AppError::InvalidArgument("书籍名称或内容不能为空".into()));
         }
-        self.import(filename, txt::parse(bytes, title)?).await
+        let started = std::time::Instant::now();
+        let parsed = tokio::task::spawn_blocking(move || txt::parse(&bytes, title))
+            .await
+            .map_err(|error| AppError::parse(format!("TXT 解析任务失败：{error}")))??;
+        tracing::info!(target: "book", elapsed_ms = started.elapsed().as_millis(), "TXT parsed");
+        self.import(filename, parsed).await
     }
 
     pub async fn import_epub(&self, filename: &str, bytes: Vec<u8>) -> Result<Book, AppError> {

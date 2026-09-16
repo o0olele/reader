@@ -21,7 +21,39 @@ struct TxtTocRule {
 #[derive(Debug)]
 struct CompiledTocRule {
     chapter_regex: Regex,
+    candidate_regex: Option<regex::Regex>,
     volume_regex: Option<Regex>,
+}
+
+impl CompiledTocRule {
+    fn headings(&self, text: &str) -> Vec<(usize, usize)> {
+        let Some(candidate) = self.candidate_regex.as_ref() else {
+            return self
+                .chapter_regex
+                .find_iter(text)
+                .filter_map(Result::ok)
+                .map(|matched| (matched.start(), matched.end()))
+                .collect();
+        };
+        let mut headings = Vec::new();
+        let mut offset = 0;
+        while let Some(possible) = candidate.find_at(text, offset) {
+            // Verify against the full original input, preserving lookbehind,
+            // multiline anchors and whitespace spanning line boundaries.
+            let Ok(Some(matched)) = self.chapter_regex.find_from_pos(text, possible.start()) else {
+                break;
+            };
+            headings.push((matched.start(), matched.end()));
+            if matched.end() == text.len() {
+                break;
+            }
+            offset = matched.end();
+            if matched.start() == matched.end() {
+                offset += text[offset..].chars().next().map_or(0, char::len_utf8);
+            }
+        }
+        headings
+    }
 }
 
 static DEFAULT_TOC_RULES: LazyLock<Vec<CompiledTocRule>> = LazyLock::new(|| {
@@ -47,11 +79,31 @@ static DEFAULT_TOC_RULES: LazyLock<Vec<CompiledTocRule>> = LazyLock::new(|| {
             };
             CompiledTocRule {
                 chapter_regex,
+                candidate_regex: candidate_regex(&compatible_pattern),
                 volume_regex,
             }
         })
         .collect()
 });
+
+/// A linear-time superset check for the bundled rules. Only known zero-width
+/// assertions are removed; the original fancy regex still decides all matches.
+/// An unknown construct disables the optimization rather than rejecting text.
+fn candidate_regex(pattern: &str) -> Option<regex::Regex> {
+    let mut pattern = pattern.to_owned();
+    for assertion in [
+        "(?<=[\\s　])",
+        "(?<=[　\\s])",
+        "(?!完|结)",
+        "(?!课)",
+        "(?![合和])",
+        "(?![分赛游])",
+        "(?!张)",
+    ] {
+        pattern = pattern.replace(assertion, "");
+    }
+    regex::Regex::new(&format!("(?m){pattern}")).ok()
+}
 
 fn rust_compatible_pattern(pattern: &str) -> String {
     // Kotlin/JVM accepts these variable-length look-behinds. Every bundled
@@ -94,12 +146,7 @@ pub fn split_chapters(text: &str) -> Vec<(String, String)> {
     let Some(rule) = select_toc_rule(text) else {
         return vec![(String::from("正文"), text.trim().to_owned())];
     };
-    let headings = rule
-        .chapter_regex
-        .find_iter(text)
-        .filter_map(Result::ok)
-        .map(|matched| (matched.start(), matched.end()))
-        .collect::<Vec<_>>();
+    let headings = rule.headings(text);
     if headings.is_empty() {
         return vec![(String::from("正文"), text.trim().to_owned())];
     }
@@ -134,11 +181,11 @@ fn select_toc_rule(text: &str) -> Option<&'static CompiledTocRule> {
         let mut previous_end = None;
         let mut spaced_matches = 0;
         let mut first_match = None;
-        for matched in rule.chapter_regex.find_iter(text).filter_map(Result::ok) {
-            first_match.get_or_insert(matched.start());
-            if previous_end.is_none_or(|end| matched.start().saturating_sub(end) > 1000) {
+        for (start, end) in rule.headings(text) {
+            first_match.get_or_insert(start);
+            if previous_end.is_none_or(|previous| start.saturating_sub(previous) > 1000) {
                 spaced_matches += 1;
-                previous_end = Some(matched.end());
+                previous_end = Some(end);
             }
         }
         let first_match = first_match.unwrap_or(usize::MAX);
@@ -197,6 +244,57 @@ pub fn parse(bytes: &[u8], title: String) -> Result<ParsedBook, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn candidate_filters_preserve_bundled_heading_matches() {
+        let definitions: Vec<serde_json::Value> =
+            serde_json::from_str(DEFAULT_TOC_RULES_JSON).unwrap();
+        let examples = definitions
+            .iter()
+            .filter_map(|rule| rule["example"].as_str())
+            .collect::<Vec<_>>();
+        for rule in DEFAULT_TOC_RULES.iter() {
+            let filter = rule
+                .candidate_regex
+                .as_ref()
+                .expect("bundled filter compiles");
+            for sample in examples.iter().copied().chain([
+                "第一节课",
+                "第一集合",
+                "正文完",
+                "第一部分",
+                "第一篇张",
+                "正文\n第一章\n开始",
+                "  第\n一章 开始",
+                "前文 第一章 开始",
+            ]) {
+                for text in [
+                    sample.to_owned(),
+                    format!("正文段落\n{sample}\n后续正文"),
+                    format!("\t{sample}\r\n"),
+                    format!(
+                        "{sample}\n{}\n第二章 继续\n正文",
+                        "没有章节的长段落。".repeat(200)
+                    ),
+                ] {
+                    if rule.chapter_regex.is_match(&text).unwrap_or(false) {
+                        assert!(filter.is_match(&text), "filter rejected {text:?}");
+                    }
+                    let original = rule
+                        .chapter_regex
+                        .find_iter(&text)
+                        .filter_map(Result::ok)
+                        .map(|matched| (matched.start(), matched.end()))
+                        .collect::<Vec<_>>();
+                    assert_eq!(
+                        rule.headings(&text),
+                        original,
+                        "heading offsets changed: {sample:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn decodes_utf8() {
