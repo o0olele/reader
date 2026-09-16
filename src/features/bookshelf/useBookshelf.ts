@@ -79,15 +79,20 @@ export function useBookshelf(report: (cause: unknown) => void) {
     }
   }
 
-  async function moveBook(book: Book, event: Event) {
-    const groupId = Number((event.target as HTMLSelectElement).value)
-    try {
-      await moveBookToGroup(book.id, groupId)
-      book.group_id = groupId
-      await refresh()
-    } catch (cause) {
-      report(cause)
+  /** Moves books into one group and re-reads the shelf; returns how many moved. */
+  async function moveBooks(bookIds: number[], groupId: number) {
+    let moved = 0
+    for (const bookId of bookIds) {
+      try {
+        await moveBookToGroup(bookId, groupId)
+        moved += 1
+      } catch (cause) {
+        report(cause)
+        break
+      }
     }
+    if (moved) await refresh()
+    return moved
   }
 
   return reactive({
@@ -101,6 +106,6 @@ export function useBookshelf(report: (cause: unknown) => void) {
     handleFile,
     addGroup,
     removeBook,
-    moveBook,
+    moveBooks,
   })
 }

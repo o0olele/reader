@@ -28,6 +28,7 @@ export default [
         HTMLElement: 'readonly',
         HTMLInputElement: 'readonly',
         HTMLSelectElement: 'readonly',
+        DragEvent: 'readonly',
         Event: 'readonly',
         EventTarget: 'readonly',
         KeyboardEvent: 'readonly',

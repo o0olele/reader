@@ -1,20 +1,32 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { save } from '@tauri-apps/plugin-dialog'
-import { BookOpen, Download, FileText, MoreHorizontal, Trash2 } from 'lucide-vue-next'
+import { BookOpen, Download, FileText, FolderInput, MoreHorizontal, Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
-import { exportBook, refreshCatalog, startDownload, type Book } from '@/services/api'
+import { exportBook, refreshCatalog, startDownload, type Book, type BookshelfGroup } from '@/services/api'
 import { notifyError, notifySuccess } from '@/app/useToast'
 
-const props = defineProps<{ book: Book; selected: boolean; mode: 'grid' | 'list' }>()
-const emit = defineEmits<{ open: []; select: []; remove: [] }>()
+const props = defineProps<{ book: Book; selected: boolean; mode: 'grid' | 'list'; groups: BookshelfGroup[] }>()
+const emit = defineEmits<{
+  open: []
+  select: []
+  remove: []
+  move: [groupId: number]
+  'move-request': []
+  dragstart: [event: DragEvent]
+}>()
 
 const badge = computed(() => (props.book.source_id ? '在线' : '本地'))
 
@@ -61,9 +73,11 @@ async function refresh() {
           mode === 'grid' ? 'flex flex-col p-3' : 'flex items-center gap-3 p-2.5',
         ]"
         tabindex="0"
+        draggable="true"
         @click="emit('open')"
         @keydown.enter="emit('open')"
         @contextmenu.prevent
+        @dragstart="emit('dragstart', $event)"
       >
         <div
           :class="[
@@ -89,6 +103,15 @@ async function refresh() {
         <div
           class="absolute right-2 top-2 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         >
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            :aria-label="`移动 ${book.title}`"
+            title="移动到分组"
+            @click.stop="emit('move-request')"
+          >
+            <FolderInput />
+          </Button>
           <Button
             variant="secondary"
             size="icon-sm"
@@ -123,12 +146,31 @@ async function refresh() {
       <ContextMenuItem @select="emit('open')">开始阅读</ContextMenuItem>
       <ContextMenuItem @select="refresh">刷新目录</ContextMenuItem>
       <ContextMenuItem @select="download">加入下载队列</ContextMenuItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger><FolderInput class="size-4" /> 移动到分组</ContextMenuSubTrigger>
+        <ContextMenuSubContent class="w-44">
+          <ContextMenuRadioGroup :model-value="String(book.group_id ?? '')">
+            <ContextMenuRadioItem
+              v-for="group in groups"
+              :key="group.id"
+              :value="String(group.id)"
+              :disabled="group.id === book.group_id"
+              @select="emit('move', group.id)"
+            >
+              {{ group.name }}
+            </ContextMenuRadioItem>
+          </ContextMenuRadioGroup>
+          <p v-if="!groups.length" class="px-2 py-1.5 text-xs text-muted-foreground">还没有其他分组</p>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
       <ContextMenuSeparator />
       <ContextMenuItem @select="exportAs('txt')">导出为 TXT</ContextMenuItem>
       <ContextMenuItem @select="exportAs('epub')">导出为 EPUB</ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem @select="emit('select')">多选</ContextMenuItem>
-      <ContextMenuItem class="text-destructive" @select="emit('remove')"> <Trash2 /> 删除书籍 </ContextMenuItem>
+      <ContextMenuItem class="text-destructive" @select="emit('remove')">
+        <Trash2 class="size-4" /> 删除书籍
+      </ContextMenuItem>
     </ContextMenuContent>
   </ContextMenu>
 </template>
