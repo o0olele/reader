@@ -4,3 +4,13 @@
 # "migration N was previously applied but has been modified".
 # Migrations must always be checked out with LF endings.
 src-tauri/migrations/*.sql text eol=lf
+
+# Match Prettier/rustfmt on every checkout, including Windows core.autocrlf=true.
+*.ts text eol=lf
+*.vue text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.rs text eol=lf
+*.yml text eol=lf

@@ -353,14 +353,16 @@ Set-Content -Path "$env:USERPROFILE\Desktop\百万字单章.txt" -Encoding UTF8 
 
 ## F. 门槛汇总（回填用）
 
+2026-09-16：自动结构检查统一使用 `npm run check:structure`，口径见 `docs/quality-gates.md`。本次工程收口不回填 GUI 手测结果。
+
 | # | 门槛 | 证明方式 | 本次由谁证明 | 结论 |
 | ---: | --- | --- | --- | --- |
-| 1 | 无 `.vue` > 200 行 | `Get-ChildItem -Recurse src -Filter *.vue \| ...` 最大 193 | 自动（已过） | ✅ |
+| 1 | 无 `.vue` > 200 行 | `Get-ChildItem -Recurse src -Filter *.vue \| ...` 最大 191（2026-09-16） | 自动（已过） | ✅ |
 | 2 | 路由不再全指向 AppShell | `grep -c 'component: AppShell' src/router/index.ts` = 0 | 自动（已过） | ✅ |
 | 3 | 无死代码导出 | `features/*/index.ts` 已删 | 自动（已过） | ✅ |
 | 4 | 无似是而非的数据 | §E | **手测** | |
 | 5 | 令牌化完成 | `src/styles.css` 硬编码十六进制 = 0 | 自动（已过） | ✅ |
-| 6 | 手写 CSS 收缩 | `styles.css` 485 行，全部为令牌 + 阅读器排版层 | 自动（已过） | ✅ |
+| 6 | 手写 CSS 收缩 | `styles.css` 597 行（2026-09-16），全部为令牌 + 阅读器排版层 | 自动（已过） | ✅ |
 | 7 | 七页与原型对位 | §B 逐页截图 | **手测** | |
 | 8 | 九组快捷键可用 | §A | **手测** | |
 
