@@ -17,8 +17,8 @@ pub struct SearchRule {
 /// The legado rule objects exactly as imported, before the CSS projection.
 ///
 /// Each field holds the raw JSON of one `rule*` object (or a bare string, which
-/// legado allows for `ruleContent`). The rule engine prefers these; the flat
-/// selector columns on [`BookSource`] remain as a fallback.
+/// legado allows for `ruleContent`). A configured stage is authoritative;
+/// flat selector columns on [`BookSource`] are used only for absent stages.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RawSourceRules {
     pub search: Option<String>,

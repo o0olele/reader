@@ -2,6 +2,9 @@
 
 mod stages;
 
+#[cfg(test)]
+mod raw_authority_tests;
+
 pub use stages::{
     parse_book_info, parse_catalog_page, parse_content_page, parse_explore, parse_search,
     parse_search_response,

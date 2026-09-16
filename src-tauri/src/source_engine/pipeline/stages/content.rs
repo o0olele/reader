@@ -5,7 +5,7 @@ use crate::{
     error::AppError,
     source_engine::{
         html_text::html_to_text,
-        legado_rules::LegadoRules,
+        legado_rules::{checked_stage, LegadoRules},
         pipeline::{url_in, values_in},
         rule::{Extraction, RuleContext},
     },
@@ -15,7 +15,11 @@ pub fn parse_content_page(
     source: &BookSource,
     html: &str,
 ) -> Result<(String, Option<String>), AppError> {
-    let rules = LegadoRules::decode(&source.raw_rules).content;
+    let rules = checked_stage(
+        source.raw_rules.content.as_ref(),
+        LegadoRules::decode(&source.raw_rules).content,
+        "ruleContent",
+    )?;
     if let Some(rules) = rules.as_ref() {
         if let Some(rule) = rules.content.as_deref() {
             let mut context = RuleContext::default();
@@ -31,7 +35,9 @@ pub fn parse_content_page(
                     url_in(source, rules.next_content_url.as_ref(), html, &mut context)?,
                 ));
             }
+            return Err(AppError::parse("页面正文为空"));
         }
+        return Err(AppError::parse("ruleContent 缺少 content"));
     }
     crate::source_engine::selector::parse_content_page(source, html)
 }

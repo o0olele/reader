@@ -20,7 +20,26 @@ fn parse<T: Default + for<'de> Deserialize<'de>>(raw: Option<&String>, bare: &st
         object.insert(bare.to_owned(), text.into());
         return serde_json::from_value(serde_json::Value::Object(object)).ok();
     }
+    // Serde also accepts positional arrays for structs; rule objects do not.
+    if !value.is_object() {
+        return None;
+    }
     serde_json::from_value(value).ok()
+}
+
+/// A configured stage must not silently fall back when its JSON is invalid.
+pub(crate) fn checked_stage<T>(
+    raw: Option<&String>,
+    decoded: Option<T>,
+    stage: &str,
+) -> Result<Option<T>, crate::error::AppError> {
+    let Some(raw) = raw else { return Ok(None) };
+    if raw.trim().is_empty() || raw.trim() == "null" {
+        return Ok(None);
+    }
+    decoded
+        .map(Some)
+        .ok_or_else(|| crate::error::AppError::parse(format!("{stage} 规则 JSON 或字段类型无效")))
 }
 
 #[derive(Debug, Default, Deserialize)]

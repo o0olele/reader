@@ -4,7 +4,7 @@ use crate::{
     domain::source::{BookSearchResult, BookSource},
     error::AppError,
     source_engine::{
-        legado_rules::LegadoRules,
+        legado_rules::{checked_stage, LegadoRules},
         pipeline::{first_in, joined_in, url_in, values_in},
         rule::{Extraction, RuleContext},
         url::absolutize,
@@ -14,7 +14,11 @@ use crate::{
 use super::info::parse_book_info;
 
 pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchResult>, AppError> {
-    if let Some(rules) = LegadoRules::decode(&source.raw_rules).search {
+    if let Some(rules) = checked_stage(
+        source.raw_rules.search.as_ref(),
+        LegadoRules::decode(&source.raw_rules).search,
+        "ruleSearch",
+    )? {
         if let Some(list) = rules.book_list.as_deref() {
             let mut list_context = RuleContext::default();
             list_context.with_http(source.http_context());
@@ -48,28 +52,11 @@ pub fn parse_search(source: &BookSource, html: &str) -> Result<Vec<BookSearchRes
                     word_count: first_in(source, rules.word_count.as_ref(), item, &mut context)?,
                 });
             }
-            if !results.is_empty() {
-                return Ok(results);
-            }
+            return Ok(results);
         }
+        return Err(AppError::parse("ruleSearch 缺少 bookList"));
     }
-    match crate::source_engine::selector::parse_search(source, html) {
-        Ok(results) => Ok(results),
-        // A raw legado rule is authoritative. Its flat projection may be a
-        // JSONPath/private expression that cannot be compiled by scraper (for
-        // example `$.list` or `tr!0`). If the engine produced no items, do not
-        // turn that expected no-match into a misleading CSS parse failure.
-        Err(error)
-            if !source.raw_rules.is_empty()
-                && error
-                    .to_string()
-                    .starts_with("parse error: 搜索结果选择器无效:") =>
-        {
-            tracing::debug!(target: "source", source = %source.name, %error, "ignoring invalid CSS projection after raw rule no-match");
-            Ok(Vec::new())
-        }
-        Err(error) => Err(error),
-    }
+    crate::source_engine::selector::parse_search(source, html)
 }
 
 /// Applies Legado's shortcut for search URLs that resolve directly to a book page.
