@@ -30,7 +30,10 @@ pub fn init(log_dir: &Path) {
 
     #[cfg(not(debug_assertions))]
     match open(log_dir) {
-        Ok(file) => builder.with_ansi(false).with_writer(Mutex::new(file)).init(),
+        Ok(file) => builder
+            .with_ansi(false)
+            .with_writer(Mutex::new(file))
+            .init(),
         // A GUI process has no console to fall back to, and logging must never
         // stop the app from starting.
         Err(_) => builder.init(),

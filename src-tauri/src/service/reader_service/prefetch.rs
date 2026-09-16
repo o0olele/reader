@@ -109,10 +109,7 @@ impl ReaderService {
         };
         let ahead = self.settings.reader_prefetch_num().await?.max(0) as usize;
         let chapters = self.list_chapters(book_id).await?;
-        let Some(current) = chapters
-            .iter()
-            .position(|chapter| chapter.id == chapter_id)
-        else {
+        let Some(current) = chapters.iter().position(|chapter| chapter.id == chapter_id) else {
             return Ok(PrefetchSummary::default());
         };
         let generation = start_generation(book_id)?;
@@ -163,7 +160,10 @@ impl ReaderService {
                 .acquire()
                 .await
                 .map_err(|_| AppError::Database("预下载调度器不可用".into()))?;
-            match self.fetch_online_content(source_id, &url, Some(chapter.id)).await {
+            match self
+                .fetch_online_content(source_id, &url, Some(chapter.id))
+                .await
+            {
                 Ok(_) => {
                     clear_failure(chapter.id);
                     summary.downloaded += 1;
@@ -406,7 +406,11 @@ mod tests {
             DEFAULT_PREFETCH_CHAPTERS
         );
         assert!(service.settings.save_reader_prefetch_num(-1).await.is_err());
-        assert!(service.settings.save_reader_prefetch_num(999).await.is_err());
+        assert!(service
+            .settings
+            .save_reader_prefetch_num(999)
+            .await
+            .is_err());
         service.settings.save_reader_prefetch_num(3).await.unwrap();
         assert_eq!(service.settings.reader_prefetch_num().await.unwrap(), 3);
     }

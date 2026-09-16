@@ -11,11 +11,11 @@
 //! `##` replacement and `-` reversal are applied per rule by the evaluators.
 
 use super::evaluator::{execute_js, execute_rule, mode_name};
+use super::expand_template;
 use super::jsoup::Extraction;
 use super::model::{
     RuleAlternatives, RuleContext, RuleExecutionError, RuleJoin, RuleMode, SourceRule,
 };
-use super::expand_template;
 
 #[path = "engine/template.rs"]
 mod template;

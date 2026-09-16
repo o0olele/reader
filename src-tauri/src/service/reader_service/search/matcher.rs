@@ -4,11 +4,7 @@
 //! Split from `search.rs` to keep both files under the project's 250-line
 //! non-test limit (ROADMAP-v3 §6.3 #1).
 
-use crate::{
-    domain::search_content::SearchContentHit,
-    domain::Chapter,
-    error::AppError,
-};
+use crate::{domain::search_content::SearchContentHit, domain::Chapter, error::AppError};
 
 /// Context kept either side of a match, in characters (the reference's ±12).
 const SNIPPET_PADDING: usize = 12;
@@ -87,7 +83,11 @@ fn snippet(text: &str, start: usize, length: usize) -> (String, i64, i64) {
         .rev()
         .take(SNIPPET_PADDING)
         .collect::<Vec<_>>();
-    let from = start - before.iter().map(|character| character.len_utf8()).sum::<usize>();
+    let from = start
+        - before
+            .iter()
+            .map(|character| character.len_utf8())
+            .sum::<usize>();
     let after = text[start + length..]
         .chars()
         .take(SNIPPET_PADDING)
@@ -172,9 +172,15 @@ mod tests {
         let matcher = QueryMatcher::new(r"\d{2}", true).unwrap();
         assert_eq!(matcher.find("第12章"), vec![(3, 2)]);
         // 正则模式下不折叠大小写：是否忽略大小写由表达式自己决定。
-        assert!(QueryMatcher::new("abc", true).unwrap().find("ABC").is_empty());
+        assert!(QueryMatcher::new("abc", true)
+            .unwrap()
+            .find("ABC")
+            .is_empty());
         assert!(QueryMatcher::new("(", true).is_err());
-        assert!(QueryMatcher::new("a*", true).unwrap().find("bbb").is_empty());
+        assert!(QueryMatcher::new("a*", true)
+            .unwrap()
+            .find("bbb")
+            .is_empty());
     }
 
     #[test]
@@ -208,7 +214,10 @@ mod tests {
 
         let long = format!("{}命中{}", "前".repeat(30), "后".repeat(30));
         let (window, offset, _) = snippet(&long, long.find("命中").unwrap(), "命中".len());
-        assert_eq!(window, format!("{}命中{}", "前".repeat(12), "后".repeat(12)));
+        assert_eq!(
+            window,
+            format!("{}命中{}", "前".repeat(12), "后".repeat(12))
+        );
         assert_eq!(offset, 12);
     }
 }

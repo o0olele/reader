@@ -147,7 +147,8 @@ fn relax_lexical_declarations(script: &str) -> String {
     output
 }
 
-fn should_insert_statement_semicolon(previous: &str, current: &str) -> bool {    let previous = previous.trim();
+fn should_insert_statement_semicolon(previous: &str, current: &str) -> bool {
+    let previous = previous.trim();
     let current = current.trim_start();
     if previous.is_empty()
         || previous.starts_with("//")
@@ -207,17 +208,14 @@ mod tests {
         let lines = vec!["var list = [],".to_owned(), "d = f()".to_owned()];
         let split = split_comma_declarations(&lines);
         assert_eq!(split[0], "var list = [];");
-        assert_eq!(split[1].split_whitespace().collect::<Vec<_>>(), ["var", "d", "=", "f()"]);
+        assert_eq!(
+            split[1].split_whitespace().collect::<Vec<_>>(),
+            ["var", "d", "=", "f()"]
+        );
         let normalized =
             normalize_js_statement_boundaries("var list = [],\nd = java.getElement('.x')\nlist");
-        assert!(
-            normalized.contains("var list = [];"),
-            "{normalized}"
-        );
-        assert!(
-            normalized.contains("java.getElement('.x')"),
-            "{normalized}"
-        );
+        assert!(normalized.contains("var list = [];"), "{normalized}");
+        assert!(normalized.contains("java.getElement('.x')"), "{normalized}");
         assert!(!normalized.contains("[],;"), "{normalized}");
     }
 
@@ -238,7 +236,10 @@ mod tests {
     fn keeps_multiline_array_literals_on_one_statement() {
         let normalized = normalize_js_statement_boundaries("var tags = [\n  'a',\n  'b'\n]\ntags");
         assert!(!normalized.contains("var tags = [;"), "{normalized}");
-        assert!(normalized.contains("var tags = [\n  'a',\n  'b'\n]"), "{normalized}");
+        assert!(
+            normalized.contains("var tags = [\n  'a',\n  'b'\n]"),
+            "{normalized}"
+        );
     }
 
     #[test]

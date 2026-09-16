@@ -169,11 +169,7 @@ impl SearchService {
                             if !browser_body_looks_like_challenge(&text) {
                                 self.sync_browser_cookies(&source, browser, &request.url)
                                     .await?;
-                                return parse_search_response(
-                                    &source,
-                                    &text,
-                                    request.url.as_str(),
-                                );
+                                return parse_search_response(&source, &text, request.url.as_str());
                             }
                         }
                     }

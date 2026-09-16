@@ -1,7 +1,9 @@
 //! Inline `{{ expression }}` template rendering for the rule engine.
 
 use super::evaluate;
-use crate::source_engine::rule::{Extraction, JsContext, JsValue, QuickJsRuntime, RuleContext, RuleExecutionError};
+use crate::source_engine::rule::{
+    Extraction, JsContext, JsValue, QuickJsRuntime, RuleContext, RuleExecutionError,
+};
 
 pub(super) fn render_inline_template(
     raw: &str,
@@ -29,7 +31,8 @@ pub(super) fn render_inline_template(
     Ok(output)
 }
 
-fn evaluate_inline_expression(    expression: &str,
+fn evaluate_inline_expression(
+    expression: &str,
     input: &str,
     context: &mut RuleContext,
 ) -> Result<String, RuleExecutionError> {
@@ -101,7 +104,12 @@ mod tests {
     #[test]
     fn traces_template_rule_forms() {
         let html = r#"<div class="intro">简介</div>"#;
-        for rule in ["@css:.intro@text", "@css:div.intro@text", "@.intro@text", "@class.intro@text"] {
+        for rule in [
+            "@css:.intro@text",
+            "@css:div.intro@text",
+            "@.intro@text",
+            "@class.intro@text",
+        ] {
             println!(
                 "RULE {rule} -> bare {:?} | bracketed {:?}",
                 render(rule, html),
@@ -117,6 +125,9 @@ mod tests {
 
     #[test]
     fn keeps_unterminated_templates_literal() {
-        assert_eq!(render("prefix {{unterminated", HTML), "prefix {{unterminated");
+        assert_eq!(
+            render("prefix {{unterminated", HTML),
+            "prefix {{unterminated"
+        );
     }
 }

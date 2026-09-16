@@ -7,10 +7,7 @@ use crate::error::AppError;
 use rquickjs::{Array, Ctx, Function};
 
 /// Wraps extracted node markup as a JSoup `Elements` collection.
-pub(crate) fn collection<'js>(
-    ctx: &Ctx<'js>,
-    nodes: Vec<String>,
-) -> Result<Array<'js>, AppError> {
+pub(crate) fn collection<'js>(ctx: &Ctx<'js>, nodes: Vec<String>) -> Result<Array<'js>, AppError> {
     let array = Array::new(ctx.clone()).map_err(js_error)?;
     for (index, node) in nodes.iter().enumerate() {
         array
@@ -40,7 +37,10 @@ pub(crate) fn collection<'js>(
         .map_err(js_error)?;
     let markup = nodes.clone();
     object
-        .set("html", Function::new(ctx.clone(), move || markup.join("\n")))
+        .set(
+            "html",
+            Function::new(ctx.clone(), move || markup.join("\n")),
+        )
         .map_err(js_error)?;
     let size = nodes.len();
     object

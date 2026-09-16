@@ -182,10 +182,11 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        let last_chapter: i64 = sqlx::query_scalar("SELECT id FROM chapters WHERE book_id = 1 AND number = 1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let last_chapter: i64 =
+            sqlx::query_scalar("SELECT id FROM chapters WHERE book_id = 1 AND number = 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         sqlx::query("INSERT INTO reading_progress (book_id, chapter_id) VALUES (1, ?)")
             .bind(last_chapter)
             .execute(&pool)

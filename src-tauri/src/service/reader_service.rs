@@ -4,9 +4,9 @@ mod cache;
 mod online;
 mod prefetch;
 mod processing;
-mod search;
 #[cfg(test)]
 mod processing_tests;
+mod search;
 use cache::memory_cache;
 pub(crate) use prefetch::cancel_prefetch;
 pub(crate) use search::cancel_search_content;

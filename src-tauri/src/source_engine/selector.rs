@@ -57,8 +57,8 @@ fn first_by_rule(document: &Html, rule: &str) -> Option<String> {
 pub fn parse_catalog(source: &BookSource, html: &str) -> Result<Vec<(String, String)>, AppError> {
     let document = Html::parse_document(html);
     let item_rule = normalize_rule(&source.catalog_rule.item);
-    let items =
-        Selector::parse(&item_rule).map_err(|error| AppError::parse(format!("目录结果选择器无效: {error}")))?;
+    let items = Selector::parse(&item_rule)
+        .map_err(|error| AppError::parse(format!("目录结果选择器无效: {error}")))?;
     Ok(document
         .select(&items)
         .filter_map(|item| {
@@ -84,8 +84,8 @@ pub fn parse_catalog_page(source: &BookSource, html: &str) -> Result<CatalogPage
 pub fn parse_content(source: &BookSource, html: &str) -> Result<String, AppError> {
     let document = Html::parse_document(html);
     let content_rule = normalize_rule(&source.content_selector);
-    let selector =
-        Selector::parse(&content_rule).map_err(|error| AppError::parse(format!("正文选择器无效: {error}")))?;
+    let selector = Selector::parse(&content_rule)
+        .map_err(|error| AppError::parse(format!("正文选择器无效: {error}")))?;
     let content = document
         .select(&selector)
         .next()

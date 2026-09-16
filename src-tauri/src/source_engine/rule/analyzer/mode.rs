@@ -93,7 +93,10 @@ mod tests {
 
     #[test]
     fn strips_the_legado_list_marker_without_losing_the_dialect() {
-        assert_eq!(mode("+@css:.bookbox"), (RuleMode::Default, ".bookbox".into()));
+        assert_eq!(
+            mode("+@css:.bookbox"),
+            (RuleMode::Default, ".bookbox".into())
+        );
         assert_eq!(
             mode("-tag.a@text"),
             (RuleMode::Default, "tag.a@text".into())
