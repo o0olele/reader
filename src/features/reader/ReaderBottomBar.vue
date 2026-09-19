@@ -12,18 +12,19 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
-  Sun,
   Type,
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
+import ReaderThemePopover from './ReaderThemePopover.vue'
 
 const props = defineProps<{
   chapterCount: number
   chapterIndex: number
   hasBookmark: boolean
   autoPage: boolean
-  eyeCare: boolean
+  /** 当前背景主题：底栏主题按钮直接显示它。 */
+  theme: string
   /** 目录是否展开：展开时目录按钮保持选中态。 */
   tocOpen: boolean
 }>()
@@ -38,8 +39,7 @@ const emit = defineEmits<{
   tts: []
   style: []
   bookmark: []
-  theme: []
-  eyeCare: []
+  theme: [theme: string]
   translate: []
   ai: []
   textProcess: []
@@ -99,10 +99,7 @@ const percent = computed(() =>
       >
         <Bookmark /> 加书签
       </Button>
-      <Button variant="ghost" size="sm" title="日夜间" @click="emit('theme')"><Sun /> 日夜间</Button>
-      <Button variant="ghost" size="sm" :class="eyeCare ? 'bg-accent' : ''" title="护眼" @click="emit('eyeCare')">
-        <Type /> 护眼
-      </Button>
+      <ReaderThemePopover :theme="theme" @select="emit('theme', $event)" />
       <Button variant="ghost" size="sm" title="翻译（未接入）" @click="emit('translate')"><Languages /> 翻译</Button>
       <Button variant="ghost" size="sm" title="AI 总结（未接入）" @click="emit('ai')"><Sparkles /> AI 总结</Button>
       <Button variant="ghost" size="sm" title="文本处理（未接入）" @click="emit('textProcess')"

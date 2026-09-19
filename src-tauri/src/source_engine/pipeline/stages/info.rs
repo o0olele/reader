@@ -1,10 +1,10 @@
-//! `ruleBookInfo` projection, with the flat-column CSS fallback.
+//! `ruleBookInfo` projection; flat columns are used only without a raw stage.
 
 use crate::{
     domain::source::{BookInfo, BookSource},
     error::AppError,
     source_engine::{
-        legado_rules::LegadoRules,
+        legado_rules::{checked_stage, LegadoRules},
         pipeline::{first_in, joined_in, url_in},
         rule::RuleContext,
         url::absolutize,
@@ -12,7 +12,11 @@ use crate::{
 };
 
 pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppError> {
-    if let Some(rules) = LegadoRules::decode(&source.raw_rules).book_info {
+    if let Some(rules) = checked_stage(
+        source.raw_rules.book_info.as_ref(),
+        LegadoRules::decode(&source.raw_rules).book_info,
+        "ruleBookInfo",
+    )? {
         let mut context = RuleContext::default();
         context.with_http(source.http_context());
         let info = BookInfo {
@@ -24,19 +28,7 @@ pub fn parse_book_info(source: &BookSource, html: &str) -> Result<BookInfo, AppE
             kind: first_in(source, rules.kind.as_ref(), html, &mut context)?,
             latest_chapter: first_in(source, rules.last_chapter.as_ref(), html, &mut context)?,
         };
-        if [
-            &info.title,
-            &info.author,
-            &info.intro,
-            &info.cover,
-            &info.kind,
-            &info.latest_chapter,
-        ]
-        .iter()
-        .any(|v| v.is_some())
-        {
-            return Ok(info);
-        }
+        return Ok(info);
     }
     crate::source_engine::selector::parse_book_info(source, html)
 }

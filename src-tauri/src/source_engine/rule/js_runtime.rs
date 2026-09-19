@@ -22,3 +22,7 @@ fn js_error(error: impl std::fmt::Display) -> AppError {
 #[cfg(test)]
 #[path = "js_runtime/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "js_runtime/jsoup_tests.rs"]
+mod jsoup_tests;

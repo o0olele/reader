@@ -5,15 +5,10 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useShellContext } from '@/app/shellKeys'
+import { READER_THEMES } from './readerThemes'
 import { defaultFullJustification } from './readerTypography'
 
 const { reader } = useShellContext()
-const THEMES = [
-  { value: 'light', label: '浅色', swatch: 'bg-[oklch(0.99_0.003_106)]' },
-  { value: 'sepia', label: '护眼', swatch: 'bg-[oklch(0.95_0.03_70)]' },
-  { value: 'dark', label: '深色', swatch: 'bg-[oklch(0.27_0.02_265)]' },
-  { value: 'black', label: '黑夜', swatch: 'bg-black' },
-] as const
 
 function reset() {
   reader.theme = 'light'
@@ -37,7 +32,7 @@ function reset() {
       <span class="text-xs text-muted-foreground">主题</span>
       <div class="grid grid-cols-4 gap-2">
         <button
-          v-for="option in THEMES"
+          v-for="option in READER_THEMES"
           :key="option.value"
           type="button"
           class="flex flex-col items-center gap-1 rounded-md border p-1 text-[11px]"

@@ -186,16 +186,21 @@ fn json_book_lists_are_expanded_into_individual_search_results() {
 }
 
 #[test]
-fn an_unexecutable_rule_falls_back_instead_of_failing() {
+fn an_unexecutable_raw_rule_does_not_activate_the_css_projection() {
     let mut source = source_c();
-    // A JS rule the engine deliberately refuses; the projection must take over.
-    source.raw_rules.search = Some(r#"{"bookList":"<js>result</js>"}"#.into());
+    // A runtime failure may be empty in tolerant mode, but cannot select
+    // unrelated entries through the lossy CSS projection.
+    source.raw_rules.search =
+        Some(r#"{"bookList":"<js>throw new Error('broken list')</js>"}"#.into());
     source.search_rule.item = "ul.result-list li".into();
     source.search_rule.title = ".bookname a".into();
     source.search_rule.url = ".bookname a::attr(href)".into();
 
-    let results = parse_search(&source, include_str!("fixtures/source_c/search.html")).unwrap();
-
-    assert_eq!(results.len(), 2);
-    assert_eq!(results[1].title, "寂静山脉");
+    let result = parse_search(&source, include_str!("fixtures/source_c/search.html"));
+    match std::env::var("READER_STRICT_ENGINE").ok().as_deref() {
+        Some(value) if value == "1" || value.eq_ignore_ascii_case("true") => {
+            assert!(result.unwrap_err().to_string().contains("broken list"));
+        }
+        _ => assert!(result.unwrap().is_empty()),
+    }
 }
