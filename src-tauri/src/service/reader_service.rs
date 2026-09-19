@@ -12,7 +12,7 @@ pub(crate) use prefetch::cancel_prefetch;
 pub(crate) use search::cancel_search_content;
 
 use crate::{
-    domain::{Chapter, ReadingProgress, ReadingRecord, ReadingStats},
+    domain::{Chapter, ReadingHistoryEntry, ReadingProgress, ReadingRecord, ReadingStats},
     error::AppError,
     repository::{
         book::SqliteBookRepository, chapter::SqliteChapterRepository,
@@ -144,6 +144,18 @@ impl ReaderService {
     pub async fn reading_stats(&self) -> Result<ReadingStats, AppError> {
         let goal = self.settings.reading_goal_minutes().await?;
         self.reading_records.stats(goal).await
+    }
+
+    /// 历史页：跨书、按最后阅读时间排序的阅读记录。
+    pub async fn reading_history(&self) -> Result<Vec<ReadingHistoryEntry>, AppError> {
+        self.reading_records.history().await
+    }
+
+    /// 忘记一本书（`Some`）或全部（`None`）的阅读记录：时长与阅读位置一起删除，
+    /// 书本身仍在书架。全部清除同时丢掉每日汇总，否则「今日 / 连续天数」会与
+    /// 归零的累计时长互相矛盾。
+    pub async fn clear_reading_history(&self, book_id: Option<i64>) -> Result<(), AppError> {
+        self.reading_records.clear(book_id).await
     }
 
     pub async fn set_reading_goal(&self, minutes: i64) -> Result<ReadingStats, AppError> {
