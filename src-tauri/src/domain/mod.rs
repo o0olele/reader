@@ -13,5 +13,5 @@ pub use book::{Book, BookshelfGroup};
 pub use bookmark::{Bookmark, BookmarkEntry};
 pub use download::DownloadTask;
 pub use reader::{Chapter, ReadingProgress};
-pub use reading_record::{ReadingRecord, ReadingStats};
+pub use reading_record::{ReadingHistoryEntry, ReadingRecord, ReadingStats};
 pub use search_content::{SearchContentHit, SearchContentProgress, SearchContentResponse};

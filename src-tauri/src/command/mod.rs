@@ -10,6 +10,7 @@ pub mod bookmark;
 pub mod bookshelf;
 pub mod download;
 pub mod explore;
+pub mod history;
 pub mod reader;
 pub mod replace_rule;
 pub mod search;

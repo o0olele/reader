@@ -5,17 +5,19 @@ import { BookOpen, Clock3, Flame, Info, Target } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import EmptyState from '@/components/EmptyState.vue'
 import NotConnected from '@/components/NotConnected.vue'
 import PageBody from '@/components/PageBody.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { getReadingStats, type ReadingStats } from '@/services/api'
+import { getReadingStats, listReadingHistory, type ReadingHistoryEntry, type ReadingStats } from '@/services/api'
 import { useShellContext } from '@/app/shellKeys'
+import { formatDuration, readAt } from '@/lib/readingHistory'
 
 const router = useRouter()
-const { bookshelf, openBook } = useShellContext()
+const { bookshelf } = useShellContext()
 const stats = ref<ReadingStats>()
+const recent = ref<ReadingHistoryEntry>()
 
-const current = computed(() => [...bookshelf.books].sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0])
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 6) return '夜深了，书友'
@@ -31,23 +33,34 @@ const goalPercent = computed(() => {
   const goal = stats.value?.daily_goal_minutes ?? 0
   return goal ? Math.min(100, Math.round((todayMinutes.value / goal) * 100)) : 0
 })
+/** 最近在读 is the newest history row, not the newest book on the shelf. */
+const lastPosition = computed(() => {
+  const entry = recent.value
+  if (!entry) return ''
+  if (entry.chapter_id === null) return entry.has_progress ? '阅读位置已失效（目录已更新）' : '尚未保存阅读位置'
+  if (entry.chapter_number === null) return '尚未建立目录'
+  return `读到 第 ${entry.chapter_number + 1} 章 · ${entry.chapter_title}`
+})
 
 async function continueReading() {
-  const book = current.value
-  if (!book) {
+  const entry = recent.value
+  if (!entry) {
     await router.push({ name: 'bookshelf' })
     return
   }
-  await openBook(book)
-  await router.push({ name: 'read', params: { bookId: String(book.id) } })
+  // No location: the reader restores the saved position (anchor included).
+  await router.push({ name: 'read', params: { bookId: String(entry.book_id) } })
 }
 
 onMounted(async () => {
-  try {
-    stats.value = await getReadingStats()
-  } catch {
-    /* browser preview has no backend */
-  }
+  // Browser preview has no backend, and one missing answer must not blank the
+  // other card: each call states its own empty fallback.
+  const [readingStats, history] = await Promise.all([
+    getReadingStats().catch(() => undefined),
+    listReadingHistory().catch(() => []),
+  ])
+  stats.value = readingStats
+  recent.value = history[0]
 })
 </script>
 
@@ -62,7 +75,7 @@ onMounted(async () => {
     <PageBody>
       <div class="grid grid-cols-[1fr_336px] items-start gap-6">
         <div class="flex flex-col gap-6">
-          <Card v-if="current">
+          <Card v-if="recent">
             <CardHeader class="pb-2">
               <CardTitle class="text-xs font-medium text-muted-foreground">最近在读</CardTitle>
             </CardHeader>
@@ -71,19 +84,22 @@ onMounted(async () => {
                 class="grid h-[132px] w-[92px] shrink-0 place-items-center overflow-hidden rounded-md bg-secondary text-xs text-muted-foreground"
               >
                 <img
-                  v-if="current.cover_data"
-                  :src="current.cover_data"
-                  :alt="current.title"
+                  v-if="recent.cover_data"
+                  :src="recent.cover_data"
+                  :alt="recent.book_title"
                   class="h-full w-full object-cover"
                 />
-                <span v-else>{{ current.title.slice(0, 1) }}</span>
+                <span v-else>{{ recent.book_title.slice(0, 1) }}</span>
               </div>
               <div class="flex min-w-0 flex-col">
-                <h2 class="truncate text-lg font-semibold">{{ current.title }}</h2>
+                <h2 class="truncate text-lg font-semibold">{{ recent.book_title }}</h2>
                 <p class="mt-1 text-xs text-muted-foreground">
-                  {{ current.author || '未知作者' }} · 共 {{ current.chapter_count }} 章
+                  {{ recent.book_author || '未知作者' }} · 共 {{ recent.chapter_count }} 章
                 </p>
-                <p v-if="current.latest_chapter" class="mt-2 truncate text-xs">最新：{{ current.latest_chapter }}</p>
+                <p class="mt-2 truncate text-xs">{{ lastPosition }}</p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                  最后阅读 {{ readAt(recent.last_read_at) }} · 累计 {{ formatDuration(recent.duration_seconds) }}
+                </p>
                 <div class="mt-auto flex gap-2 pt-4">
                   <Button size="sm" @click="continueReading"><BookOpen /> 继续阅读</Button>
                   <Button size="sm" variant="outline" @click="router.push({ name: 'bookshelf' })">
@@ -93,12 +109,20 @@ onMounted(async () => {
               </div>
             </CardContent>
           </Card>
-          <NotConnected
+          <EmptyState
             v-else
-            title="最近在读"
-            description="书架里还没有书，导入一本后首页会显示最近在读。"
-            :capabilities="['书架中至少一本书（导入 TXT / EPUB 或从发现页加入）']"
-          />
+            :icon="BookOpen"
+            :title="bookshelf.books.length ? '还没有阅读记录' : '书架里还没有书'"
+            :description="
+              bookshelf.books.length
+                ? '打开书架里的任意一本读一会儿，这里会接着上次的位置。'
+                : '导入一本 TXT / EPUB，或从发现页加入一本书。'
+            "
+          >
+            <Button size="sm" variant="outline" class="mt-4" @click="router.push({ name: 'bookshelf' })">
+              <BookOpen /> 打开书架
+            </Button>
+          </EmptyState>
 
           <div class="grid grid-cols-3 gap-4">
             <Card>

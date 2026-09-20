@@ -1,5 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Chapter, ReadingProgress, ReadingRecord, ReadingStats, SearchContentResponse } from './types'
+import type {
+  Chapter,
+  ReadingHistoryEntry,
+  ReadingProgress,
+  ReadingRecord,
+  ReadingStats,
+  SearchContentResponse,
+} from './types'
 
 export interface Bookmark {
   book_id: number
@@ -121,4 +128,22 @@ export function getReadingStats(): Promise<ReadingStats> {
 
 export function setReadingGoal(minutes: number): Promise<ReadingStats> {
   return invoke<ReadingStats>('set_reading_goal', { minutes })
+}
+
+/** Every book that has a saved position or recorded reading time, newest first. */
+export function listReadingHistory(): Promise<ReadingHistoryEntry[]> {
+  return invoke<ReadingHistoryEntry[]>('list_reading_history')
+}
+
+/** Forgets one book: its reading time and its saved position. The book stays. */
+export function clearReadingHistory(bookId: number): Promise<void> {
+  return invoke<void>('clear_reading_history', { bookId })
+}
+
+/**
+ * Forgets every book, including the per-day totals behind 今日时长 and 连续天数 —
+ * keeping them would contradict the zeroed totals.
+ */
+export function clearAllReadingHistory(): Promise<void> {
+  return invoke<void>('clear_all_reading_history')
 }

@@ -82,6 +82,32 @@ export interface ReadingRecord {
   duration_seconds: number
 }
 
+/**
+ * One row of the 历史 page (`list_reading_history`), newest read first. A row
+ * exists when the book has a saved position or recorded reading time, so a book
+ * whose position was cleared (换源) still appears with `chapter_id: null`.
+ */
+export interface ReadingHistoryEntry {
+  book_id: number
+  book_title: string
+  book_author?: string
+  cover_data?: string
+  chapter_id: number | null
+  chapter_title: string | null
+  chapter_number: number | null
+  /**
+   * Whether a saved position exists. `false` means the book was read but never
+   * saved a position; `true` with `chapter_id: null` means the saved position
+   * pointed at a chapter the catalog no longer has (换源 / 目录收缩).
+   */
+  has_progress: boolean
+  /** Catalog size; `0` before the book has a catalog, so no percentage either. */
+  chapter_count: number
+  duration_seconds: number
+  /** UTC as SQLite writes it (`YYYY-MM-DD HH:MM:SS`), render in local time. */
+  last_read_at: string
+}
+
 /** Home-dashboard aggregate returned by `get_reading_stats`. */
 export interface ReadingStats {
   total_seconds: number
