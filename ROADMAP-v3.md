@@ -2,8 +2,8 @@
 
 ## 当前状态（2026-09-16 复核）
 
-F0–F3 主体实现已落地：13 条真实页面路由、阅读器分页/搜索/换源/预下载；E1 已有统计、每日目标、跨书书签和书籍信息侧栏。
-GUI、性能、在线端到端验收仍未收口，不能把实现勾选当作版本验收通过。RSS/历史及多个高级子系统仍未接入。
+F0–F3 主体实现已落地：13 条真实页面路由、阅读器分页/搜索/换源/预下载；E1 已有统计、每日目标、跨书书签、跨书阅读历史（含首页「最近在读」）和书籍信息侧栏。
+GUI、性能、在线端到端验收仍未收口，不能把实现勾选当作版本验收通过。RSS 及多个高级子系统仍未接入。
 
 工程门禁现由 `npm run check`、Rust fmt/test/clippy 及 PR/发布共用的 quality workflow 管理，口径见 [工程质量门禁](docs/quality-gates.md)。
 原先三个超长 Rust 文件已拆分，并修复旧计数口径漏掉的 HTTP request 生产代码。
@@ -319,7 +319,7 @@ shadcn-vue 当前版本原生支持 Tailwind v4 的 `@theme` / `@theme inline`�
    ├─ ttsbar     迷你封面 · 朗读进度 · 波形动画 · 上/暂停/下/关
    ├─ progress   上一章 · 第N/M章 · 可拖动轨道 · 百分比 · 下一章
    └─ tools      正文搜索 自动翻页 目录 听书 阅读样式 加书签
-                 日夜间 护眼 翻译 AI总结 文本处理 更多  (12 个)
+                 背景主题 翻译 AI总结 文本处理 更多  (11 个)
 ```
 
 **当前 `ReaderPane.vue` 只有 233 行，覆盖：正文渲染、目录、滚动/分页双模式、章内搜索。**
@@ -346,6 +346,14 @@ shadcn-vue 当前版本原生支持 Tailwind v4 的 `@theme` / `@theme inline`�
 > 关闭 / 章节标题 / 字体 / 字号 / 主题 / 换源 / 书籍信息 / 阅读设置；目录与上一章 / 下一章**只在底栏**，
 > 且目录展开时底栏目录按钮保持选中态（`tocOpen` → `bg-accent`）。另外目录进入阅读器时**默认收起**，
 > 只有 `?toc=1` 深链接才展开。实现：`ReaderTopbar.vue` / `ReaderBottomBar.vue` / `ReaderPage.vue`。
+
+> **实现偏差（2026 记录）**：底栏原有两个互不相干却又都在改背景色的按钮 —— 「日夜间」（浅色↔深色两态循环）
+> 与「护眼」（给正文叠 `sepia(0.22)` 滤镜）—— 既数不清「现在是什么主题」，也和阅读样式面板里的**四色背景**
+> （浅色/护眼/深色/黑夜）对不上。现合并为**一个**「背景主题」按钮：点开 popover 选四色之一，选完按钮的图标
+> 与文字直接显示当前主题（浅色☀ / 护眼👁 / 深色☾ / 黑夜✦），选择写入既有的 `reader-theme`。护眼**滤镜**
+> 开关不重复放在底栏，仍只在阅读样式面板里（`ReaderStylePane.vue`）。四色现在是唯一数据源：
+> `src/features/reader/readerThemes.ts`，底栏与样式面板共用。实现：`ReaderThemePopover.vue` +
+> `src/components/ui/popover/`（reka-ui）。顶栏那个只做浅色↔深色的主题图标按钮未动，属另一处入口。
 
 ---
 
@@ -568,6 +576,17 @@ path parser 18 条 / 16 源 · unsupported JVM access 24 条 / 14 源 · harness
       「打开」走阅读器深链接 `#/read/<id>?chapter=<章节 id>&offset=<像素>&mode=`（`useReaderDeepLink.ts`
       + `useReader.focusLocation`）。门禁：`cargo test bookmark`（跨表连接、排序、级联删除）。
       手测项 `docs/manual-acceptance.md` §C12 —— 与其它 F 轨验收一样**留待 GUI 会话**，此处不代替勾选。
+- [x] **跨书阅读历史聚合命令** —— `list_reading_history` / `clear_reading_history` /
+      `clear_all_reading_history`（`command/history.rs`、`service/reader_service.rs`、
+      `repository/reading_record.rs`，新增 `ReadingHistoryEntry`）。左导航「历史」页因此不再显示
+      未接入态：`HistoryPage.vue` 按最后阅读时间倒序（今天 / 昨天 / 更早分组）列出书名 / 作者 /
+      章节 / 进度 / 累计时长，可搜索、可「继续阅读」（走阅读器深链接，由阅读器恢复锚点位置）、
+      可单行清除或清空历史（同时删除阅读时长与阅读位置；清空历史还会重置每日汇总，因此今日时长与
+      连续天数一并归零，书籍本身不动）。聚合取 `reading_progress` 与 `reading_records` 的并集，
+      因此只留下位置或只留下时长的书都仍会出现，章节被目录收缩删掉时该行标记「章节已失效」。
+      首页「最近在读」改用同一聚合的第一个条目，不再按书籍 `updated_at` 猜（`docs/progress-audit-2026-09-16.md` §E1 的建议）。
+      门禁：`cargo test --lib reading_record`（8 条，新增并集/排序、章节失效、单本清除、全部清除）。
+      手测项 `docs/manual-acceptance.md` §C14 —— 同书签页，**留待 GUI 会话**。
 - [ ] **书籍状态字段** —— 未读章数、「更新 / 完结 / 音频」徽标（书架卡片需要）
 - [ ] **完整书籍详情** —— 已有 `fetch_book_info` 与阅读器信息侧栏（简介/分类等）；仍缺独立详情页、字数及源站更新时间等字段
 - [ ] **高亮 / 批注** —— 新表 + CRUD（正文 `<mark>` 与批注角标需要）
@@ -714,7 +733,7 @@ CI 使用已提交的审计器单测和 fixtures，不声称全量覆盖率达�
 
 1. 工程收口：格式、生产文件拆分、自动结构检查、测试与发布前质量门禁已接入；实际验证结果记录在本次收口文档。
 2. 执行 `docs/manual-acceptance.md`：快捷键、七页视觉、分页几何、重排定位、连续在线阅读与性能。相关勾选继续保持未验收。
-3. E1：最近阅读/历史、书籍状态与完整详情、持久化划线笔记。
+3. E1：书籍状态与完整详情、持久化划线笔记（最近阅读/历史已完成，见 §5 E1）。
 4. E0：语料已恢复，Jsoup 修复后全量重测为 127 受阻；继续按真实 fixture 修 JS/规则语义，删 selector 四处兜底并完成存储迁移。静态审计不替代管线提取正确性与在线验收。
 5. S/R：Legado 兼容备份、阅读进度同步、RSS 与 Linux 发布。
 
