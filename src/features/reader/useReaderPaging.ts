@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { captureReadingLocator, pageStep, restoreReadingLocator } from './readerPosition'
 
 export type ReaderMode = 'scroll' | 'paged'
+export type ReaderAdvanceResult = 'moved' | 'end' | 'unavailable'
 
 /** Prototype :871–885 — below either threshold the spread collapses. */
 const SPREAD_MIN_HEIGHT = 820
@@ -88,11 +89,17 @@ export function useReaderPaging(
   }
 
   /** Auto page-turn: the spread flips a page, scrolling modes advance a viewport. */
-  function advance() {
+  function advance(): ReaderAdvanceResult {
     const element = contentRef.value
-    if (!element) return
-    if (layout() === 'spread') turnPage(1)
+    if (!element || element.clientHeight <= 0 || element.clientWidth <= 0) return 'unavailable'
+    const horizontal = layout() === 'spread'
+    const position = horizontal ? element.scrollLeft : element.scrollTop
+    const limit = horizontal ? element.scrollWidth - element.clientWidth : element.scrollHeight - element.clientHeight
+    // Scroll positions can be fractional; rounding progress to 100% is not an end check.
+    if (limit - position <= 1) return 'end'
+    if (horizontal) turnPage(1)
     else element.scrollBy({ top: element.clientHeight * 0.9, behavior: 'smooth' })
+    return 'moved'
   }
 
   function changeMode(mode: ReaderMode) {
@@ -124,6 +131,12 @@ export function useReaderPaging(
 
   function onKeydown(event: KeyboardEvent) {
     if (layout() !== 'spread') return
+    const target = event.target as HTMLElement | null
+    if (
+      event.defaultPrevented ||
+      target?.closest('input, textarea, select, button, [contenteditable], [role="dialog"], [role="slider"]')
+    )
+      return
     if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
       event.preventDefault()
       turnPage(1)

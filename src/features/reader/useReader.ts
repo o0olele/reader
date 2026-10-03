@@ -268,7 +268,7 @@ export function useReader(report: (cause: unknown) => void) {
   }
 
   async function loadChapterContent(chapter?: Chapter) {
-    if (!chapter) return
+    if (!chapter) return false
     const request = ++chapterRequest
     loadingChapter.value = true
     try {
@@ -278,12 +278,14 @@ export function useReader(report: (cause: unknown) => void) {
         // 正文到手才谈得上"按正文语言定默认"；用户拨过开关（storedJustify 有值）就不插手。
         if (storedJustify === null) justify.value = defaultFullJustification(processed.content)
         warmNeighbourChapters(chapter.id)
+        return true
       }
     } catch (cause) {
       if (request === chapterRequest) report(cause)
     } finally {
       if (request === chapterRequest) loadingChapter.value = false
     }
+    return false
   }
 
   /**
@@ -319,9 +321,10 @@ export function useReader(report: (cause: unknown) => void) {
   async function selectChapter(chapter: Chapter) {
     selectedChapter.value = chapter
     lastReadChapterId.value = chapter.id
-    await loadChapterContent(chapter)
+    const loaded = await loadChapterContent(chapter)
     await nextTick()
     scheduleProgressSave()
+    return loaded
   }
 
   async function closeBook() {

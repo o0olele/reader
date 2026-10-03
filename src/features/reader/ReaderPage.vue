@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ReaderBottomBar from './ReaderBottomBar.vue'
 import ReaderEmptyState from './ReaderEmptyState.vue'
@@ -11,6 +11,7 @@ import { useChangeSource } from './useChangeSource'
 import { useContentSearch } from './useContentSearch'
 import { useReaderDeepLink } from './useReaderDeepLink'
 import { useReaderSidePanels } from './useReaderSidePanels'
+import { useReaderAutoAdvance } from './useReaderAutoAdvance'
 import { useShellContext } from '@/app/shellKeys'
 import type { Chapter, SearchContentHit } from '@/services/api'
 
@@ -18,16 +19,13 @@ const route = useRoute()
 const router = useRouter()
 const { reader } = useShellContext()
 
-// Deep link (prototype :2778–2794): `toc` / `panel` are read here, while the
-// book itself (plus a bookmark's `chapter` / `offset` / `mode`) is owned by
-// `useReaderDeepLink`.
+// Book and position deep links are owned by useReaderDeepLink.
 useReaderDeepLink()
 
 // 目录默认收起，不挡正文；只有显式 `?toc=1` 深链接才展开（原型 :2778–2794
 // 里 `toc=0` 表示关闭，现在关闭就是默认值，`toc=0` 仍然兼容）。
 const chapterListOpen = ref(route.query.toc === '1')
 const immersive = ref(false)
-const autoPage = ref(false)
 const pane = ref<InstanceType<typeof ReaderPane>>()
 const missing = ref<{ title: string; description: string; capabilities: string[] }>()
 
@@ -70,11 +68,13 @@ function showMissing(title: string, description: string, capabilities: string[])
   missing.value = { title, description, capabilities }
 }
 
-let autoPageTimer: ReturnType<typeof setInterval> | undefined
-watch(autoPage, (on) => {
-  if (autoPageTimer) clearInterval(autoPageTimer)
-  if (on) autoPageTimer = setInterval(() => pane.value?.advance(), 12_000)
-})
+const autoPaging = useReaderAutoAdvance(pane)
+const {
+  active: autoPage,
+  secondsLeft: autoPageSeconds,
+  intervalSeconds: autoPageInterval,
+  ready: autoPageReady,
+} = autoPaging
 
 function isTyping(target: EventTarget | null) {
   const element = target as HTMLElement | null
@@ -96,7 +96,6 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
-  if (autoPageTimer) clearInterval(autoPageTimer)
   // 离开阅读器时停掉还在跑的换源搜索，不让它再往已卸载的组件里写结果。
   changeSource.close()
 })
@@ -164,13 +163,17 @@ onBeforeUnmount(() => {
         :chapter-index="chapterIndex"
         :has-bookmark="Boolean(pane?.bookmark)"
         :auto-page="autoPage"
+        :auto-page-seconds="autoPageSeconds"
+        :auto-page-interval="autoPageInterval"
+        :auto-page-ready="autoPageReady"
         :theme="reader.theme"
         :toc-open="chapterListOpen"
         @prev="selectRelativeChapter(-1)"
         @next="selectRelativeChapter(1)"
         @goto="reader.chapters[$event] && selectChapter(reader.chapters[$event])"
         @search="toggleSearch"
-        @auto-page="autoPage = !autoPage"
+        @start-auto-page="autoPaging.start"
+        @pause-auto-page="autoPaging.pause"
         @toc="chapterListOpen = !chapterListOpen"
         @style="panels.toggle('settings')"
         @bookmark="pane?.toggleBookmark()"

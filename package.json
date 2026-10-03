@@ -11,7 +11,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,vue,css}\" \"scripts/**/*.mjs\" \"eslint.config.js\" \"*.json\" \".github/workflows/*.yml\"",
     "check:structure": "node scripts/check-structure.mjs",
     "test:tooling": "node --test scripts/check-structure.test.mjs",
-    "check": "npm run lint && npm run format:check && npm run test:tooling && npm run check:structure && npm run build",
+    "test:reader": "node --test scripts/reader-auto-page.test.mjs",
+    "check": "npm run lint && npm run format:check && npm run test:tooling && npm run test:reader && npm run check:structure && npm run build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

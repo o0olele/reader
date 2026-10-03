@@ -8,7 +8,6 @@ import {
   Languages,
   List,
   MoreHorizontal,
-  Play,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -17,12 +16,16 @@ import {
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import ReaderThemePopover from './ReaderThemePopover.vue'
+import ReaderAutoPageControl from './ReaderAutoPageControl.vue'
 
 const props = defineProps<{
   chapterCount: number
   chapterIndex: number
   hasBookmark: boolean
   autoPage: boolean
+  autoPageSeconds: number
+  autoPageInterval: number
+  autoPageReady: boolean
   /** 当前背景主题：底栏主题按钮直接显示它。 */
   theme: string
   /** 目录是否展开：展开时目录按钮保持选中态。 */
@@ -34,7 +37,8 @@ const emit = defineEmits<{
   next: []
   goto: [index: number]
   search: []
-  autoPage: []
+  startAutoPage: [seconds: number]
+  pauseAutoPage: []
   toc: []
   tts: []
   style: []
@@ -76,9 +80,14 @@ const percent = computed(() =>
 
     <div class="flex items-center gap-0.5 border-t px-3 py-1">
       <Button variant="ghost" size="sm" title="正文搜索" @click="emit('search')"><Search /> 正文搜索</Button>
-      <Button variant="ghost" size="sm" :class="autoPage ? 'bg-accent' : ''" title="自动翻页" @click="emit('autoPage')">
-        <Play /> 自动翻页
-      </Button>
+      <ReaderAutoPageControl
+        :active="autoPage"
+        :seconds-left="autoPageSeconds"
+        :interval="autoPageInterval"
+        :ready="autoPageReady"
+        @start="emit('startAutoPage', $event)"
+        @pause="emit('pauseAutoPage')"
+      />
       <Button
         variant="ghost"
         size="sm"

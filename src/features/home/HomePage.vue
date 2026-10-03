@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { BookOpen, Clock3, Flame, Info, Target } from 'lucide-vue-next'
+import { BookOpen, Clock3, Flame, Info } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
 import EmptyState from '@/components/EmptyState.vue'
 import NotConnected from '@/components/NotConnected.vue'
 import PageBody from '@/components/PageBody.vue'
@@ -12,6 +11,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { getReadingStats, listReadingHistory, type ReadingHistoryEntry, type ReadingStats } from '@/services/api'
 import { useShellContext } from '@/app/shellKeys'
 import { formatDuration, readAt } from '@/lib/readingHistory'
+import DailyGoalCard from './DailyGoalCard.vue'
 
 const router = useRouter()
 const { bookshelf } = useShellContext()
@@ -29,10 +29,6 @@ const today = computed(() =>
   new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
 )
 const todayMinutes = computed(() => Math.round((stats.value?.today_seconds ?? 0) / 60))
-const goalPercent = computed(() => {
-  const goal = stats.value?.daily_goal_minutes ?? 0
-  return goal ? Math.min(100, Math.round((todayMinutes.value / goal) * 100)) : 0
-})
 /** 最近在读 is the newest history row, not the newest book on the shelf. */
 const lastPosition = computed(() => {
   const entry = recent.value
@@ -160,23 +156,7 @@ onMounted(async () => {
         </div>
 
         <div class="flex flex-col gap-6">
-          <Card>
-            <CardHeader class="pb-2">
-              <CardTitle class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Target :size="13" />每日目标
-              </CardTitle>
-            </CardHeader>
-            <CardContent class="grid gap-3">
-              <div class="flex items-end justify-between">
-                <span class="text-2xl font-semibold">{{ todayMinutes }}</span>
-                <span class="text-xs text-muted-foreground">/ {{ stats?.daily_goal_minutes || '未设置' }} 分钟</span>
-              </div>
-              <Progress :model-value="goalPercent" class="h-1.5" />
-              <p class="text-[11px] text-muted-foreground">
-                {{ stats?.daily_goal_minutes ? `已完成 ${goalPercent}%` : '设定每日目标后这里会显示进度。' }}
-              </p>
-            </CardContent>
-          </Card>
+          <DailyGoalCard :stats="stats" @saved="stats = $event" />
 
           <NotConnected
             title="WebDAV 同步"
