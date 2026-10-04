@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { READER_THEMES, readerTheme } from './readerThemes'
 
-const props = defineProps<{ theme: string }>()
+const props = defineProps<{ theme: string; compact?: boolean }>()
 
 const emit = defineEmits<{ select: [theme: string] }>()
 
@@ -30,8 +30,14 @@ function select(value: string) {
 <template>
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
-      <Button variant="ghost" size="sm" :title="`背景主题：${current.label}`">
-        <component :is="currentIcon" /> {{ current.label }}
+      <Button
+        variant="ghost"
+        :size="compact ? 'icon-sm' : 'sm'"
+        class="shrink-0"
+        :aria-label="`背景主题：${current.label}`"
+        :title="`背景主题：${current.label}`"
+      >
+        <component :is="currentIcon" /> <span v-if="!compact">{{ current.label }}</span>
       </Button>
     </PopoverTrigger>
     <!-- 底栏贴着窗口下沿，明确向上弹，别依赖碰撞翻转。 -->

@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useElementSize } from '@vueuse/core'
 import {
-  ArrowLeft,
-  ArrowRight,
   Bookmark,
   Headphones,
   Languages,
@@ -14,11 +13,18 @@ import {
   Type,
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import { Slider } from '@/components/ui/slider'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import ReaderThemePopover from './ReaderThemePopover.vue'
 import ReaderAutoPageControl from './ReaderAutoPageControl.vue'
+import ReaderChapterProgress from './ReaderChapterProgress.vue'
 
-const props = defineProps<{
+defineProps<{
   chapterCount: number
   chapterIndex: number
   hasBookmark: boolean
@@ -50,73 +56,102 @@ const emit = defineEmits<{
   more: []
 }>()
 
-const percent = computed(() =>
-  props.chapterCount ? Math.round(((props.chapterIndex + 1) / props.chapterCount) * 100) : 0,
-)
+const bar = ref<HTMLElement | null>(null)
+const { width } = useElementSize(bar)
+// 按底栏实际宽度适配侧栏开合；阈值也为自动翻页的最长状态文案留出空间。
+const compact = computed(() => width.value < 800)
+const overflow = computed(() => width.value < 1100)
+const buttonSize = computed(() => (compact.value ? 'icon-sm' : 'sm'))
+const secondaryTools = [
+  { label: '听书', icon: Headphones, run: () => emit('tts') },
+  { label: '翻译', icon: Languages, run: () => emit('translate') },
+  { label: 'AI 总结', icon: Sparkles, run: () => emit('ai') },
+  { label: '文本处理', icon: Type, run: () => emit('textProcess') },
+]
 </script>
 
 <template>
-  <div class="shrink-0 border-t bg-card">
-    <div class="flex items-center gap-3 px-4 py-1.5">
-      <Button variant="ghost" size="sm" :disabled="chapterIndex <= 0" @click="emit('prev')"
-        ><ArrowLeft /> 上一章</Button
-      >
-      <span class="w-28 shrink-0 text-center text-xs text-muted-foreground">
-        第 {{ chapterIndex + 1 }}/{{ chapterCount }} 章
-      </span>
-      <Slider
-        class="flex-1"
-        :model-value="[chapterIndex]"
-        :min="0"
-        :max="Math.max(0, chapterCount - 1)"
-        :step="1"
-        @update:model-value="emit('goto', $event?.[0] ?? chapterIndex)"
-      />
-      <span class="w-12 shrink-0 text-right text-xs text-muted-foreground">{{ percent }}%</span>
-      <Button variant="ghost" size="sm" :disabled="chapterIndex >= chapterCount - 1" @click="emit('next')">
-        下一章 <ArrowRight />
+  <div ref="bar" class="min-w-0 shrink-0 border-t bg-card">
+    <ReaderChapterProgress
+      :chapter-count="chapterCount"
+      :chapter-index="chapterIndex"
+      :compact="compact"
+      @prev="emit('prev')"
+      @next="emit('next')"
+      @goto="emit('goto', $event)"
+    />
+    <div class="flex items-center gap-0.5 border-t py-1 [&>button]:shrink-0" :class="compact ? 'px-2' : 'px-3'">
+      <Button variant="ghost" :size="buttonSize" aria-label="正文搜索" title="正文搜索" @click="emit('search')">
+        <Search /><span v-if="!compact">正文搜索</span>
       </Button>
-    </div>
-
-    <div class="flex items-center gap-0.5 border-t px-3 py-1">
-      <Button variant="ghost" size="sm" title="正文搜索" @click="emit('search')"><Search /> 正文搜索</Button>
       <ReaderAutoPageControl
         :active="autoPage"
         :seconds-left="autoPageSeconds"
         :interval="autoPageInterval"
         :ready="autoPageReady"
+        :compact="compact"
         @start="emit('startAutoPage', $event)"
         @pause="emit('pauseAutoPage')"
       />
       <Button
         variant="ghost"
-        size="sm"
+        :size="buttonSize"
         :class="tocOpen ? 'bg-accent' : ''"
         :aria-pressed="tocOpen"
+        aria-label="目录"
         title="目录 (T)"
         @click="emit('toc')"
-        ><List /> 目录</Button
       >
-      <Button variant="ghost" size="sm" title="听书（未接入）" @click="emit('tts')"><Headphones /> 听书</Button>
-      <Button variant="ghost" size="sm" title="阅读样式" @click="emit('style')"><SlidersHorizontal /> 阅读样式</Button>
+        <List /><span v-if="!compact">目录</span>
+      </Button>
+      <Button variant="ghost" :size="buttonSize" aria-label="阅读样式" title="阅读样式" @click="emit('style')">
+        <SlidersHorizontal /><span v-if="!compact">阅读样式</span>
+      </Button>
       <Button
         variant="ghost"
-        size="sm"
+        :size="buttonSize"
         :class="hasBookmark ? 'bg-accent' : ''"
-        title="加书签"
+        :aria-pressed="hasBookmark"
+        :aria-label="hasBookmark ? '移除书签' : '加书签'"
+        :title="hasBookmark ? '移除书签' : '加书签'"
         @click="emit('bookmark')"
       >
-        <Bookmark /> 加书签
+        <Bookmark /><span v-if="!compact">{{ hasBookmark ? '已加书签' : '加书签' }}</span>
       </Button>
-      <ReaderThemePopover :theme="theme" @select="emit('theme', $event)" />
-      <Button variant="ghost" size="sm" title="翻译（未接入）" @click="emit('translate')"><Languages /> 翻译</Button>
-      <Button variant="ghost" size="sm" title="AI 总结（未接入）" @click="emit('ai')"><Sparkles /> AI 总结</Button>
-      <Button variant="ghost" size="sm" title="文本处理（未接入）" @click="emit('textProcess')"
-        ><Type /> 文本处理</Button
-      >
-      <Button variant="ghost" size="icon-sm" class="ml-auto" title="更多" @click="emit('more')">
-        <MoreHorizontal />
-      </Button>
+      <ReaderThemePopover :theme="theme" :compact="compact" @select="emit('theme', $event)" />
+      <template v-if="!overflow">
+        <Button
+          v-for="tool in secondaryTools"
+          :key="tool.label"
+          variant="ghost"
+          size="sm"
+          :title="`${tool.label}（未接入）`"
+          @click="tool.run"
+        >
+          <component :is="tool.icon" />{{ tool.label }}
+        </Button>
+      </template>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button variant="ghost" size="icon-sm" class="ml-auto shrink-0" aria-label="更多" title="更多">
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="end" class="w-44">
+          <template v-if="overflow">
+            <DropdownMenuItem
+              v-for="tool in secondaryTools"
+              :key="tool.label"
+              :title="`${tool.label}（未接入）`"
+              @select="tool.run"
+            >
+              <component :is="tool.icon" />{{ tool.label }}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </template>
+          <DropdownMenuItem @select="emit('more')"><MoreHorizontal />更多功能</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   </div>
 </template>

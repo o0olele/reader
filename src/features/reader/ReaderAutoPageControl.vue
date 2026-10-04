@@ -5,7 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-const props = defineProps<{ active: boolean; secondsLeft: number; interval: number; ready: boolean }>()
+const props = defineProps<{
+  active: boolean
+  secondsLeft: number
+  interval: number
+  ready: boolean
+  compact?: boolean
+}>()
 const emit = defineEmits<{ start: [seconds: number]; pause: [] }>()
 const open = ref(false)
 const draft = ref<string | number>(props.interval)
@@ -25,18 +31,29 @@ function submit() {
 </script>
 
 <template>
-  <div class="flex items-center">
+  <div class="flex shrink-0 items-center">
     <Button
       variant="ghost"
-      size="sm"
+      :size="compact && !active ? 'icon-sm' : 'sm'"
       :class="active ? 'bg-accent' : ''"
       :aria-pressed="active"
       :aria-label="active ? '暂停自动翻页' : '设置自动翻页'"
-      :title="active ? '点击暂停自动翻页' : '设置翻页间隔并开启自动翻页'"
+      :title="
+        active
+          ? ready
+            ? `暂停自动翻页（剩余 ${secondsLeft} 秒）`
+            : '暂停自动翻页（等待正文）'
+          : '设置翻页间隔并开启自动翻页'
+      "
       @click="active ? emit('pause') : (open = true)"
     >
       <Pause v-if="active" /><Play v-else />
-      {{ active ? (ready ? `暂停翻页 · ${secondsLeft}秒` : '暂停翻页 · 等待正文') : '自动翻页' }}
+      <span v-if="!compact">{{
+        active ? (ready ? `暂停翻页 · ${secondsLeft}秒` : '暂停翻页 · 等待正文') : '自动翻页'
+      }}</span>
+      <span v-else-if="active" class="min-w-9 text-center tabular-nums">{{
+        ready ? `${secondsLeft}秒` : '等待中'
+      }}</span>
     </Button>
     <Popover v-model:open="open">
       <PopoverTrigger as-child>
