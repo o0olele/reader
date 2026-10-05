@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Pause, Play, Settings2 } from 'lucide-vue-next'
+import { Pause, Play } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -13,7 +13,7 @@ const props = defineProps<{
   compact?: boolean
 }>()
 const emit = defineEmits<{ start: [seconds: number]; pause: [] }>()
-const open = ref(false)
+const open = defineModel<boolean>('settingsOpen', { default: false })
 const draft = ref<string | number>(props.interval)
 const valid = computed(() => {
   const seconds = Number(draft.value)
@@ -22,6 +22,11 @@ const valid = computed(() => {
 watch(open, (value) => {
   if (value) draft.value = props.interval
 })
+
+function updateOpen(value: boolean) {
+  // 运行中点击主按钮只暂停；「更多」菜单通过 model 直接打开设置。
+  if (!props.active || !value) open.value = value
+}
 
 function submit() {
   if (!valid.value || !props.ready) return
@@ -32,33 +37,30 @@ function submit() {
 
 <template>
   <div class="flex shrink-0 items-center">
-    <Button
-      variant="ghost"
-      :size="compact && !active ? 'icon-sm' : 'sm'"
-      :class="active ? 'bg-accent' : ''"
-      :aria-pressed="active"
-      :aria-label="active ? '暂停自动翻页' : '设置自动翻页'"
-      :title="
-        active
-          ? ready
-            ? `暂停自动翻页（剩余 ${secondsLeft} 秒）`
-            : '暂停自动翻页（等待正文）'
-          : '设置翻页间隔并开启自动翻页'
-      "
-      @click="active ? emit('pause') : (open = true)"
-    >
-      <Pause v-if="active" /><Play v-else />
-      <span v-if="!compact">{{
-        active ? (ready ? `暂停翻页 · ${secondsLeft}秒` : '暂停翻页 · 等待正文') : '自动翻页'
-      }}</span>
-      <span v-else-if="active" class="min-w-9 text-center tabular-nums">{{
-        ready ? `${secondsLeft}秒` : '等待中'
-      }}</span>
-    </Button>
-    <Popover v-model:open="open">
+    <Popover :open="open" @update:open="updateOpen">
       <PopoverTrigger as-child>
-        <Button variant="ghost" size="icon-sm" aria-label="自动翻页设置" title="自动翻页设置">
-          <Settings2 />
+        <Button
+          variant="ghost"
+          :size="compact && !active ? 'icon-sm' : 'sm'"
+          :class="active ? 'bg-accent' : ''"
+          :aria-pressed="active"
+          :aria-label="active ? '暂停自动翻页' : '设置自动翻页'"
+          :title="
+            active
+              ? ready
+                ? `暂停自动翻页（剩余 ${secondsLeft} 秒）`
+                : '暂停自动翻页（等待正文）'
+              : '设置翻页间隔并开启自动翻页'
+          "
+          @click="active && emit('pause')"
+        >
+          <Pause v-if="active" /><Play v-else />
+          <span v-if="!compact">{{
+            active ? (ready ? `暂停翻页 · ${secondsLeft}秒` : '暂停翻页 · 等待正文') : '自动翻页'
+          }}</span>
+          <span v-else-if="active" class="min-w-9 text-center tabular-nums">{{
+            ready ? `${secondsLeft}秒` : '等待中'
+          }}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" class="w-72">

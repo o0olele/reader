@@ -8,6 +8,7 @@ import {
   List,
   MoreHorizontal,
   Search,
+  Settings2,
   SlidersHorizontal,
   Sparkles,
   Type,
@@ -62,6 +63,16 @@ const { width } = useElementSize(bar)
 const compact = computed(() => width.value < 800)
 const overflow = computed(() => width.value < 1100)
 const buttonSize = computed(() => (compact.value ? 'icon-sm' : 'sm'))
+const autoPageSettingsOpen = ref(false)
+const pendingAutoPageSettings = ref(false)
+function onMoreCloseAutoFocus(event: Event) {
+  if (!pendingAutoPageSettings.value) return
+  // 等菜单关闭后再打开设置，避免菜单恢复焦点时把设置弹层关掉。
+  event.preventDefault()
+  pendingAutoPageSettings.value = false
+  autoPageSettingsOpen.value = true
+}
+
 const secondaryTools = [
   { label: '听书', icon: Headphones, run: () => emit('tts') },
   { label: '翻译', icon: Languages, run: () => emit('translate') },
@@ -85,6 +96,7 @@ const secondaryTools = [
         <Search /><span v-if="!compact">正文搜索</span>
       </Button>
       <ReaderAutoPageControl
+        v-model:settings-open="autoPageSettingsOpen"
         :active="autoPage"
         :seconds-left="autoPageSeconds"
         :interval="autoPageInterval"
@@ -137,7 +149,9 @@ const secondaryTools = [
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="end" class="w-44">
+        <DropdownMenuContent side="top" align="end" class="w-44" @close-auto-focus="onMoreCloseAutoFocus">
+          <DropdownMenuItem @select="pendingAutoPageSettings = true"><Settings2 />自动翻页设置</DropdownMenuItem>
+          <DropdownMenuSeparator />
           <template v-if="overflow">
             <DropdownMenuItem
               v-for="tool in secondaryTools"
