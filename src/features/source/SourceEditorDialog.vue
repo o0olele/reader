@@ -44,8 +44,7 @@ const MISC = [
 ] as const
 
 async function submit() {
-  await sources.save()
-  if (!sources.saving) open.value = false
+  if (await sources.save()) open.value = false
 }
 </script>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Globe, Loader2, MoreHorizontal } from 'lucide-vue-next'
+import { CheckCircle2, CircleAlert, Globe, Loader2, MoreHorizontal, Settings2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -9,83 +10,111 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { useShellContext } from '@/app/shellKeys'
 import type { BookSource } from '@/services/api'
+import { probeLabel, probeNeedsAttention, sessionLabel } from './sourceView'
 
 const props = defineProps<{ source: BookSource; query: string }>()
+const emit = defineEmits<{ manage: [source: BookSource] }>()
 const { sources } = useShellContext()
 const router = useRouter()
-
-// The draft lives in the store, not the row: the list only keeps the rows near
-// the viewport mounted, so scrolling away must not drop an unsaved edit.
-const draft = sources.managementDraft(props.source)
-
-function sessionLabel(source: BookSource) {
-  if (!source.access_token && !source.session_cookie) return '未认证'
-  if (source.session_expires_at) {
-    const raw = source.session_expires_at
-    const expiry = /^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw)
-    if (Number.isFinite(expiry) && expiry <= Date.now()) return '已过期'
-  }
-  return '已认证'
-}
-
-function saveManagement() {
-  return sources.saveManagement(props.source)
-}
-
-async function openDebug() {
-  await router.push({ name: 'source-debug', query: { source: String(props.source.id) } })
-}
+const result = computed(() => sources.testResults[props.source.id])
+const error = computed(() => sources.testErrors[props.source.id])
+const attention = computed(() => probeNeedsAttention(result.value, error.value))
+const duration = computed(() => result.value?.duration_ms ?? props.source.respond_time)
 </script>
 
 <template>
-  <div
-    data-source-row
-    class="grid grid-cols-[minmax(180px,1fr)_120px_64px_64px_auto_auto] items-center gap-2 rounded-md border bg-card px-3 py-2"
-  >
+  <div data-source-row class="source-grid h-[76px] items-center border-b px-4 transition-colors hover:bg-muted/40">
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="grid size-9 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground"
+        ><Globe class="size-4"
+      /></span>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <strong
+            class="truncate text-sm font-medium"
+            :class="source.enabled ? '' : 'text-muted-foreground'"
+            :title="source.name"
+            >{{ source.name }}</strong
+          >
+          <span
+            v-if="source.enabled_explore && source.explore_url"
+            class="shrink-0 rounded border px-1 text-[10px] text-muted-foreground"
+            >发现</span
+          >
+        </div>
+        <p class="mt-1 truncate text-xs text-muted-foreground" :title="source.base_url">{{ source.base_url }}</p>
+      </div>
+    </div>
     <div class="min-w-0">
-      <div class="flex items-center gap-2">
-        <span class="size-2 shrink-0 rounded-full" :class="source.enabled ? 'bg-primary' : 'bg-muted-foreground'" />
-        <strong class="truncate text-sm">{{ source.name }}</strong>
-        <span class="shrink-0 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">{{
-          sessionLabel(source)
-        }}</span>
-      </div>
-      <div class="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
-        <Globe :size="11" />{{ source.base_url }}
-        <template v-if="source.respond_time != null">· {{ source.respond_time }} ms</template>
-      </div>
-    </div>
-    <Input v-model="draft.group" class="h-8 text-xs" placeholder="分组" aria-label="书源分组" />
-    <Input v-model.number="draft.order" class="h-8 text-xs" type="number" aria-label="排序" />
-    <Input v-model.number="draft.weight" class="h-8 text-xs" type="number" aria-label="权重" />
-    <div class="flex items-center gap-1.5">
-      <Switch :model-value="source.enabled" aria-label="启用书源" @update:model-value="sources.toggle(source)" />
-      <Button
-        variant="outline"
-        size="sm"
-        :disabled="sources.testing === source.id"
-        @click="sources.test(source, query)"
+      <span
+        class="inline-block max-w-full truncate rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground"
+        :title="source.source_group || '未分组'"
+        >{{ source.source_group || '未分组' }}</span
       >
-        <Loader2 v-if="sources.testing === source.id" class="animate-spin" />
-        {{ sources.testing === source.id ? '' : '测试' }}
-      </Button>
     </div>
-    <DropdownMenu>
-      <DropdownMenuTrigger as-child>
-        <Button variant="ghost" size="icon-sm" :aria-label="`${source.name} 更多操作`"><MoreHorizontal /></Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem @select="saveManagement">保存分组与排序</DropdownMenuItem>
-        <DropdownMenuItem @select="sources.browserAuth(source)">浏览器认证</DropdownMenuItem>
-        <DropdownMenuItem @select="sources.saveBrowserSession(source)">读取浏览器会话</DropdownMenuItem>
-        <DropdownMenuItem @select="sources.clearSession(source)">清除会话</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem @select="openDebug">打开书源调试</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div class="min-w-0 text-xs">
+      <div v-if="sources.testing === source.id" class="flex items-center gap-1.5 text-muted-foreground">
+        <Loader2 class="size-3.5 animate-spin" />测试中…
+      </div>
+      <div v-else class="flex items-center gap-1.5" :class="attention ? 'text-destructive' : 'text-muted-foreground'">
+        <CircleAlert v-if="attention" class="size-3.5 shrink-0" /><CheckCircle2
+          v-else-if="result"
+          class="size-3.5 shrink-0"
+        />
+        <span class="truncate" :title="error || probeLabel(result)">{{ probeLabel(result, error) }}</span>
+      </div>
+      <p class="mt-1 text-[11px] text-muted-foreground" :title="sessionLabel(source)">
+        {{ error ? '请重试' : duration == null ? sessionLabel(source) : `${duration} ms` }}
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <Switch
+        :model-value="source.enabled"
+        :aria-label="`启用 ${source.name}`"
+        :disabled="sources.toggling.has(source.id)"
+        @update:model-value="sources.toggle(source)"
+      />
+      <span class="text-[11px] text-muted-foreground">{{ source.enabled ? '启用' : '停用' }}</span>
+    </div>
+    <div class="flex items-center justify-end gap-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        :disabled="sources.testing != null || sources.batchTesting"
+        :aria-label="`测试 ${source.name}`"
+        :title="`测试关键词：${query || '测试'}`"
+        @click="sources.test(source, query)"
+        >测试</Button
+      >
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        :aria-label="`管理 ${source.name}`"
+        title="管理分组与排序"
+        @click="emit('manage', source)"
+        ><Settings2
+      /></Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child
+          ><Button variant="ghost" size="icon-sm" :aria-label="`${source.name} 更多操作`"><MoreHorizontal /></Button
+        ></DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem @select="router.push({ name: 'source-debug', query: { source: String(source.id) } })"
+            >打开书源调试</DropdownMenuItem
+          >
+          <DropdownMenuSeparator />
+          <DropdownMenuItem @select="sources.browserAuth(source)">浏览器认证</DropdownMenuItem>
+          <DropdownMenuItem @select="sources.saveBrowserSession(source)">读取浏览器会话</DropdownMenuItem>
+          <DropdownMenuItem
+            :disabled="!source.access_token && !source.session_cookie"
+            @select="sources.clearSession(source)"
+            >清除会话</DropdownMenuItem
+          >
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   </div>
 </template>

@@ -1,6 +1,7 @@
 import { reactive, ref } from 'vue'
 import {
   clearBookSourceSession,
+  getErrorMessage,
   exportBookSources,
   importBookSourcesJson,
   importBookSourcesUrl,
@@ -18,12 +19,12 @@ import {
   type SourceImportReport,
   type SourceTestResult,
 } from '../../services/api'
+import { probeNeedsAttention } from './sourceView'
 
 export type SourceForm = Record<string, string>
 
-/** Per-row group/order/weight edits, held by the store rather than the row: the
- *  source list only mounts the rows near the viewport, so a row that scrolls
- *  away must not take an unsaved edit with it. */
+/** Keep management drafts outside the windowed rows so an edit survives
+ *  scrolling or closing the management dialog before saving. */
 export interface SourceManagementDraft {
   group: string
   order: number
@@ -73,24 +74,15 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
   const sourceUrl = ref('')
   const importing = ref(false)
   const testing = ref<number>()
+  const toggling = reactive(new Set<number>())
+  const testResults = reactive<Record<number, SourceTestResult>>({})
+  const testErrors = reactive<Record<number, string>>({})
   const batchTesting = ref(false)
   const batchResults = ref<SourceTestResult[]>([])
   const exporting = ref(false)
   const loginForm = ref({ sourceId: 0, username: '', password: '' })
   const loggingIn = ref(false)
-  const lastProbe = ref<{
-    source_name: string
-    status: number
-    result_count: number
-    auth_required: boolean
-    cloudflare_challenge: boolean
-    session_state: string
-    request_url: string
-    duration_ms: number
-    has_token: boolean
-    has_cookie: boolean
-    user_agent: string
-  }>()
+  const lastProbe = ref<SourceTestResult>()
 
   async function refresh() {
     try {
@@ -109,7 +101,7 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     const required = [current.name, current.base_url, current.search_url, current.item, current.title, current.url]
     if (required.some((field) => !field.trim())) {
       notify('请完整填写书源名称、URL 和必需选择器')
-      return
+      return false
     }
     saving.value = true
     try {
@@ -143,8 +135,10 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
       form.value = emptyForm()
       await refresh()
       notify('书源已保存')
+      return true
     } catch (cause) {
       report(cause)
+      return false
     } finally {
       saving.value = false
     }
@@ -158,8 +152,10 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     try {
       notify(describeReport(await importBookSourcesJson(await file.text())))
       await refresh()
+      return true
     } catch (cause) {
       report(cause)
+      return false
     } finally {
       importing.value = false
       input.value = ''
@@ -173,18 +169,23 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
       notify(describeReport(await importBookSourcesUrl(sourceUrl.value)))
       sourceUrl.value = ''
       await refresh()
+      return true
     } catch (cause) {
       report(cause)
+      return false
     } finally {
       importing.value = false
     }
   }
 
   async function test(source: BookSource, query: string) {
+    if (testing.value != null || batchTesting.value) return
     testing.value = source.id
     try {
       const result = await testBookSource(source.id, query || '测试')
       lastProbe.value = result
+      testResults[source.id] = result
+      delete testErrors[source.id]
       const status = `HTTP ${result.status}`
       notify(
         result.cloudflare_challenge
@@ -195,6 +196,9 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
       )
       await refresh()
     } catch (cause) {
+      testErrors[source.id] = getErrorMessage(cause)
+      delete testResults[source.id]
+      if (lastProbe.value?.source_id === source.id) lastProbe.value = undefined
       report(cause)
     } finally {
       testing.value = undefined
@@ -202,13 +206,17 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
   }
 
   async function batchTest(query: string) {
+    if (testing.value != null || batchTesting.value) return
     batchTesting.value = true
     try {
       batchResults.value = await validateAllSources(query || '测试')
-      const failed = batchResults.value.filter(
-        (result) => result.status < 200 || result.status >= 400 || result.auth_required || result.cloudflare_challenge,
-      ).length
-      notify(`批量验证完成：${batchResults.value.length - failed} 个可用，${failed} 个需处理`)
+      for (const result of batchResults.value) {
+        testResults[result.source_id] = result
+        delete testErrors[result.source_id]
+      }
+      const failed = batchResults.value.filter((result) => probeNeedsAttention(result)).length
+      notify(`批量验证完成：${batchResults.value.length - failed} 个有搜索结果，${failed} 个需关注`)
+      await refresh()
     } catch (cause) {
       report(cause)
     } finally {
@@ -217,12 +225,16 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
   }
 
   async function toggle(source: BookSource) {
+    if (toggling.has(source.id)) return
+    toggling.add(source.id)
     try {
       await setBookSourceEnabled(source.id, !source.enabled)
       source.enabled = !source.enabled
       notify(`${source.name} 已${source.enabled ? '启用' : '停用'}`)
     } catch (cause) {
       report(cause)
+    } finally {
+      toggling.delete(source.id)
     }
   }
 
@@ -253,8 +265,10 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
       delete managementDrafts[source.id]
       await refresh()
       notify(`${source.name} 的分组与排序已保存`)
+      return true
     } catch (cause) {
       report(cause)
+      return false
     }
   }
 
@@ -336,6 +350,9 @@ export function useSources(report: (cause: unknown) => void, notify: (message: s
     sourceUrl,
     importing,
     testing,
+    toggling,
+    testResults,
+    testErrors,
     batchTesting,
     batchResults,
     exporting,
